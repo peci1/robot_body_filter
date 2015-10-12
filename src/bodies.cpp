@@ -41,6 +41,8 @@
 #include <iostream>
 #include <cmath>
 
+namespace robot_self_filter
+{
 bodies::Body* bodies::createBodyFromShape(const shapes::Shape *shape)
 {
     Body *body = NULL;
@@ -986,4 +988,6 @@ bool bodies::ConvexMesh::intersectsRay(const tf::Vector3& origin, const tf::Vect
     }
     
     return result;
+}
+  
 }
