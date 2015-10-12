@@ -40,6 +40,8 @@
 #include <tf/message_filter.h>
 #include <message_filters/subscriber.h>
 
+namespace robot_self_filter
+{
 class SelfFilter
 {
 public:
@@ -188,14 +190,14 @@ private:
   ros::Subscriber                                       no_filter_sub_;
   
 };
-
+}
     
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "self_filter");
   
   ros::NodeHandle nh("~");
-  SelfFilter s;
+  robot_self_filter::SelfFilter s;
   ros::spin();
     
   return 0;

@@ -44,7 +44,8 @@
 /** Definition of various shapes. No properties such as position are
     included. These are simply the descriptions and dimensions of
     shapes. */
-
+namespace robot_self_filter
+{
 namespace shapes
 {
     
@@ -254,4 +255,5 @@ namespace shapes
     
 }
 
+}
 #endif

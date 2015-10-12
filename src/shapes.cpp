@@ -35,6 +35,8 @@
 /** \author Ioan Sucan */
 
 #include "robot_self_filter/shapes.h"
+namespace robot_self_filter
+{
 
 shapes::Shape* shapes::cloneShape(const shapes::Shape *shape)
 {
@@ -86,4 +88,6 @@ shapes::StaticShape* shapes::cloneShape(const shapes::StaticShape *shape)
     }
     
     return result;
+}
+
 }
