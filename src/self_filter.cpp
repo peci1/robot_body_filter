@@ -148,6 +148,7 @@ private:
       pcl::PointCloud<pcl::PointXYZRGB> out;
       self_filter_rgb_->updateWithSensorFrame(*cloud, out, sensor_frame_);
       pcl::toROSMsg(out, out2);
+      out2.header.stamp = cloud2->header.stamp;
       input_size = cloud->points.size();
       output_size = out.points.size();
     }
@@ -158,6 +159,7 @@ private:
       pcl::PointCloud<pcl::PointXYZ> out;
       self_filter_->updateWithSensorFrame(*cloud, out, sensor_frame_);
       pcl::toROSMsg(out, out2);
+      out2.header.stamp = cloud2->header.stamp;
       input_size = cloud->points.size();
       output_size = out.points.size();
     }

@@ -409,7 +409,7 @@ struct LinkInfo
             frames.push_back(bodies_[i].name);
         }
 	
-    private:
+    protected:
 
 	/** \brief Free memory. */
 	void freeMemory(void)
