@@ -2,8 +2,8 @@
 Changelog for package robot_self_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.29 (2015-12-05)
+-------------------
 * pr2_navigation_self_filter -> robot_self_filter
 * Add robot_self_filter namespace before bodies and shapes namespace.
   geometric_shapes package also provides bodies and shapes namespace
