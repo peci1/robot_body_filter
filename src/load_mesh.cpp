@@ -56,7 +56,8 @@
 
 
 // \author Ioan Sucan ;  based on stl_to_mesh 
-
+namespace robot_self_filter
+{
 namespace shapes
 {
 
@@ -556,4 +557,5 @@ namespace shapes
 	return result;
     }
     
+}
 }
