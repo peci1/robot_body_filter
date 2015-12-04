@@ -1,55 +1,29 @@
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Changelog for package pr2_navigation_self_filter
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Changelog for package robot_self_filter
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.1.26 (2015-02-10)
--------------------
-* Updated maintanership
-* Contributors: TheDash
+Forthcoming
+-----------
+* pr2_navigation_self_filter -> robot_self_filter
+* Add robot_self_filter namespace before bodies and shapes namespace.
+  geometric_shapes package also provides bodies and shapes namespace
+  and same classes and functions. If a program is linked with
+  geometric_shapes and robot_self_filter, it may cause strange behavior
+  because of symbol confliction.
+* Contributors: Ryohei Ueda
 
-0.1.25 (2015-02-06)
+0.1.28 (2015-12-04)
 -------------------
+* Added indigo devel
+* Set correct timestamp for self filtered cloud
+  This is needed because pcl drops some value of timestamp.
+  So pcl::fromROSMsg and pcl::toROSMsg does not work to get correct timestamp.
+  Protected member variables in SelfMask for subclass of SelfMask
+* Protected member variables in SelfMask for subclass of SelfMask
+* Contributors: Devon Ash, Kentaro Wada, Ryohei Ueda, TheDash
 
-0.1.24 (2014-10-15)
+0.1.27 (2015-12-01)
 -------------------
-* Remove mainpage.dox
-* Contributors: TheDash
-
-0.1.23 (2014-10-15)
--------------------
-* Updated maintainership
-* Contributors: TheDash
-
-0.1.22 (2014-09-08)
--------------------
-
-0.1.21 (2014-09-06)
--------------------
-
-0.1.20 (2014-09-06)
--------------------
-* 0.1.19
-* Added changelogs
-* 0.1.18
-* Generating changelogs; preparing for release
-* Contributors: TheDash
-
-0.1.19 (2014-09-06)
--------------------
-* 0.1.18
-* Generating changelogs; preparing for release
-* Contributors: TheDash
-
-0.1.18 (2014-09-06)
--------------------
-* catkinize packages
-* Add ignores.
-* use less bullet and more tf
-* Navigation is just going to use XYZ points from now on
-* Porting pr2_navigation_self filter from PointCloud to PointCloud2. Still need to test.
-* Fixing linking issue on oneiric
-* Fixes for fuerte
-* Remove deprecated API usage
-* Adding descriptions of each package to manifest files
-* Copying pr2_navigation from staging area to stacks section of the repoistory
-* Contributors: Austin Hendrix, Brian Gerkey, Eitan Marder-Eppstein, Kei Okada, Vincent Rabaud, eitan
+* Porting robot_self_filter from pr2_navigation_self_filter
+* Initial commit
+* Contributors: Devon Ash, Ryohei Ueda
