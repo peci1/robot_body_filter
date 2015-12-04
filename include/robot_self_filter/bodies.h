@@ -52,7 +52,8 @@
    arms, for example).
 */
 
-
+namespace robot_self_filter
+{
 namespace bodies
 {
     
@@ -408,5 +409,5 @@ namespace bodies
     void mergeBoundingSpheres(const std::vector<BoundingSphere> &spheres, BoundingSphere &mergedSphere);
     
 }
-
+}
 #endif
