@@ -2,8 +2,8 @@
 Changelog for package robot_self_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.30 (2017-01-20)
+-------------------
 * Fix typo in CMakeLists.txt: CATKIN-DEPENDS -> CATKIN_DEPENDS
 * Add ~max_queue_size parameter for subscription queue size
 * Contributors: Devon Ash, Kentaro Wada, Ryohei Ueda
