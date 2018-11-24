@@ -2,6 +2,20 @@
 Changelog for package robot_self_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Merge pull request `#16 <https://github.com/PR2/robot_self_filter/issues/16>`_ from mikaelarguedas/tinyxml_dependency
+  depends on tinyxml and link against it
+* Merge branch 'indigo-devel' into tinyxml_dependency
+* Merge pull request `#18 <https://github.com/PR2/robot_self_filter/issues/18>`_ from k-okada/add_travis
+  update travis.yml
+* update travis.yml
+* depend on tinyxml and link against it
+* Merge pull request `#14 <https://github.com/PR2/robot_self_filter/issues/14>`_ from traclabs/indigo-devel
+  Minor changes to indigo-devel CMake allow this to be used in kinetic and indigo
+* Changes for kinetic
+* Contributors: Devon Ash, Kei Okada, Mikael Arguedas, Patrick Beeson
+
 0.1.30 (2017-01-20)
 -------------------
 * Fix typo in CMakeLists.txt: CATKIN-DEPENDS -> CATKIN_DEPENDS
