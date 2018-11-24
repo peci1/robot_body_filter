@@ -41,7 +41,9 @@ else()
 endif()
 
 
-find_package(catkin REQUIRED COMPONENTS roscpp tf filters sensor_msgs urdf roscpp resource_retriever visualization_msgs pcl_ros)
+find_package(catkin REQUIRED COMPONENTS roscpp tf filters sensor_msgs urdf roscpp resource_retriever visualization_msgs pcl_ros cmake_modules)
+
+find_package(TinyXML REQUIRED)
 
 catkin_package(
     DEPENDS bullet
@@ -65,8 +67,8 @@ add_executable(self_filter src/self_filter.cpp)
 target_link_libraries(self_filter ${PROJECT_NAME})
 target_link_libraries(self_filter robot_geometric_shapes  assimp)
 
-include_directories(include ${bullet_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS})
-target_link_libraries(robot_geometric_shapes ${bullet_LIBRARIES} ${Boost_LIBRARIES} ${PCL_LIBRARIES} ${catkin_LIBRARIES}  assimp)
+include_directories(include ${bullet_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${TinyXML_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS})
+target_link_libraries(robot_geometric_shapes ${bullet_LIBRARIES} ${Boost_LIBRARIES} ${PCL_LIBRARIES} ${catkin_LIBRARIES} ${TinyXML_LIBRARIES} assimp)
 
 
 install(DIRECTORY include/${PROJECT_NAME}/
