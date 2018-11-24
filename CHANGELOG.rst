@@ -2,8 +2,8 @@
 Changelog for package robot_self_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.31 (2018-11-24)
+-------------------
 * Merge pull request `#16 <https://github.com/PR2/robot_self_filter/issues/16>`_ from mikaelarguedas/tinyxml_dependency
   depends on tinyxml and link against it
 * Merge branch 'indigo-devel' into tinyxml_dependency
