@@ -465,42 +465,50 @@ struct LinkInfo
               continue;
             }
             
-            if (!(link->collision && link->collision->geometry))
+            for (unsigned int j = 0; j < link->collision_array.size(); ++j)
             {
-              ROS_WARN("No collision geometry specified for link '%s'", links[i].name.c_str());
-              continue;
-            }
-	
-            shapes::Shape *shape = constructShape(link->collision->geometry.get());
-	
-            if (!shape)
-            {
-              ROS_ERROR("Unable to construct collision shape for link '%s'", links[i].name.c_str());
-              continue;
-            }
-	
-            SeeLink sl;
-            sl.body = bodies::createBodyFromShape(shape);
+                    
+              if (!(link->collision_array[j]->geometry))
+              {
+                ROS_WARN("No collision geometry specified for link '%s', collision element %u",
+                    links[i].name.c_str(), j);
+                continue;
+              }
+      
+              shapes::Shape *shape = constructShape(link->collision_array[j]->geometry.get());
+      
+              if (!shape)
+              {
+                ROS_ERROR("Unable to construct collision shape for link '%s', collision element %u",
+                    links[i].name.c_str(), j);
+                continue;
+              }
+      
+              SeeLink sl;
+              sl.body = bodies::createBodyFromShape(shape);
 
-            if (sl.body)
-            {
-              sl.name = links[i].name;
-              
-              // collision models may have an offset, in addition to what TF gives
-              // so we keep it around
-              sl.constTransf = urdfPose2TFTransform(link->collision->origin);
-              
-              sl.body->setScale(links[i].scale);
-              sl.body->setPadding(links[i].padding);
-              ROS_INFO_STREAM("Self see link name " <<  links[i].name << " padding " << links[i].padding);
-              sl.volume = sl.body->computeVolume();
-              sl.unscaledBody = bodies::createBodyFromShape(shape);
-              bodies_.push_back(sl);
+              if (sl.body)
+              {
+                sl.name = links[i].name;
+                
+                // collision models may have an offset, in addition to what TF gives
+                // so we keep it around
+                sl.constTransf = urdfPose2TFTransform(link->collision_array[j]->origin);
+                
+                sl.body->setScale(links[i].scale);
+                sl.body->setPadding(links[i].padding);
+                sl.volume = sl.body->computeVolume();
+                ROS_INFO("Self see link '%s', collision element %u: scale %g, padding %g, volume %g m^3",
+                    links[i].name.c_str(), j, links[i].scale, links[i].padding, sl.volume);
+                sl.unscaledBody = bodies::createBodyFromShape(shape);
+                bodies_.push_back(sl);
+              }
+              else
+                ROS_WARN("Unable to create point inclusion body for link '%s', collision element %u",
+                    links[i].name.c_str(), j);
+      
+              delete shape;
             }
-            else
-              ROS_WARN("Unable to create point inclusion body for link '%s'", links[i].name.c_str());
-	
-            delete shape;
           }
     
           if (missing.str().size() > 0)
