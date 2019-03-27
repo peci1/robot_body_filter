@@ -612,12 +612,15 @@ struct LinkInfo
 		for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j) {
                   if (bodies_[j].body->intersectsRay(pt, dir, &intersections, 1))
                   {
-                    if (dir.dot(sensor_pos_ - intersections[0]) >= 0.0)
+                    for (size_t k = 0; out == OUTSIDE && k < intersections.size(); ++k)
                     {
-                      if (callback)
-                        callback(intersections[0]);
-                      out = SHADOW;
-                      if(print) std::cout << "Point " << i << " shadowed by body part " << bodies_[j].name << std::endl;
+                      if (dir.dot(sensor_pos_ - intersections[k]) >= 0.0)
+                      {
+                        if (callback)
+                          callback(intersections[i]);
+                        out = SHADOW;
+                        if(print) std::cout << "Point " << i << " shadowed by body part " << bodies_[j].name << ", intersection " << k << std::endl;
+                      }
                     }
                   }
 		}
