@@ -30,10 +30,10 @@
 #ifndef ROBOT_SELF_FILTER_SELF_MASK_
 #define ROBOT_SELF_FILTER_SELF_MASK_
 
-#include <pcl/point_types.h>
-#include <pcl_ros/point_cloud.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud2_iterator.h>
 #include <robot_self_filter/bodies.h>
+#include <robot_self_filter/cloud.h>
 #include <tf/transform_listener.h>
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
@@ -141,7 +141,6 @@ struct LinkInfo
     /** \brief Computing a mask for a pointcloud that states which points are inside the robot
      *
      */
-    template <typename PointT>
     class SelfMask
     {	
     protected:
@@ -169,8 +168,6 @@ struct LinkInfo
 	};
 	
     public:
-	typedef pcl::PointCloud<PointT> PointCloud;
-
 	/** \brief Construct the filter */
 	SelfMask(tf::TransformListener &tf, const std::vector<LinkInfo> &links) : tf_(tf)
 	{
@@ -187,15 +184,14 @@ struct LinkInfo
 	/** \brief Compute the containment mask (INSIDE or OUTSIDE) for a given pointcloud. If a mask element is INSIDE, the point
 	    is inside the robot. The point is outside if the mask element is OUTSIDE.
 	 */
-	void maskContainment(const PointCloud& data_in, std::vector<int> &mask)
+	void maskContainment(const Cloud& data_in, std::vector<int> &mask)
         {
-          mask.resize(data_in.points.size());
+          mask.resize(num_points(data_in));
           if (bodies_.empty())
             std::fill(mask.begin(), mask.end(), (int)OUTSIDE);
           else
           {
-            std_msgs::Header header = pcl_conversions::fromPCL(data_in.header);
-            assumeFrame(header);
+            assumeFrame(data_in.header);
             maskAuxContainment(data_in, mask);
           }
 
@@ -210,17 +206,16 @@ struct LinkInfo
 	    the origin of the sensor. A callback can be registered for
 	    the first intersection point on each body.
 	 */
-	void maskIntersection(const PointCloud& data_in, const std::string &sensor_frame, const double min_sensor_dist,
+	void maskIntersection(const Cloud& data_in, const std::string &sensor_frame, const double min_sensor_dist,
 			      std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &intersectionCallback = NULL)
         {
-          mask.resize(data_in.points.size());
+          mask.resize(num_points(data_in));
           if (bodies_.empty()) {
             std::fill(mask.begin(), mask.end(), (int)OUTSIDE);
           }
           else
           {
-            std_msgs::Header header = pcl_conversions::fromPCL(data_in.header);
-            assumeFrame(header, sensor_frame, min_sensor_dist);
+            assumeFrame(data_in.header, sensor_frame, min_sensor_dist);
             if (sensor_frame.empty())
               maskAuxContainment(data_in, mask);
             else
@@ -236,16 +231,15 @@ struct LinkInfo
 	    been seen. If the mask element is INSIDE, the point is inside
 	    the robot. The origin of the sensor is specified as well.
 	 */
-	void maskIntersection(const PointCloud& data_in, const tf::Vector3 &sensor_pos, const double min_sensor_dist,
+	void maskIntersection(const Cloud& data_in, const tf::Vector3 &sensor_pos, const double min_sensor_dist,
 			      std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &intersectionCallback = NULL)
         {
-          mask.resize(data_in.points.size());
+          mask.resize(num_points(data_in));
           if (bodies_.empty())
             std::fill(mask.begin(), mask.end(), (int)OUTSIDE);
           else
           {
-            std_msgs::Header header = pcl_conversions::fromPCL(data_in.header);
-            assumeFrame(header, sensor_pos, min_sensor_dist);
+            assumeFrame(data_in.header, sensor_pos, min_sensor_dist);
             maskAuxIntersection(data_in, mask, intersectionCallback);
           }
 
@@ -545,10 +539,10 @@ struct LinkInfo
 
 	
 	/** \brief Perform the actual mask computation. */
-	void maskAuxContainment(const PointCloud& data_in, std::vector<int> &mask)
+	void maskAuxContainment(const Cloud& data_in, std::vector<int> &mask)
         {
           const unsigned int bs = bodies_.size();
-          const unsigned int np = data_in.points.size();
+          const size_t np = num_points(data_in);
     
           // compute a sphere that bounds the entire robot
           bodies::BoundingSphere bound;
@@ -556,10 +550,12 @@ struct LinkInfo
           tfScalar radiusSquared = bound.radius * bound.radius;
     
           // we now decide which points we keep
-          //#pragma omp parallel for schedule(dynamic) 
-          for (int i = 0 ; i < (int)np ; ++i)
+          CloudConstIter x_it(data_in, "x");
+          CloudConstIter y_it(data_in, "y");
+          CloudConstIter z_it(data_in, "z");
+          for (size_t i = 0 ; i < np ; ++i, ++x_it, ++y_it, ++z_it)
           {
-            tf::Vector3 pt = tf::Vector3(data_in.points[i].x, data_in.points[i].y, data_in.points[i].z);
+            tf::Vector3 pt = tf::Vector3(*x_it, *y_it, *z_it);
             int out = OUTSIDE;
             if (bound.center.distance2(pt) < radiusSquared)
               for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j)
@@ -571,25 +567,25 @@ struct LinkInfo
         }
 
 	/** \brief Perform the actual mask computation. */
-	void maskAuxIntersection(const PointCloud& data_in, std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &callback)
+	void maskAuxIntersection(const Cloud& data_in, std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &callback)
         {
           const unsigned int bs = bodies_.size();
-          const unsigned int np = data_in.points.size();
+          const size_t np = num_points(data_in);
     
           // compute a sphere that bounds the entire robot
           bodies::BoundingSphere bound;
           bodies::mergeBoundingSpheres(bspheres_, bound);	  
           tfScalar radiusSquared = bound.radius * bound.radius;
 
-          //std::cout << "Testing " << np << " points\n";
-
           // we now decide which points we keep
-          //#pragma omp parallel for schedule(dynamic) 
-          for (int i = 0 ; i < (int)np ; ++i)
+          CloudConstIter x_it(data_in, "x");
+          CloudConstIter y_it(data_in, "y");
+          CloudConstIter z_it(data_in, "z");
+          for (size_t i = 0; i < np; ++i, ++x_it, ++y_it, ++z_it)
           {
             bool print = false;
             //if(i%100 == 0) print = true;
-            tf::Vector3 pt = tf::Vector3(data_in.points[i].x, data_in.points[i].y, data_in.points[i].z);
+            tf::Vector3 pt = tf::Vector3(*x_it, *y_it, *z_it);
             int out = OUTSIDE;
 
             // we first check is the point is in the unscaled body. 

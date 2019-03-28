@@ -27,26 +27,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FILTERS_SELF_SEE_H_
-#define FILTERS_SELF_SEE_H_
+#ifndef ROBOT_SELF_FILTER_SELF_SEE_FILTER_H_
+#define ROBOT_SELF_FILTER_SELF_SEE_FILTER_H_
 
 #include <filters/filter_base.h>
 #include <robot_self_filter/self_mask.h>
 #include <ros/console.h>
 
-namespace filters
+namespace robot_self_filter
 {
 
 /** \brief A filter to remove parts of the robot seen in a pointcloud
  *
  */
 
-template <typename PointT>
-class SelfFilter: public FilterBase <pcl::PointCloud<PointT> >
+class SelfFilter: public filters::FilterBase<sensor_msgs::PointCloud2>
 {
     
 public:
-  typedef pcl::PointCloud<PointT> PointCloud;
   /** \brief Construct the filter */
   SelfFilter(ros::NodeHandle nh) : nh_(nh)
   {
@@ -101,7 +99,7 @@ public:
         }      
       }
     }
-    sm_ = new robot_self_filter::SelfMask<PointT>(tf_, links);
+    sm_ = new robot_self_filter::SelfMask(tf_, links);
     if (!sensor_frame_.empty())
       ROS_INFO("Self filter is removing shadow points for sensor in frame '%s'. Minimum distance to sensor is %f.", sensor_frame_.c_str(), min_sensor_dist_);
   }
@@ -125,7 +123,7 @@ public:
     return true;
   }
 
-  bool updateWithSensorFrame(const PointCloud& data_in, PointCloud& data_out, const std::string& sensor_frame)
+  bool updateWithSensorFrame(const Cloud& data_in, Cloud& data_out, const std::string& sensor_frame)
   {
     sensor_frame_ = sensor_frame;
     return update(data_in, data_out);
@@ -135,9 +133,9 @@ public:
    * \param data_in T array with length width
    * \param data_out T array with length width
    */
-  virtual bool update(const PointCloud& data_in, PointCloud& data_out)
+  virtual bool update(const Cloud& data_in, Cloud& data_out)
   {
-    std::vector<int> keep(data_in.points.size());
+    std::vector<int> keep(num_points(data_in));
     if(sensor_frame_.empty()) {
       sm_->maskContainment(data_in, keep);
     } else {
@@ -147,7 +145,7 @@ public:
     return true;
   }
 
-  bool updateWithSensorFrame(const PointCloud& data_in, PointCloud& data_out, PointCloud& data_diff, const std::string& sensor_frame)
+  bool updateWithSensorFrame(const Cloud& data_in, Cloud& data_out, Cloud& data_diff, const std::string& sensor_frame)
   {
     sensor_frame_ = sensor_frame;
     return update(data_in, data_out, data_diff);
@@ -157,75 +155,77 @@ public:
    * \param data_in T array with length width
    * \param data_out T array with length width
    */
-  virtual bool update(const PointCloud& data_in, PointCloud& data_out, PointCloud& data_diff)
+  virtual bool update(const Cloud& data_in, Cloud& data_out, Cloud& data_diff)
   {
-    std::vector<int> keep(data_in.points.size());
+    std::vector<int> keep(num_points(data_in));
     if(sensor_frame_.empty()) {
       sm_->maskContainment(data_in, keep);
     } else {
       sm_->maskIntersection(data_in, sensor_frame_, min_sensor_dist_, keep);
     }
     fillResult(data_in, keep, data_out);
-    fillDiff(data_in,keep,data_diff);
+    fillDiff(data_in, keep, data_diff);
     return true;
   }
 
-  void fillDiff(const PointCloud& data_in, const std::vector<int> &keep, PointCloud& data_out)
+  void fillDiff(const Cloud& data_in, const std::vector<int> &keep, Cloud& data_out)
   {
-    const unsigned int np = data_in.points.size();
-	
-    // fill in output data 
-    data_out.header = data_in.header;	  
-	
-    data_out.points.resize(0);
-    data_out.points.reserve(np);
-	
-    for (unsigned int i = 0 ; i < np ; ++i)
+    std::vector<int> remove = keep;
+    for (std::vector<int>::iterator it = remove.begin(); it != remove.begin(); ++it)
     {
-      if ((keep[i] && invert_) || (!keep[i] && !invert_))
-      {
-        data_out.points.push_back(data_in.points[i]);
-      }
+      *it = (*it != OUTSIDE);
     }
+    fillResult(data_in, remove, data_out);
   }
 
-  void fillResult(const PointCloud& data_in, const std::vector<int> &keep, PointCloud& data_out)
+  void fillResult(const Cloud& data_in, const std::vector<int> &keep, Cloud& data_out)
   {
-    const unsigned int np = data_in.points.size();
+    const size_t np = num_points(data_in);
 
-    // fill in output data with points that are NOT on the robot
-    data_out.header = data_in.header;	  
-	
-    data_out.points.resize(0);
-    data_out.points.reserve(np);
-    PointT nan_point;
-    nan_point.x = std::numeric_limits<float>::quiet_NaN(); 
-    nan_point.y = std::numeric_limits<float>::quiet_NaN();
-    nan_point.z = std::numeric_limits<float>::quiet_NaN();
-    for (unsigned int i = 0 ; i < np ; ++i)
+    if (keep_organized_)
+    {
+      // Start from a copy, set x, y, z to nan for points filtered out.
+      data_out = data_in;
+      CloudIter x_it(data_out, "x");
+      CloudIter y_it(data_out, "y");
+      CloudIter z_it(data_out, "z");
+      for (size_t i = 0; i < np; ++i, ++x_it, ++y_it, ++z_it)
+      {
+        if (keep[i] != robot_self_filter::OUTSIDE) {
+          *x_it = *y_it = *z_it = std::numeric_limits<float>::quiet_NaN();
+        }
+      }
+      return;
+    }
+
+    // Iterate over the points and copy corresponding data chunks.
+    data_out.header = data_in.header;
+    data_out.fields = data_in.fields;
+    data_out.point_step = data_in.point_step;
+    data_out.height = 1;
+    data_out.width = 0;
+    data_out.data.resize(0);
+    data_out.data.reserve(data_in.data.size());
+    for (size_t i = 0; i < np; ++i)
     {
       if (keep[i] == robot_self_filter::OUTSIDE)
       {
-        data_out.points.push_back(data_in.points[i]);
-      }
-      if (keep_organized_ && keep[i] != robot_self_filter::OUTSIDE)
-      {
-        data_out.points.push_back(nan_point);
+        size_t from = (i / data_in.width) * data_in.row_step + (i % data_in.width) * data_in.point_step;
+        size_t to = from + data_in.point_step;
+        data_out.data.insert(data_out.data.end(), data_in.data.begin() + from, data_in.data.begin() + to);
+        data_out.width++;
       }
     }
-    if (keep_organized_) {
-      data_out.width = data_in.width;
-      data_out.height = data_in.height;
-    }
+    data_out.row_step = data_out.width * data_out.point_step;
   }
 
-  virtual bool updateWithSensorFrame(const std::vector<PointCloud> & data_in, std::vector<PointCloud>& data_out, const std::string& sensor_frame)
+  virtual bool updateWithSensorFrame(const std::vector<Cloud> &data_in, std::vector<Cloud> &data_out, const std::string& sensor_frame)
   {
     sensor_frame_ = sensor_frame;
     return update(data_in, data_out);
   }
   
-  virtual bool update(const std::vector<PointCloud> & data_in, std::vector<PointCloud>& data_out)
+  virtual bool update(const std::vector<Cloud> &data_in, std::vector<Cloud> &data_out)
   {
     bool result = true;
     data_out.resize(data_in.size());
@@ -235,7 +235,7 @@ public:
     return true;
   }
 
-  robot_self_filter::SelfMask<PointT>* getSelfMask() {
+  robot_self_filter::SelfMask* getSelfMask() {
     return sm_;
   }
 
@@ -246,7 +246,7 @@ public:
 protected:
     
   tf::TransformListener tf_;
-  robot_self_filter::SelfMask<PointT>* sm_;
+  robot_self_filter::SelfMask* sm_;
   
   ros::NodeHandle nh_;
   bool invert_;
@@ -258,4 +258,4 @@ protected:
 
 }
 
-#endif //#ifndef FILTERS_SELF_SEE_H_
+#endif //ROBOT_SELF_FILTER_SELF_SEE_FILTER_H_

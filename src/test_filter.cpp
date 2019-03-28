@@ -40,6 +40,9 @@
 #include <visualization_msgs/Marker.h>
 #include "robot_self_filter/self_mask.h"
 
+namespace robot_self_filter
+{
+
 class TestSelfFilter
 {
 public:
@@ -54,7 +57,7 @@ public:
         li.padding = .05;
         li.scale = 1.0;
         links.push_back(li);
-	sf_ = new robot_self_filter::SelfMask<pcl::PointXYZ>(tf_, links);
+	sf_ = new robot_self_filter::SelfMask(tf_, links);
     }
 
     ~TestSelfFilter(void)
@@ -98,20 +101,24 @@ public:
 
     void run(void)
     {
-        pcl::PointCloud<pcl::PointXYZ> in;
-	
-	in.header.stamp = ros::Time::now().toNSec();
-	in.header.frame_id = "base_link";
-	
-	const unsigned int N = 500000;	
-	in.points.resize(N);
-	for (unsigned int i = 0 ; i < N ; ++i)
-	{
-	    in.points[i].x = uniform(1.5);
-	    in.points[i].y = uniform(1.5);
-	    in.points[i].z = uniform(1.5);
-	}
-	
+        Cloud in;
+        CloudModifier modifier(in);
+        in.header.stamp = ros::Time::now();
+        in.header.frame_id = "base_link";
+
+        const size_t N = 500000;
+        modifier.setPointCloud2FieldsByString(1, "xyz");
+        modifier.resize(N);
+        CloudIter x_it(in, "x");
+        CloudIter y_it(in, "y");
+        CloudIter z_it(in, "z");
+        for (size_t i = 0; i < N; ++i, ++x_it, ++y_it, ++z_it)
+        {
+            *x_it = float(uniform(1.5));
+            *y_it = float(uniform(1.5));
+            *z_it = float(uniform(1.5));
+        }
+
 	for (unsigned int i = 0 ; i < 1000 ; ++i)
 	{
 	    ros::Duration(0.001).sleep();
@@ -147,17 +154,18 @@ protected:
     }
 
     tf::TransformListener             tf_;
-    robot_self_filter::SelfMask<pcl::PointXYZ>      *sf_;
+    robot_self_filter::SelfMask      *sf_;
     ros::Publisher                    vmPub_;
     ros::NodeHandle                   nodeHandle_;        
     int                               id_;
 };
+}
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "robot_self_filter");
 
-    TestSelfFilter t;
+    robot_self_filter::TestSelfFilter t;
     sleep(1);
     t.run();
     

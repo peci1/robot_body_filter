@@ -21,7 +21,6 @@
   <build_depend>bullet</build_depend>
   <build_depend>resource_retriever</build_depend>
   <build_depend>visualization_msgs</build_depend>
-  <build_depend>pcl_ros</build_depend>
   <build_depend>assimp-dev</build_depend>
   <build_depend>tinyxml</build_depend>
   
@@ -33,7 +32,6 @@
   <run_depend>bullet</run_depend>
   <run_depend>resource_retriever</run_depend>
   <run_depend>visualization_msgs</run_depend>
-  <run_depend>pcl_ros</run_depend>
   <run_depend>assimp</run_depend>
   <run_depend>tinyxml</run_depend>
   <!-- <test_depend>roscpp</test_depend> -->
@@ -44,8 +42,6 @@
   <!-- <test_depend>bullet</test_depend> -->
   <!-- <test_depend>resource_retriever</test_depend> -->
   <!-- <test_depend>visualization_msgs</test_depend> -->
-  <!-- <test_depend>pcl</test_depend> -->
-  <!-- <test_depend>pcl_ros</test_depend> -->
 
   <export>
 
