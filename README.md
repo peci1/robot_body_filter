@@ -6,3 +6,4 @@ Filters the robot's body out of point clouds.
 - Branch indigo-devel merged into master.
 - Using all ray intersections instead of only the first one.
 - Using all collision elements for each link instead of only the first one.
+- Enabling generic point type, removing PCL dependency and unnecessary params.
