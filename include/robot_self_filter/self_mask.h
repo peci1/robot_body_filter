@@ -32,9 +32,12 @@
 
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
-#include <robot_self_filter/bodies.h>
+#include <geometric_shapes/bodies.h>
+#include <geometric_shapes/body_operations.h>
+#include <geometric_shapes/shape_operations.h>
 #include <robot_self_filter/cloud.h>
 #include <tf/transform_listener.h>
+#include <tf_conversions/tf_eigen.h>
 #include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
 #include <string>
@@ -61,81 +64,57 @@ struct LinkInfo
   double scale;
 };
     
-    static inline tf::Transform urdfPose2TFTransform(const urdf::Pose &pose)
+    static inline Eigen::Isometry3d urdfPose2TFTransform(const urdf::Pose &pose)
     {
-      return tf::Transform(tf::Quaternion(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w),
-			   tf::Vector3(pose.position.x, pose.position.y, pose.position.z));
+      Eigen::Isometry3d trans;
+      tf::transformTFToEigen(
+          tf::Transform(tf::Quaternion(pose.rotation.x, pose.rotation.y, pose.rotation.z, pose.rotation.w), tf::Vector3(pose.position.x, pose.position.y, pose.position.z)),
+          trans);
+      return trans;
     }
 
     static shapes::Shape* constructShape(const urdf::Geometry *geom)
     {
-	ROS_ASSERT(geom);
-	
-	shapes::Shape *result = NULL;
-	switch (geom->type)
-	{
-	case urdf::Geometry::SPHERE:
-	    result = new shapes::Sphere(dynamic_cast<const urdf::Sphere*>(geom)->radius);
-	    break;	
-	case urdf::Geometry::BOX:
-	    {
-		urdf::Vector3 dim = dynamic_cast<const urdf::Box*>(geom)->dim;
-		result = new shapes::Box(dim.x, dim.y, dim.z);
-	    }
-	    break;
-	case urdf::Geometry::CYLINDER:
-	    result = new shapes::Cylinder(dynamic_cast<const urdf::Cylinder*>(geom)->radius,
-					  dynamic_cast<const urdf::Cylinder*>(geom)->length);
-	    break;
-	case urdf::Geometry::MESH:
-	    {
-		const urdf::Mesh *mesh = dynamic_cast<const urdf::Mesh*>(geom);
-		if (!mesh->filename.empty())
-		{
-		    resource_retriever::Retriever retriever;
-		    resource_retriever::MemoryResource res;
-		    bool ok = true;
-		    
-		    try
-		    {
-			res = retriever.get(mesh->filename);
-		    }
-		    catch (resource_retriever::Exception& e)
-		    {
-			ROS_ERROR("%s", e.what());
-			ok = false;
-		    }
-		    
-		    if (ok)
-		    {
-			if (res.size == 0)
-			    ROS_WARN("Retrieved empty mesh for resource '%s'", mesh->filename.c_str());
-			else
-			{
-			    boost::filesystem::path model_path(mesh->filename);
-			    std::string ext = model_path.extension().string();
-			    if (ext == ".dae" || ext == ".DAE") {
-			      result = shapes::createMeshFromBinaryDAE(mesh->filename.c_str());
-			    }
-			    else {
-			      result = shapes::createMeshFromBinaryStlData(reinterpret_cast<char*>(res.data.get()), res.size);
-			    }
-			    if (result == NULL)
-				ROS_ERROR("Failed to load mesh '%s'", mesh->filename.c_str());
-			}
-		    }
-		}
-		else
-		    ROS_WARN("Empty mesh filename");
-	    }
-	    
-	    break;
-	default:
-	    ROS_ERROR("Unknown geometry type: %d", (int)geom->type);
-	    break;
-	}
-	
-	return result;
+      ROS_ASSERT(geom);
+
+      shapes::Shape *result = NULL;
+      switch (geom->type)
+      {
+        case urdf::Geometry::SPHERE:
+        {
+          result = new shapes::Sphere(dynamic_cast<const urdf::Sphere*>(geom)->radius);
+          break;
+        }
+        case urdf::Geometry::BOX:
+        {
+          urdf::Vector3 dim = dynamic_cast<const urdf::Box*>(geom)->dim;
+          result = new shapes::Box(dim.x, dim.y, dim.z);
+          break;
+        }
+        case urdf::Geometry::CYLINDER:
+        {
+          result = new shapes::Cylinder(dynamic_cast<const urdf::Cylinder*>(geom)->radius,
+                                        dynamic_cast<const urdf::Cylinder*>(geom)->length);
+          break;
+        }
+        case urdf::Geometry::MESH:
+        {
+          const urdf::Mesh *mesh = dynamic_cast<const urdf::Mesh*>(geom);
+          if (!mesh->filename.empty())
+          {
+            Eigen::Vector3d scale(mesh->scale.x, mesh->scale.y, mesh->scale.z);
+            result = shapes::createMeshFromResource(mesh->filename, scale);
+          } else
+            ROS_WARN("Empty mesh filename");
+          break;
+        }
+        default:
+        {
+          ROS_ERROR("Unknown geometry type: %d", (int)geom->type);
+          break;
+        }
+      }
+      return (result);
     }
 
     /** \brief Computing a mask for a pointcloud that states which points are inside the robot
@@ -155,7 +134,7 @@ struct LinkInfo
 	    std::string   name;
 	    bodies::Body *body;
 	    bodies::Body *unscaledBody;
-	    tf::Transform   constTransf;
+	    Eigen::Isometry3d   constTransf;
 	    double        volume;
 	};
 	
@@ -207,7 +186,7 @@ struct LinkInfo
 	    the first intersection point on each body.
 	 */
 	void maskIntersection(const Cloud& data_in, const std::string &sensor_frame, const double min_sensor_dist,
-			      std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &intersectionCallback = NULL)
+			      std::vector<int> &mask, const boost::function<void(const Eigen::Vector3d&)> &intersectionCallback = NULL)
         {
           mask.resize(num_points(data_in));
           if (bodies_.empty()) {
@@ -231,8 +210,8 @@ struct LinkInfo
 	    been seen. If the mask element is INSIDE, the point is inside
 	    the robot. The origin of the sensor is specified as well.
 	 */
-	void maskIntersection(const Cloud& data_in, const tf::Vector3 &sensor_pos, const double min_sensor_dist,
-			      std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &intersectionCallback = NULL)
+	void maskIntersection(const Cloud& data_in, const Eigen::Vector3d &sensor_pos, const double min_sensor_dist,
+			      std::vector<int> &mask, const boost::function<void(const Eigen::Vector3d&)> &intersectionCallback = NULL)
         {
           mask.resize(num_points(data_in));
           if (bodies_.empty())
@@ -273,8 +252,10 @@ struct LinkInfo
       }
       
       // set it for each body; we also include the offset specified in URDF
-      bodies_[i].body->setPose(transf * bodies_[i].constTransf);
-      bodies_[i].unscaledBody->setPose(transf * bodies_[i].constTransf);
+      Eigen::Isometry3d trans;
+      tf::transformTFToEigen(transf, trans);
+      bodies_[i].body->setPose(trans * bodies_[i].constTransf);
+      bodies_[i].unscaledBody->setPose(trans * bodies_[i].constTransf);
     }
     
     computeBoundingSpheres();
@@ -284,7 +265,7 @@ struct LinkInfo
 	
         /** \brief Assume subsequent calls to getMaskX() will be in the frame passed to this function.
 	 *  Also specify which possition to assume for the sensor (frame is not needed) */
-	void assumeFrame(const std_msgs::Header& header, const tf::Vector3 &sensor_pos, const double min_sensor_dist)
+	void assumeFrame(const std_msgs::Header& header, const Eigen::Vector3d &sensor_pos, const double min_sensor_dist)
         {
           assumeFrame(header);
           sensor_pos_ = sensor_pos;
@@ -300,7 +281,7 @@ struct LinkInfo
           std::string err;
           if(!tf_.waitForTransform(header.frame_id, sensor_frame, header.stamp, ros::Duration(.1), ros::Duration(.01), &err)) {
             ROS_ERROR("WaitForTransform timed out from %s to %s after 100ms.  Error string: %s", sensor_frame.c_str(), header.frame_id.c_str(), err.c_str());
-            sensor_pos_.setValue(0, 0, 0);
+            sensor_pos_ = {0, 0, 0};
           } 
 
           //transform should be there
@@ -309,11 +290,13 @@ struct LinkInfo
           {
             tf::StampedTransform transf;
             tf_.lookupTransform(header.frame_id, sensor_frame, header.stamp, transf);
-            sensor_pos_ = transf.getOrigin();
+            Eigen::Isometry3d trans;
+            tf::transformTFToEigen(transf, trans);
+            sensor_pos_ = trans.translation();
           }
           catch(tf::TransformException& ex)
           {
-            sensor_pos_.setValue(0, 0, 0);
+            sensor_pos_ = {0, 0, 0};
             ROS_ERROR("Unable to lookup transform from %s to %s.  Exception: %s", sensor_frame.c_str(), header.frame_id.c_str(), ex.what());
           }
   
@@ -323,7 +306,7 @@ struct LinkInfo
 	
         /** \brief Get the containment mask (INSIDE or OUTSIDE) value for an individual point. No
 	    setup is performed, assumeFrame() should be called before use */
-	int  getMaskContainment(const tf::Vector3 &pt) const
+	int  getMaskContainment(const Eigen::Vector3d &pt) const
         {
           const unsigned int bs = bodies_.size();
           int out = OUTSIDE;
@@ -337,21 +320,21 @@ struct LinkInfo
 	    setup is performed, assumeFrame() should be called before use */
 	int  getMaskContainment(double x, double y, double z) const
         {
-          return getMaskContainment(tf::Vector3(x, y, z));
+          return getMaskContainment(Eigen::Vector3d(x, y, z));
         }
 	
 	/** \brief Get the intersection mask (INSIDE, OUTSIDE or
 	    SHADOW) value for an individual point. No setup is
 	    performed, assumeFrame() should be called before use */
-	int  getMaskIntersection(double x, double y, double z, const boost::function<void(const tf::Vector3&)> &intersectionCallback = NULL) const
+	int  getMaskIntersection(double x, double y, double z, const boost::function<void(const Eigen::Vector3d&)> &intersectionCallback = NULL) const
         {
-          return getMaskIntersection(tf::Vector3(x, y, z), intersectionCallback);
+          return getMaskIntersection(Eigen::Vector3d(x, y, z), intersectionCallback);
         }
 	
 	/** \brief Get the intersection mask (INSIDE, OUTSIDE or
 	    SHADOW) value for an individual point. No setup is
 	    performed, assumeFrame() should be called before use */
-	int  getMaskIntersection(const tf::Vector3 &pt, const boost::function<void(const tf::Vector3&)> &intersectionCallback = NULL) const
+	int  getMaskIntersection(const Eigen::Vector3d &pt, const boost::function<void(const Eigen::Vector3d&)> &intersectionCallback = NULL) const
         {
           const unsigned int bs = bodies_.size();
 
@@ -366,15 +349,15 @@ struct LinkInfo
           {
 
             // we check it the point is a shadow point 
-            tf::Vector3 dir(sensor_pos_ - pt);
-            tfScalar  lng = dir.length();
+            Eigen::Vector3d dir(sensor_pos_ - pt);
+            const auto lng = dir.norm();
             if (lng < min_sensor_dist_)
               out = INSIDE;
             else
             {
               dir /= lng;
-	    
-              std::vector<tf::Vector3> intersections;
+
+              EigenSTL::vector_Vector3d intersections;
               for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j)
 		if (bodies_[j].body->intersectsRay(pt, dir, &intersections, 1))
 		{
@@ -425,7 +408,7 @@ struct LinkInfo
         {
           // in case configure was called before, we free the memory
           freeMemory();
-          sensor_pos_.setValue(0, 0, 0);
+          sensor_pos_ = {0, 0, 0};
     
           std::string content;
           boost::shared_ptr<urdf::Model> urdfModel;
@@ -555,9 +538,9 @@ struct LinkInfo
           CloudConstIter z_it(data_in, "z");
           for (size_t i = 0 ; i < np ; ++i, ++x_it, ++y_it, ++z_it)
           {
-            tf::Vector3 pt = tf::Vector3(*x_it, *y_it, *z_it);
+            Eigen::Vector3d pt = {*x_it, *y_it, *z_it};
             int out = OUTSIDE;
-            if (bound.center.distance2(pt) < radiusSquared)
+            if ((bound.center - pt).squaredNorm() < radiusSquared)
               for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j)
 		if (bodies_[j].body->containsPoint(pt))
                   out = INSIDE;
@@ -567,7 +550,7 @@ struct LinkInfo
         }
 
 	/** \brief Perform the actual mask computation. */
-	void maskAuxIntersection(const Cloud& data_in, std::vector<int> &mask, const boost::function<void(const tf::Vector3&)> &callback)
+	void maskAuxIntersection(const Cloud& data_in, std::vector<int> &mask, const boost::function<void(const Eigen::Vector3d&)> &callback)
         {
           const unsigned int bs = bodies_.size();
           const size_t np = num_points(data_in);
@@ -585,12 +568,12 @@ struct LinkInfo
           {
             bool print = false;
             //if(i%100 == 0) print = true;
-            tf::Vector3 pt = tf::Vector3(*x_it, *y_it, *z_it);
+            Eigen::Vector3d pt = {*x_it, *y_it, *z_it};
             int out = OUTSIDE;
 
             // we first check is the point is in the unscaled body. 
             // if it is, the point is definitely inside
-            if (bound.center.distance2(pt) < radiusSquared)
+            if ((bound.center - pt).squaredNorm() < radiusSquared)
               for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j)
                 if (bodies_[j].unscaledBody->containsPoint(pt)) {
                   if(print)
@@ -602,8 +585,8 @@ struct LinkInfo
             if (out == OUTSIDE)
             {
               // we check it the point is a shadow point 
-              tf::Vector3 dir(sensor_pos_ - pt);
-              tfScalar  lng = dir.length();
+              Eigen::Vector3d dir(sensor_pos_ - pt);
+              const auto lng = dir.norm();
               if (lng < min_sensor_dist_) {
 		out = INSIDE;
                 //std::cout << "Point " << i << " less than min sensor distance away\n";
@@ -612,7 +595,7 @@ struct LinkInfo
               {		
 		dir /= lng;
 
-		std::vector<tf::Vector3> intersections;
+    EigenSTL::vector_Vector3d intersections;
 		for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j) {
                   if (bodies_[j].body->intersectsRay(pt, dir, &intersections, 1))
                   {
@@ -629,7 +612,7 @@ struct LinkInfo
                   }
 		}
 		// if it is not a shadow point, we check if it is inside the scaled body
-		if (out == OUTSIDE && bound.center.distance2(pt) < radiusSquared)
+		if (out == OUTSIDE && (bound.center - pt).squaredNorm() < radiusSquared)
                   for (unsigned int j = 0 ; out == OUTSIDE && j < bs ; ++j)
                     if (bodies_[j].body->containsPoint(pt)) {
                       if(print) std::cout << "Point " << i << " in scaled body part " << bodies_[j].name << std::endl;
@@ -644,7 +627,7 @@ struct LinkInfo
 	tf::TransformListener              &tf_;
 	ros::NodeHandle                     nh_;
 	
-	tf::Vector3                           sensor_pos_;
+	Eigen::Vector3d                           sensor_pos_;
 	double                              min_sensor_dist_;
 	
 	std::vector<SeeLink>                bodies_;
