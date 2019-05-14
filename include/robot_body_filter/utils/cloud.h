@@ -2,15 +2,15 @@
 // Created by Tomas Petricek on 3/28/19.
 //
 
-#ifndef ROBOT_SELF_FILTER_CLOUD_H
-#define ROBOT_SELF_FILTER_CLOUD_H
+#ifndef ROBOT_BODY_FILTER_CLOUD_H
+#define ROBOT_BODY_FILTER_CLOUD_H
 
 #include <functional>
 
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 typedef sensor_msgs::PointCloud2 Cloud;
@@ -27,4 +27,4 @@ void createFilteredCloud(const sensor_msgs::PointCloud2& in,
   sensor_msgs::PointCloud2& out, bool keepOrganized);
 
 }
-#endif //ROBOT_SELF_FILTER_CLOUD_H
+#endif //ROBOT_BODY_FILTER_CLOUD_H

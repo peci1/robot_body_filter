@@ -1,10 +1,10 @@
 #include <utility>
 
-#include <robot_self_filter/TfFramesWatchdog.h>
+#include <robot_body_filter/TfFramesWatchdog.h>
 
-#include <robot_self_filter/utils/time_utils.hpp>
+#include <robot_body_filter/utils/time_utils.hpp>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 TFFramesWatchdog::TFFramesWatchdog(std::string robotFrame,
                                    std::set<std::string>  monitoredFrames,

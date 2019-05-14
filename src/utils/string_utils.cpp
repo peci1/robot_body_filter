@@ -1,9 +1,9 @@
-#include "robot_self_filter/utils/string_utils.hpp"
+#include "robot_body_filter/utils/string_utils.hpp"
 
 #include <ros/ros.h>
 #include <rosconsole/macros_generated.h>
 
-namespace robot_self_filter {
+namespace robot_body_filter {
 
 void warnLeadingSlash(const std::string& s)
 {

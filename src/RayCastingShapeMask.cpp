@@ -7,13 +7,13 @@
 #undef private
 /* HACK END HACK */
 
-#include <robot_self_filter/RayCastingShapeMask.h>
+#include <robot_body_filter/RayCastingShapeMask.h>
 
 #include <geometric_shapes/body_operations.h>
 
 #include <ros/console.h>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 struct RayCastingShapeMask::RayCastingShapeMaskPIMPL

@@ -1,12 +1,12 @@
-#ifndef ROBOT_SELF_FILTER_UTILS_FILTER_UTILS_HPP
-#define ROBOT_SELF_FILTER_UTILS_FILTER_UTILS_HPP
+#ifndef ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
+#define ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
 
 #include <rosconsole/macros_generated.h>
 #include <filters/filter_base.h>
 
-#include "robot_self_filter/utils/string_utils.hpp"
+#include "robot_body_filter/utils/string_utils.hpp"
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 template<typename F>
@@ -123,4 +123,4 @@ private:
 };
 
 };
-#endif //ROBOT_SELF_FILTER_UTILS_FILTER_UTILS_HPP
+#endif //ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP

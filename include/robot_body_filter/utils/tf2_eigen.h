@@ -1,5 +1,5 @@
-#ifndef ROBOT_SELF_FILTER_TF2_EIGEN_H
-#define ROBOT_SELF_FILTER_TF2_EIGEN_H
+#ifndef ROBOT_BODY_FILTER_TF2_EIGEN_H
+#define ROBOT_BODY_FILTER_TF2_EIGEN_H
 
 #include <Eigen/Core>
 #include <geometry_msgs/Point32.h>
@@ -8,4 +8,4 @@ namespace tf2 {
 void toMsg(const Eigen::Vector3d& in, geometry_msgs::Point32& out);
 }
 
-#endif //ROBOT_SELF_FILTER_TF2_EIGEN_H
+#endif //ROBOT_BODY_FILTER_TF2_EIGEN_H

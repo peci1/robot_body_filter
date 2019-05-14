@@ -1,14 +1,14 @@
 <class_libraries>
-    <library path="lib/librobot_self_filter">
-        <class name="robot_self_filter/RobotSelfFilterLaserScan"
-               type="robot_self_filter::RobotSelfFilterLaserScan"
+    <library path="lib/librobot_body_filter">
+        <class name="robot_body_filter/RobotBodyFilterLaserScan"
+               type="robot_body_filter::RobotBodyFilterLaserScan"
                base_class_type="filters::FilterBase<sensor_msgs::LaserScan>">
             <description>
                 Filter for removing robot body from laser scans.
             </description>
         </class>
-        <class name="robot_self_filter/RobotSelfFilterPointCloud2"
-               type="robot_self_filter::RobotSelfFilterPointCloud2"
+        <class name="robot_body_filter/RobotBodyFilterPointCloud2"
+               type="robot_body_filter::RobotBodyFilterPointCloud2"
                base_class_type="filters::FilterBase<sensor_msgs::PointCloud2>">
             <description>
                 Filter for removing robot body from pointclouds.

@@ -1,15 +1,15 @@
-#ifndef ROBOT_SELF_FILTER_RAYCASTINGSHAPEMASK_H
-#define ROBOT_SELF_FILTER_RAYCASTINGSHAPEMASK_H
+#ifndef ROBOT_BODY_FILTER_RAYCASTINGSHAPEMASK_H
+#define ROBOT_BODY_FILTER_RAYCASTINGSHAPEMASK_H
 
 #include <vector>
 #include <map>
 
 #include <moveit/point_containment_filter/shape_mask.h>
 
-#include <robot_self_filter/utils/bodies.h>
-#include <robot_self_filter/utils/cloud.h>
+#include <robot_body_filter/utils/bodies.h>
+#include <robot_body_filter/utils/cloud.h>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 class RayCastingShapeMask : protected point_containment_filter::ShapeMask
@@ -196,4 +196,4 @@ protected:
 
 }
 
-#endif //ROBOT_SELF_FILTER_RAYCASTINGSHAPEMASK_H
+#endif //ROBOT_BODY_FILTER_RAYCASTINGSHAPEMASK_H

@@ -1,10 +1,10 @@
-#ifndef ROBOT_SELF_FILTER_URDF_EIGEN_HPP
-#define ROBOT_SELF_FILTER_URDF_EIGEN_HPP
+#ifndef ROBOT_BODY_FILTER_URDF_EIGEN_HPP
+#define ROBOT_BODY_FILTER_URDF_EIGEN_HPP
 
 #include <Eigen/Core>
 #include <urdf_model/types.h>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 /**
@@ -21,4 +21,4 @@ inline Eigen::Isometry3d urdfPose2EigenTransform(const urdf::Pose &pose) {
 
 }
 
-#endif //ROBOT_SELF_FILTER_URDF_EIGEN_HPP
+#endif //ROBOT_BODY_FILTER_URDF_EIGEN_HPP

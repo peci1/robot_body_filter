@@ -1,7 +1,7 @@
-#ifndef ROBOT_SELF_FILTER_SET_UTILS_HPP
-#define ROBOT_SELF_FILTER_SET_UTILS_HPP
+#ifndef ROBOT_BODY_FILTER_SET_UTILS_HPP
+#define ROBOT_BODY_FILTER_SET_UTILS_HPP
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 template<typename T>
@@ -18,4 +18,4 @@ bool isSetIntersectionEmpty(const std::set<T>& set1,
 
 }
 
-#endif //ROBOT_SELF_FILTER_SET_UTILS_HPP
+#endif //ROBOT_BODY_FILTER_SET_UTILS_HPP

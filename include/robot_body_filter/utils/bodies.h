@@ -1,5 +1,5 @@
-#ifndef ROBOT_SELF_FILTER_BODIES_H
-#define ROBOT_SELF_FILTER_BODIES_H
+#ifndef robot_body_filter_BODIES_H
+#define ROBOT_BODY_FILTER_BODIES_H
 
 #include <geometric_shapes/bodies.h>
 #include <moveit/robot_model/aabb.h>
@@ -29,4 +29,4 @@ void constructMarkerFromBody(const bodies::Body& body,
 
 }
 
-#endif //ROBOT_SELF_FILTER_BODIES_H
+#endif //ROBOT_BODY_FILTER_BODIES_H

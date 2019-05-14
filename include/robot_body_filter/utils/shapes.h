@@ -1,10 +1,10 @@
-#ifndef ROBOT_SELF_FILTER_SHAPES_H
-#define ROBOT_SELF_FILTER_SHAPES_H
+#ifndef ROBOT_BODY_FILTER_SHAPES_H
+#define ROBOT_BODY_FILTER_SHAPES_H
 
 #include <urdf_model/types.h>
 #include <geometric_shapes/shapes.h>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 /** \brief Consruct a masking shape out of the given URDF geometry.
@@ -20,4 +20,4 @@ shapes::ShapeConstPtr constructShape(const urdf::Geometry& geometry);
 
 }
 
-#endif //ROBOT_SELF_FILTER_SHAPES_H
+#endif //ROBOT_BODY_FILTER_SHAPES_H

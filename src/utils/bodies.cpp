@@ -7,7 +7,7 @@
 #undef protected
 /* HACK END HACK */
 
-#include <robot_self_filter/utils/bodies.h>
+#include <robot_body_filter/utils/bodies.h>
 
 #include <ros/ros.h>
 

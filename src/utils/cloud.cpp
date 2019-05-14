@@ -1,6 +1,6 @@
-#include <robot_self_filter/utils/cloud.h>
+#include <robot_body_filter/utils/cloud.h>
 
-namespace robot_self_filter
+namespace robot_body_filter
 {
 
 size_t num_points(const Cloud &cloud)

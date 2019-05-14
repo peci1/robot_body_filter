@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(robot_self_filter)
+project(robot_body_filter)
 
 set(CMAKE_CXX_STANDARD 17)  # we're using std::optional
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,7 +35,7 @@ add_library(utils
 target_link_libraries(utils ${catkin_LIBRARIES})
 
 add_library(${PROJECT_NAME}
-  src/RobotSelfFilter.cpp
+  src/RobotBodyFilter.cpp
   src/TFFramesWatchdog.cpp
   src/RayCastingShapeMask.cpp)
 target_link_libraries(${PROJECT_NAME} utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})

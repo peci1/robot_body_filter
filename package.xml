@@ -1,12 +1,12 @@
 <package format="2">
-  <name>robot_self_filter</name>
+  <name>robot_body_filter</name>
   <version>1.0.0</version>
 
   <description>Filters the robot's body out of laser scans or point clouds.</description>
 
   <license>BSD</license>
 
-  <url type="website">https://github.com/tpet/robot_self_filter</url>
+  <url type="website">https://github.com/tpet/robot_body_filter</url>
 
   <author>Eitan Marder-Eppstein</author>
   <author>Tomas Petricek</author>

@@ -1,6 +1,6 @@
-#include "robot_self_filter/utils/time_utils.hpp"
+#include "robot_body_filter/utils/time_utils.hpp"
 
-namespace robot_self_filter {
+namespace robot_body_filter {
 
 ros::Duration remainingTime(const ros::Time &query, const double timeout)
 {

@@ -1,9 +1,9 @@
-#ifndef ROBOT_SELF_FILTER_UTILS_TIME_UTILS_HPP
-#define ROBOT_SELF_FILTER_UTILS_TIME_UTILS_HPP
+#ifndef ROBOT_BODY_FILTER_UTILS_TIME_UTILS_HPP
+#define ROBOT_BODY_FILTER_UTILS_TIME_UTILS_HPP
 
 #include <ros/ros.h>
 
-namespace robot_self_filter {
+namespace robot_body_filter {
 
 /**
  * @brief remainingTime Return remaining time to timeout from the query time.
@@ -24,4 +24,4 @@ ros::Duration remainingTime(const ros::Time &query,
 
 };
 
-#endif //ROBOT_SELF_FILTER_UTILS_TIME_UTILS_HPP
+#endif //ROBOT_BODY_FILTER_UTILS_TIME_UTILS_HPP

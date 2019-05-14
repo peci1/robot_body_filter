@@ -1,5 +1,5 @@
-#ifndef ROBOT_SELF_FILTER_TFFRAMESWATCHDOG_H
-#define ROBOT_SELF_FILTER_TFFRAMESWATCHDOG_H
+#ifndef ROBOT_BODY_FILTER_TFFRAMESWATCHDOG_H
+#define ROBOT_BODY_FILTER_TFFRAMESWATCHDOG_H
 
 #include <mutex>
 #include <optional>
@@ -11,7 +11,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-namespace robot_self_filter {
+namespace robot_body_filter {
 
 /**
  * \brief Provide quick access to TFs while simultaneousely monitoring if some
@@ -141,4 +141,4 @@ private:
 
 }
 
-#endif //ROBOT_SELF_FILTER_TFFRAMESWATCHDOG_H
+#endif //ROBOT_BODY_FILTER_TFFRAMESWATCHDOG_H

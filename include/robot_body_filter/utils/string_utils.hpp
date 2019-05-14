@@ -1,5 +1,5 @@
-#ifndef ROBOT_SELF_FILTER_UTILS_TOPIC_UTILS_HPP
-#define ROBOT_SELF_FILTER_UTILS_TOPIC_UTILS_HPP
+#ifndef ROBOT_BODY_FILTER_UTILS_TOPIC_UTILS_HPP
+#define ROBOT_BODY_FILTER_UTILS_TOPIC_UTILS_HPP
 
 #include <iterator>
 #include <map>
@@ -8,7 +8,7 @@
 #include <vector>
 #include <xmlrpcpp/XmlRpcValue.h>
 
-namespace robot_self_filter {
+namespace robot_body_filter {
 
 /**
  * \brief Strip leading slash from the given string (if there is one).
@@ -83,4 +83,4 @@ inline std::string to_string(const std::map<K, V> &value)
 }
 
 };
-#endif //ROBOT_SELF_FILTER_UTILS_TOPIC_UTILS_HPP
+#endif //ROBOT_BODY_FILTER_UTILS_TOPIC_UTILS_HPP
