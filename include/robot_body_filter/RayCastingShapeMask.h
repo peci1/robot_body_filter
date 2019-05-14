@@ -100,13 +100,15 @@ public:
    * \param [out] mask The mask value of the given point.
    * \param [in] sensorPos Position of the sensor in the pointcloud frame.
    *
+   *
    * \note Internally calls updateBodyPoses() to update link transforms.
    * \note Updates bspheres_/boundingBoxes to contain the bounding spheres/boxes of links.
   */
   void maskContainmentAndShadows(
       const Eigen::Vector3f& data,
       MaskValue& mask,
-      const Eigen::Vector3f& sensorPos = Eigen::Vector3d::Zero());
+      const Eigen::Vector3f& sensorPos = Eigen::Vector3d::Zero(),
+      bool updateBodyPoses = true);
 
   /**
    * \brief Set the shapes to be ignored when doing test for INSIDE in maskContainmentAndShadows.

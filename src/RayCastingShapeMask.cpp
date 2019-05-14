@@ -174,11 +174,13 @@ void RayCastingShapeMask::maskContainmentAndShadows(
 }
 
 void RayCastingShapeMask::maskContainmentAndShadows(const Eigen::Vector3f& data,
-    RayCastingShapeMask::MaskValue& mask, const Eigen::Vector3f& sensorPos)
+    RayCastingShapeMask::MaskValue& mask, const Eigen::Vector3f& sensorPos,
+    const bool updateBodyPoses)
 {
   boost::mutex::scoped_lock _(this->shapes_lock_);
 
-  this->updateBodyPosesNoLock();
+  if (updateBodyPoses)
+    this->updateBodyPosesNoLock();
 
   // compute a sphere that bounds the entire robot
   const bodies::BoundingSphere bound = this->getBoundingSphereForContainsTestNoLock();
