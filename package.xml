@@ -1,14 +1,18 @@
 <package format="2">
   <name>robot_self_filter</name>
-  <version>0.1.31</version>
-  <description>Filters the robot's body out of point clouds.</description>
-  <maintainer email="dash@clearpathrobotics.com">Devon Ash</maintainer>
+  <version>1.0.0</version>
+
+  <description>Filters the robot's body out of laser scans or point clouds.</description>
 
   <license>BSD</license>
 
-  <url type="website">http://ros.org/wiki/robot_self_filter</url>
+  <url type="website">https://github.com/tpet/robot_self_filter</url>
 
   <author>Eitan Marder-Eppstein</author>
+  <author>Tomas Petricek</author>
+  <author>Martin Pecka</author>
+
+  <maintainer email="peckama2@fel.cvut.cz">Martin Pecka</maintainer>
 
   <buildtool_depend>catkin</buildtool_depend>
 
@@ -20,8 +24,6 @@
   <depend>roscpp</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
-  <depend>tf</depend>
-  <depend>tf_conversions</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>urdf</depend>
