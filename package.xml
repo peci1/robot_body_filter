@@ -19,6 +19,7 @@
   <depend>filters</depend>
   <depend>geometric_shapes</depend>
   <depend>geometry_msgs</depend>
+  <depend>laser_geometry</depend>
   <depend>moveit_core</depend>
   <depend>moveit_ros_perception</depend>
   <depend>roscpp</depend>

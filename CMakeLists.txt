@@ -7,10 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_compile_options("-O3")
 
-set(THIS_PACKAGE_DEPS filters geometric_shapes moveit_core moveit_ros_perception roscpp sensor_msgs tf2 tf2_ros urdf visualization_msgs)
+set(THIS_PACKAGE_DEPS filters geometric_shapes laser_geometry moveit_core moveit_ros_perception roscpp sensor_msgs tf2 tf2_ros urdf visualization_msgs)
 set(MESSAGE_DEPS geometry_msgs std_msgs)
 
-find_package(catkin REQUIRED COMPONENTS ${THIS_PACKAGE_DEPS} ${MESSAGE_DEPS} tf2_eigen tf2_sensor_msgs message_generation)
+find_package(catkin REQUIRED COMPONENTS ${THIS_PACKAGE_DEPS} ${MESSAGE_DEPS} message_generation tf2_eigen tf2_sensor_msgs)
 find_package(PCL REQUIRED COMPONENTS common filters)
 
 add_message_files(FILES Sphere.msg SphereStamped.msg)
