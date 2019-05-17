@@ -1,5 +1,5 @@
-#ifndef ROBOT_SELF_FILTER_ROBOTSELFFILTER_H_
-#define ROBOT_SELF_FILTER_ROBOTSELFFILTER_H_
+#ifndef ROBOT_BODY_FILTER_ROBOTSELFFILTER_H_
+#define ROBOT_BODY_FILTER_ROBOTSELFFILTER_H_
 
 #include <memory>
 #include <mutex>
@@ -13,9 +13,9 @@
 #include <pcl/filters/crop_box.h>
 
 #include <ros/ros.h>
-#include <robot_self_filter/utils/filter_utils.hpp>
+#include <robot_body_filter/utils/filter_utils.hpp>
 #include <sensor_msgs/LaserScan.h>
-#include <robot_self_filter/RayCastingShapeMask.h>
+#include <robot_body_filter/RayCastingShapeMask.h>
 #include <moveit/occupancy_map_monitor/occupancy_map_updater.h>
 #include <moveit/robot_model/aabb.h>
 #include <urdf/model.h>
@@ -26,14 +26,14 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <dynamic_reconfigure/Config.h>
-#include <robot_self_filter/SphereStamped.h>
+#include <robot_body_filter/SphereStamped.h>
 #include <geometry_msgs/PointStamped.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <std_srvs/Trigger.h>
 
-#include <robot_self_filter/TfFramesWatchdog.h>
+#include <robot_body_filter/TfFramesWatchdog.h>
 
-namespace robot_self_filter {
+namespace robot_body_filter {
 /**
 * \brief Just a helper structure holding together a link, one of its collision elements,
  * and the index of the collision element in the collision array of the link.
@@ -61,132 +61,22 @@ struct CollisionBodyWithLink {
 };
 
 /**
- * \brief Filter to remove robot's own body from laser scans.
+ * \brief Filter to remove robot's own body from laser scan.
  *
- * Subscribed topics:
- * - /tf2, /tf2_static: transforms
- * - dynamic_robot_model_server/parameter_updates: Dynamic reconfigure topic on
- *       which updated robot model can be published. The model is read from a
- *       field defined by parameter dynamic_robot_description_field_name.
- *
- * Published topics:
- * - scan_point_cloud_no_bbox: Point cloud with point inside bounding box removed.
- * - scan_point_cloud_no_bsphere: Point cloud with point inside bounding sphere removed.
- * - robot_bounding_sphere: Bounding sphere of the robot body.
- * - robot_bounding_box: Bounding box of the robot body.
- * - robot_bounding_sphere_debug: Marker array containing the bounding sphere for
- *       each collision.
- * - robot_bounding_box_debug: Marker array containing the bounding box for
- *       each collision.
- *
- * Provided services:
- * - ~reload_model (std_srvs/Trigger): Call this service to re-read the URDF
- *       model from parameter server.
+ * See readme for more information.
  *
  * \author Martin Pecka
  */
 template<typename T>
-class RobotSelfFilter : public ::robot_self_filter::FilterBase<T> {
+class RobotBodyFilter : public ::robot_body_filter::FilterBase<T> {
 public:
-  RobotSelfFilter();
-  ~RobotSelfFilter() override = default;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  RobotBodyFilter();
+  ~RobotBodyFilter() override;
 
   //! Read config parameters loaded by FilterBase::configure(string, NodeHandle)
-  /**
-   * point_by_point_scan (only the PointCloud2 version):  If true, suppose that
-   *     every point in the scan was captured at a different time instant.
-   *     Otherwise, the scan is assumed to be taken at once. If this is true,
-   *     the processing pipeline expects the pointcloud to have fields
-   *     int32 index, float32 stamps, and float32 vp_x, vp_y and vp_z viewpoint
-   *     positions. If one of these fields is missing, computeMask() throws
-   *     runtime exception. Default: false.
-   * fixed_frame: The fixed frame. Usually base_link for stationary robots
-   *              (or sensor frame if both robot and sensor are stationary).
-   *              For mobile robots, it can be e.g. odom or map.
-   *              Default: base_link.
-   * sensor_frame: Frame of the sensor. For LaserScan version, it is
-   *               automatically read from the incoming data (this parameter has
-   *               no effect). For PointCloud2, you have to specify it
-   *               explicitly because the pointcloud could have already been
-   *               transformed e.g. to the fixed frame. Default: "laser"
-   * min_distance: The minimum distance of points from the laser to keep them
-   *               (in meters). Default: 0.0 m
-   * max_distance: The maximum distance of points from the laser to keep them
-   *               (in meters). Set to zero to disable this limit. Default: 0.0 m
-   * inflation_scale: A scale that is applied to the collision model for the
-   *                  purposes of collision checking. Default: 1.0
-   * inflation_padding: Padding to be added to the collision model for the
-   *                    purposes of collision checking (meters). Default: 0.0 m
-   * robot_description_param: Name of the parameter where the robot model can be
-   *                          found. Default: robot_description
-   * keep_clouds_organized: Whether to keep pointclouds organized if they were.
-   *                        Organized cloud has height > 1. Default: true.
-   * tf_buffer_length: Duration for which transforms will be stored in TF buffer.
-   *                   Default: 60.0 seconds.
-   * reachable_transform_timeout: How long to wait while getting reachable TF.
-   *                              Default: 1.0 second.
-   * unreachable_transform_timeout: How long to wait while getting unreachable
-   *                                TF. Default: 0.1 second.
-   * compute_bounding_sphere: Whether to compute bounding sphere. Default: false.
-   * compute_bounding_box: Whether to compute bounding box. Default: false.
-   * compute_debug_bounding_sphere: Whether to compute and publish debug
-   *                                bounding sphere (marker array of spheres for
-   *                                each collision). Default: false.
-   * compute_debug_bounding_box: Whether to compute and publish debug
-   *                             bounding box (marker array of boxes for
-   *                             each collision). Default: false.
-   * publish_no_bounding_box_pointcloud: Whether to compute and publish
-   *                                     pointcloud from which points in the
-   *                                     bounding box are removed. Will be
-   *                                     published on scan_point_cloud_no_bbox.
-   *                                     Implies compute_bounding_box.
-   *                                     Default: false.
-   * publish_no_bounding_sphere_pointcloud: Whether to compute and publish
-   *                                        pointcloud from which points in the
-   *                                        bounding sphere are removed. Will be
-   *                                        published on scan_point_cloud_no_bsphere.
-   *                                        Implies compute_bounding_sphere.
-   *                                        Default: false.
-   * links_ignored_in_bounding_sphere: List of links to be ignored in bounding
-   *                                   sphere computation. Can be either names of
-   *                                   links or a combination of link name and
-   *                                   collision index, e.g. link::1,
-   *                                   or link name and collision name, e.g.
-   *                                   link::my_collision.
-   *                                   Default: []
-   * links_ignored_in_bounding_box: List of links to be ignored in bounding
-   *                                box computation. Can be either names of
-   *                                links or a combination of link name and
-   *                                collision index, e.g. link::1,
-   *                                or link name and collision name, e.g.
-   *                                link::my_collision.
-   *                                Default: []
-   * links_ignored_in_contains_test: List of links to be ignored when testing
-   *                                 if a point is inside robot body. Can be
-   *                                 either names of links or a combination of
-   *                                 link name and collision index, e.g.
-   *                                 link::1, or link name and
-   *                                 collision name, e.g. link::my_collision.
-   *                                 Default: []
-   * links_ignored_in_shadow_test: List of links to be ignored when testing
-   *                               if a point is shadowed by robot body. Can be
-   *                               either names of links or a combination of
-   *                               link name and collision index, e.g.
-   *                               link::1, or link name and collision
-   *                               name, e.g. link::my_collision. It is
-   *                               essential that this list contains the sensor
-   *                               link - otherwise all points would be shadowed
-   *                               by the sensor itself. Default: ['laser']
-   * links_ignored_everywhere: List of links to be completely ignored. Can be
-   *                               either names of links or a combination of
-   *                               link name and collision index, e.g.
-   *                               link::1, or link name and collision
-   *                               name, e.g. link::my_collision. Default: []
-   * dynamic_robot_description_field_name: If robot model is published by dynamic
-   *                                       reconfigure, this is the name of the
-   *                                       Config message field which holds the
-   *                                       robot model: Default: robot_model
-   */
+  //! Parameters are described in the readme.
   bool configure() override;
 
   bool update(const T& data_in, T& data_out) override = 0;
@@ -212,6 +102,15 @@ protected:
   //! Whether to keep pointcloud organized or not (if not, invalid points are
   //! removed).
   bool keepCloudsOrganized;
+
+  /** \brief The interval between two consecutive model pose updates when
+   * processing a pointByPointScan. If set to zero, the model will be updated
+   * for each point separately (might be computationally exhaustive). If
+   * non-zero, it will only update the model once in this interval, which makes
+   * the masking algorithm a little bit less precise but more computationally
+   * affordable.
+   */
+  ros::Duration modelPoseUpdateInterval;
 
   /** \brief Fixed frame wrt the sensor frame.
    * Usually base_link for stationary robots (or sensor frame if both
@@ -258,8 +157,13 @@ protected:
   ros::Publisher boundingSpherePublisher;
   //! Publisher of robot bounding box (relative to fixed frame).
   ros::Publisher boundingBoxPublisher;
+  //! Publisher of the bounding sphere marker.
+  ros::Publisher boundingSphereMarkerPublisher;
+  //! Publisher of the bounding box marker.
+  ros::Publisher boundingBoxMarkerPublisher;
   //! Publisher of the debug bounding box markers.
   ros::Publisher boundingBoxDebugMarkerPublisher;
+  //! Publisher of the debug bounding sphere markers.
   ros::Publisher boundingSphereDebugMarkerPublisher;
 
   //! Publisher of scan_point_cloud with robot bounding box cut out.
@@ -283,6 +187,10 @@ protected:
   bool computeBoundingBox;
   //! Whether to compute debug bounding box of the robot.
   bool computeDebugBoundingBox;
+  //! Whether to publish the bounding box marker.
+  bool publishBoundingBoxMarker;
+  //! Whether to publish the bounding sphere marker.
+  bool publishBoundingSphereMarker;
   //! Whether to publish scan_point_cloud with robot bounding box cut out.
   bool publishNoBoundingBoxPointcloud;
   //! Whether to publish scan_point_cloud with robot bounding sphere cut out.
@@ -411,7 +319,7 @@ protected:
   void computeAndPublishBoundingBox(const sensor_msgs::PointCloud2& projectedPointCloud) const;
 };
 
-class RobotSelfFilterLaserScan : public RobotSelfFilter<sensor_msgs::LaserScan>
+class RobotBodyFilterLaserScan : public RobotBodyFilter<sensor_msgs::LaserScan>
 {
 public:
   //! Apply the filter.
@@ -420,7 +328,7 @@ public:
   virtual bool configure();
 };
 
-class RobotSelfFilterPointCloud2 : public RobotSelfFilter<sensor_msgs::PointCloud2>
+class RobotBodyFilterPointCloud2 : public RobotBodyFilter<sensor_msgs::PointCloud2>
 {
 public:
   //! Apply the filter.
@@ -431,4 +339,4 @@ public:
 
 }
 
-#endif //ROBOT_SELF_FILTER_ROBOTSELFFILTER_H_
+#endif //ROBOT_BODY_FILTER_ROBOTSELFFILTER_H_

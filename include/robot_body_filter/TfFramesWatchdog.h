@@ -49,6 +49,11 @@ public:
   void unpause();
 
   /**
+   * \brief Stop the watchdog for good. Can only be called once.
+   */
+  void stop();
+
+  /**
    * \brief Clear shapes_to_links, reachable_frames and tf_buffer.
    */
   void clear();
@@ -120,9 +125,12 @@ protected:
   std::set<std::string> monitoredFrames;
 
   //! If true, this thread is paused.
-  bool paused = true;
+  volatile bool paused = true;
   //! True if the watchdog thread has been started.
   bool started = false;
+  //! If true, the watchdog should stop its execution. Blocks until the
+  //! execution thread exits.
+  volatile bool shouldStop = false;
 
   //! TF buffer
   std::shared_ptr<tf2_ros::Buffer> tfBuffer;

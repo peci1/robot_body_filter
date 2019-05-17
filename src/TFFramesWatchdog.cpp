@@ -26,7 +26,7 @@ void TFFramesWatchdog::start() {
 void TFFramesWatchdog::run() {
   this->started = true;
 
-  while (ros::ok()) {
+  while (!this->shouldStop && ros::ok()) {
     if (!this->paused) { // the thread is paused when we want to change the stuff protected by framesMutex.
       this->searchForReachableFrames();
     }
@@ -77,6 +77,13 @@ void TFFramesWatchdog::pause() {
 
 void TFFramesWatchdog::unpause() {
   this->paused = false;
+}
+
+void TFFramesWatchdog::stop() {
+  ROS_INFO("Stopping TF watchdog.");
+  this->shouldStop = true;
+  this->thisThread.join(); // segfaults without this line
+  ROS_INFO("TF watchdog stopped.");
 }
 
 void TFFramesWatchdog::clear() {
