@@ -27,6 +27,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <dynamic_reconfigure/Config.h>
 #include <robot_body_filter/SphereStamped.h>
+#include <robot_body_filter/OrientedBoundingBoxStamped.h>
 #include <geometry_msgs/PointStamped.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <std_srvs/Trigger.h>
@@ -157,17 +158,33 @@ protected:
   ros::Publisher boundingSpherePublisher;
   //! Publisher of robot bounding box (relative to fixed frame).
   ros::Publisher boundingBoxPublisher;
+  //! Publisher of robot bounding box (relative to fixed frame).
+  ros::Publisher orientedBoundingBoxPublisher;
+  //! Publisher of robot bounding box (relative to defined local frame).
+  ros::Publisher localBoundingBoxPublisher;
   //! Publisher of the bounding sphere marker.
   ros::Publisher boundingSphereMarkerPublisher;
   //! Publisher of the bounding box marker.
   ros::Publisher boundingBoxMarkerPublisher;
+  //! Publisher of the oriented bounding box marker.
+  ros::Publisher orientedBoundingBoxMarkerPublisher;
+  //! Publisher of the local bounding box marker.
+  ros::Publisher localBoundingBoxMarkerPublisher;
   //! Publisher of the debug bounding box markers.
   ros::Publisher boundingBoxDebugMarkerPublisher;
+  //! Publisher of the debug oriented bounding box markers.
+  ros::Publisher orientedBoundingBoxDebugMarkerPublisher;
+  //! Publisher of the debug local bounding box markers.
+  ros::Publisher localBoundingBoxDebugMarkerPublisher;
   //! Publisher of the debug bounding sphere markers.
   ros::Publisher boundingSphereDebugMarkerPublisher;
 
   //! Publisher of scan_point_cloud with robot bounding box cut out.
   ros::Publisher scanPointCloudNoBoundingBoxPublisher;
+  //! Publisher of scan_point_cloud with robot oriented bounding box cut out.
+  ros::Publisher scanPointCloudNoOrientedBoundingBoxPublisher;
+  //! Publisher of scan_point_cloud with robot local bounding box cut out.
+  ros::Publisher scanPointCloudNoLocalBoundingBoxPublisher;
   //! Publisher of scan_point_cloud with robot bounding sphere cut out.
   ros::Publisher scanPointCloudNoBoundingSpherePublisher;
   ros::Publisher debugPointCloudInsidePublisher;
@@ -187,14 +204,33 @@ protected:
   bool computeBoundingBox;
   //! Whether to compute debug bounding box of the robot.
   bool computeDebugBoundingBox;
+  //! Whether to compute oriented bounding box of the robot.
+  bool computeOrientedBoundingBox;
+  //! Whether to compute debug oriented bounding box of the robot.
+  bool computeDebugOrientedBoundingBox;
+  //! Whether to compute local bounding box of the robot.
+  bool computeLocalBoundingBox;
+  //! Whether to compute debug local bounding box of the robot.
+  bool computeDebugLocalBoundingBox;
   //! Whether to publish the bounding box marker.
   bool publishBoundingBoxMarker;
+  //! Whether to publish the bounding box marker.
+  bool publishOrientedBoundingBoxMarker;
+  //! Whether to publish the bounding box marker.
+  bool publishLocalBoundingBoxMarker;
   //! Whether to publish the bounding sphere marker.
   bool publishBoundingSphereMarker;
   //! Whether to publish scan_point_cloud with robot bounding box cut out.
   bool publishNoBoundingBoxPointcloud;
+  //! Whether to publish scan_point_cloud with robot oriented bounding box cut out.
+  bool publishNoOrientedBoundingBoxPointcloud;
+  //! Whether to publish scan_point_cloud with robot local bounding box cut out.
+  bool publishNoLocalBoundingBoxPointcloud;
   //! Whether to publish scan_point_cloud with robot bounding sphere cut out.
   bool publishNoBoundingSpherePointcloud;
+
+  //! The frame in which local bounding box should be computed.
+  std::string localBoundingBoxFrame;
 
   bool publishDebugPclInside;
   bool publishDebugPclClip;
@@ -317,6 +353,18 @@ protected:
    * pointcloud without bounding box.
    */
   void computeAndPublishBoundingBox(const sensor_msgs::PointCloud2& projectedPointCloud) const;
+
+  /**
+   * \brief Computation of the oriented bounding box, debug boxes, and publishing of
+   * pointcloud without bounding box.
+   */
+  void computeAndPublishOrientedBoundingBox(const sensor_msgs::PointCloud2& projectedPointCloud) const;
+
+  /**
+   * \brief Computation of the local bounding box, debug boxes, and publishing of
+   * pointcloud without bounding box.
+   */
+  void computeAndPublishLocalBoundingBox(const sensor_msgs::PointCloud2& projectedPointCloud) const;
 };
 
 class RobotBodyFilterLaserScan : public RobotBodyFilter<sensor_msgs::LaserScan>

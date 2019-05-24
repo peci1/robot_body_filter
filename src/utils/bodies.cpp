@@ -54,7 +54,7 @@ void computeBoundingBox(const bodies::Box *body, AxisAlignedBoundingBox &bbox)
     return;
 
   bbox.extendWithTransformedBox(body->getPose(),
-      Eigen::Vector3d(body->length2_, body->width2_, body->height2_));
+      2 * Eigen::Vector3d(body->length2_, body->width2_, body->height2_));
 }
 
 void computeBoundingBox(const bodies::Sphere *body, AxisAlignedBoundingBox &bbox)
@@ -65,7 +65,7 @@ void computeBoundingBox(const bodies::Sphere *body, AxisAlignedBoundingBox &bbox
     return;
 
   // it's a sphere, so we do not rotate the bounding box
-  Eigen::Isometry3d transform;
+  Eigen::Isometry3d transform = Eigen::Isometry3d::Identity();
   transform.translation() = body->getPose().translation();
 
   bbox.extendWithTransformedBox(transform,
@@ -89,10 +89,17 @@ void computeBoundingBox(const bodies::Cylinder *body, AxisAlignedBoundingBox &bb
   if (body == nullptr)
     return;
 
-  // TODO this might be a little suboptimal if the cylinder is rotated around
-  //  its z-axis - the resulting bbox might be up to sqrt(2)-times larger
-  bbox.extendWithTransformedBox(body->getPose(),
-      Eigen::Vector3d(2 * body->radiusU_, 2 * body->radiusU_, 2 * body->length2_));
+  // method taken from http://www.iquilezles.org/www/articles/diskbbox/diskbbox.htm
+
+  const auto a = body->normalH_;
+  const auto e = body->radiusU_ * (Eigen::Vector3d::Ones() - a.cwiseProduct(a) / a.dot(a)).cwiseSqrt();
+  const auto pa = body->center_ + body->length2_ * body->normalH_;
+  const auto pb = body->center_ - body->length2_ * body->normalH_;
+
+  bbox.extend(pa - e);
+  bbox.extend(pa + e);
+  bbox.extend(pb - e);
+  bbox.extend(pb + e);
 }
 
 void mergeAxisAlignedBoundingBoxes(const std::vector<AxisAlignedBoundingBox> &boxes,
@@ -100,6 +107,13 @@ void mergeAxisAlignedBoundingBoxes(const std::vector<AxisAlignedBoundingBox> &bo
 {
   for (const auto& box : boxes)
     mergedBox.extend(box);
+}
+
+void mergeOrientedBoundingBoxesApprox(const std::vector<OrientedBoundingBox>& boxes,
+    OrientedBoundingBox& mergedBox)
+{
+  for (const auto& box : boxes)
+    mergedBox.extendApprox(box);
 }
 
 shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body &body)
@@ -152,6 +166,57 @@ void constructMarkerFromBody(const bodies::Body& body,
     msg.pose.orientation.y = q.y();
     msg.pose.orientation.z = q.z();
     msg.pose.orientation.w = q.w();
+}
+
+void computeBoundingBox(const bodies::Body *body,
+                                OrientedBoundingBox &bbox) {
+  if (body == nullptr)
+    return;
+
+  switch (body->getType()) {
+
+  case shapes::SPHERE:
+    computeBoundingBox(dynamic_cast<const bodies::Sphere*>(body), bbox);
+    break;
+  case shapes::CYLINDER:
+    computeBoundingBox(dynamic_cast<const bodies::Cylinder*>(body), bbox);
+    break;
+  case shapes::BOX:
+    computeBoundingBox(dynamic_cast<const bodies::Box*>(body), bbox);
+    break;
+  case shapes::MESH:
+    computeBoundingBox(dynamic_cast<const bodies::ConvexMesh*>(body), bbox);
+    break;
+  case shapes::PLANE:
+  case shapes::CONE:
+  case shapes::UNKNOWN_SHAPE:
+  case shapes::OCTREE:
+    throw std::runtime_error("Unsupported geometric body type.");
+  }
+}
+
+void computeBoundingBox(const bodies::Sphere *body,
+                                OrientedBoundingBox &bbox) {
+  // it's a sphere, so we do not rotate the bounding box
+  Eigen::Isometry3d transform = Eigen::Isometry3d::Identity();
+  transform.translation() = body->getPose().translation();
+
+  bbox.setPoseAndExtents(transform, 2 * Eigen::Vector3d(body->radiusU_, body->radiusU_, body->radiusU_));
+}
+
+void computeBoundingBox(const bodies::Box *body,
+                                OrientedBoundingBox &bbox) {
+  bbox.setPoseAndExtents(body->getPose(), 2 * Eigen::Vector3d(body->length2_, body->width2_, body->height2_));
+}
+
+void computeBoundingBox(const bodies::Cylinder *body,
+                                OrientedBoundingBox &bbox) {
+  bbox.setPoseAndExtents(body->getPose(), 2 * Eigen::Vector3d(body->radiusU_, body->radiusU_, body->length2_));
+}
+
+void computeBoundingBox(const bodies::ConvexMesh *body,
+                                OrientedBoundingBox &bbox) {
+  computeBoundingBox(&body->bounding_box_, bbox);
 }
 
 }

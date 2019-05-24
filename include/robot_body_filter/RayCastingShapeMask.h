@@ -45,13 +45,6 @@ public:
   getBoundingSpheres() const;
 
   /**
-   * \brief Get the map of axis-aligned bounding boxes of all registered shapes.
-   * \return The map of bounding boxes.
-   */
-  std::map<point_containment_filter::ShapeHandle, bodies::AxisAlignedBoundingBox>
-  getAxisAlignedBoundingBoxes() const;
-
-  /**
    * \brief Get the bounding sphere containing all registered shapes.
    * \return The bounding sphere of the mask.
    */
@@ -193,7 +186,6 @@ protected:
 
   std::vector<size_t> bspheresBodyIndices;
   std::vector<bodies::BoundingSphere> bspheresForContainsTest;
-  std::vector<bodies::AxisAlignedBoundingBox> boundingBoxes;
 };
 
 }

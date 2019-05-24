@@ -1,0 +1,2 @@
+geometry_msgs/Vector3 extents
+geometry_msgs/Transform pose

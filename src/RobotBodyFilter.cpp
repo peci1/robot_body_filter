@@ -22,6 +22,7 @@
 #include <sensor_msgs/point_cloud2_iterator.h>
 
 #include <pcl_conversions/pcl_conversions.h>
+#include <tf2/LinearMath/Transform.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 #include <tf2_eigen/tf2_eigen.h>
 
@@ -70,12 +71,21 @@ bool RobotBodyFilter<T>::configure() {
   this->unreachableTransformTimeout = this->getParamVerbose("transforms/timeout/unreachable", ros::Duration(0.2), "s");
   this->publishNoBoundingSpherePointcloud = this->getParamVerbose("bounding_sphere/publish_cut_out_pointcloud", false);
   this->publishNoBoundingBoxPointcloud = this->getParamVerbose("bounding_box/publish_cut_out_pointcloud", false);
+  this->publishNoOrientedBoundingBoxPointcloud = this->getParamVerbose("oriented_bounding_box/publish_cut_out_pointcloud", false);
+  this->publishNoLocalBoundingBoxPointcloud = this->getParamVerbose("local_bounding_box/publish_cut_out_pointcloud", false);
   this->computeBoundingSphere = this->getParamVerbose("bounding_sphere/compute", false) || this->publishNoBoundingSpherePointcloud;
   this->computeBoundingBox = this->getParamVerbose("bounding_box/compute", false) || this->publishNoBoundingBoxPointcloud;
+  this->computeOrientedBoundingBox = this->getParamVerbose("oriented_bounding_box/compute", false) || this->publishNoOrientedBoundingBoxPointcloud;
+  this->computeLocalBoundingBox = this->getParamVerbose("local_bounding_box/compute", false) || this->publishNoLocalBoundingBoxPointcloud;
   this->computeDebugBoundingSphere = this->getParamVerbose("bounding_sphere/debug", false);
   this->computeDebugBoundingBox = this->getParamVerbose("bounding_box/debug", false);
+  this->computeDebugOrientedBoundingBox = this->getParamVerbose("oriented_bounding_box/debug", false);
+  this->computeDebugLocalBoundingBox = this->getParamVerbose("local_bounding_box/debug", false);
   this->publishBoundingSphereMarker = this->getParamVerbose("bounding_sphere/marker", false);
   this->publishBoundingBoxMarker = this->getParamVerbose("bounding_box/marker", false);
+  this->publishOrientedBoundingBoxMarker = this->getParamVerbose("oriented_bounding_box/marker", false);
+  this->publishLocalBoundingBoxMarker = this->getParamVerbose("local_bounding_box/marker", false);
+  this->localBoundingBoxFrame = this->getParamVerbose("local_bounding_box/frame_id", this->fixedFrame);
   this->publishDebugPclInside = this->getParamVerbose("debug/pcl/inside", false);
   this->publishDebugPclClip = this->getParamVerbose("debug/pcl/clip", false);
   this->publishDebugPclShadow = this->getParamVerbose("debug/pcl/shadow", false);
@@ -106,6 +116,14 @@ bool RobotBodyFilter<T>::configure() {
     this->boundingBoxPublisher = this->nodeHandle.template advertise<geometry_msgs::PolygonStamped>("robot_bounding_box", 100);
   }
 
+  if (this->computeOrientedBoundingBox) {
+    this->orientedBoundingBoxPublisher = this->nodeHandle.template advertise<OrientedBoundingBoxStamped>("robot_oriented_bounding_box", 100);
+  }
+
+  if (this->computeLocalBoundingBox) {
+    this->localBoundingBoxPublisher = this->nodeHandle.template advertise<geometry_msgs::PolygonStamped>("robot_local_bounding_box", 100);
+  }
+
   if (this->publishBoundingSphereMarker && this->computeBoundingSphere) {
     this->boundingSphereMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::Marker>("robot_bounding_sphere_marker", 100);
   }
@@ -114,9 +132,27 @@ bool RobotBodyFilter<T>::configure() {
     this->boundingBoxMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::Marker>("robot_bounding_box_marker", 100);
   }
 
+  if (this->publishOrientedBoundingBoxMarker && this->computeOrientedBoundingBox) {
+    this->orientedBoundingBoxMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::Marker>("robot_oriented_bounding_box_marker", 100);
+  }
+
+  if (this->publishLocalBoundingBoxMarker && this->computeLocalBoundingBox) {
+    this->localBoundingBoxMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::Marker>("robot_local_bounding_box_marker", 100);
+  }
+
   if (this->publishNoBoundingBoxPointcloud)
   {
     this->scanPointCloudNoBoundingBoxPublisher = this->nodeHandle.template advertise<sensor_msgs::PointCloud2>("scan_point_cloud_no_bbox", 100);
+  }
+
+  if (this->publishNoOrientedBoundingBoxPointcloud)
+  {
+    this->scanPointCloudNoOrientedBoundingBoxPublisher = this->nodeHandle.template advertise<sensor_msgs::PointCloud2>("scan_point_cloud_no_oriented_bbox", 100);
+  }
+
+  if (this->publishNoLocalBoundingBoxPointcloud)
+  {
+    this->scanPointCloudNoLocalBoundingBoxPublisher = this->nodeHandle.template advertise<sensor_msgs::PointCloud2>("scan_point_cloud_no_local_bbox", 100);
   }
 
   if (this->publishNoBoundingSpherePointcloud)
@@ -152,6 +188,16 @@ bool RobotBodyFilter<T>::configure() {
   if (this->computeDebugBoundingBox) {
     this->boundingBoxDebugMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>(
       "robot_bounding_box_debug", 100);
+  }
+
+  if (this->computeDebugOrientedBoundingBox) {
+    this->orientedBoundingBoxDebugMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>(
+      "robot_oriented_bounding_box_debug", 100);
+  }
+
+  if (this->computeDebugLocalBoundingBox) {
+    this->localBoundingBoxDebugMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>(
+      "robot_local_bounding_box_debug", 100);
   }
 
   if (this->computeDebugBoundingSphere) {
@@ -323,6 +369,8 @@ bool RobotBodyFilter<T>::computeMask(
   this->publishDebugMarkers(scanTime);
   this->computeAndPublishBoundingSphere(projectedPointCloud);
   this->computeAndPublishBoundingBox(projectedPointCloud);
+  this->computeAndPublishOrientedBoundingBox(projectedPointCloud);
+  this->computeAndPublishLocalBoundingBox(projectedPointCloud);
 
   ROS_DEBUG("RobotBodyFilter: Filtering run time is %.5f secs.", double(clock()-stopwatchOverall) / CLOCKS_PER_SEC);
   return true;
@@ -908,10 +956,12 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBox : this->shapeMask->getAxisAlignedBoundingBoxes())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodies())
     {
-      const auto& shapeHandle = shapeHandleAndBox.first;
-      const auto& box = shapeHandleAndBox.second;
+      const auto& shapeHandle = shapeHandleAndBody.first;
+      const auto& body = shapeHandleAndBody.second;
+      bodies::AxisAlignedBoundingBox box;
+      bodies::computeBoundingBox(body, box);
 
       if (this->shapesIgnoredInBoundingBox.find(shapeHandle) == this->shapesIgnoredInBoundingBox.end())
       {
@@ -923,7 +973,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
         msg.header.stamp = scanTime;
         msg.header.frame_id = this->fixedFrame;
 
-        // TODO it is aligned to odom and not base_link!
+        // it is aligned to fixed frame, not necessarily robot frame
         tf2::toMsg(box.sizes(), msg.scale);
         msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.center());
         msg.pose.orientation.w = 1;
@@ -967,7 +1017,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
       msg.header.stamp = scanTime;
       msg.header.frame_id = this->fixedFrame;
 
-      // TODO it is aligned to odom and not base_link!
+      // it is aligned to fixed frame and not necessarily to robot frame
       tf2::toMsg(box.sizes(), msg.scale);
       msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.center());
       msg.pose.orientation.w = 1;
@@ -1004,6 +1054,262 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
       boxFilteredCloud->header.stamp = scanTime;  // PCL strips precision of timestamp
 
       this->scanPointCloudNoBoundingBoxPublisher.publish(boxFilteredCloud);
+    }
+  }
+}
+
+template<typename T>
+void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
+    const sensor_msgs::PointCloud2& projectedPointCloud) const
+{
+  if (!this->computeOrientedBoundingBox && !this->computeDebugOrientedBoundingBox)
+    return;
+
+  // assume this->modelMutex is locked
+
+  const auto& scanTime = projectedPointCloud.header.stamp;
+  std::vector<bodies::OrientedBoundingBox> boxes;
+
+  {
+    visualization_msgs::MarkerArray boundingBoxDebugMsg;
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodies())
+    {
+      const auto& shapeHandle = shapeHandleAndBody.first;
+      const auto& body = shapeHandleAndBody.second;
+
+      bodies::OrientedBoundingBox box;
+      bodies::computeBoundingBox(body, box);
+
+      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) == this->shapesIgnoredInBoundingBox.end())
+      {
+        boxes.push_back(box);
+      }
+
+      if (this->computeDebugOrientedBoundingBox) {
+        visualization_msgs::Marker msg;
+        msg.header.stamp = scanTime;
+        msg.header.frame_id = this->fixedFrame;
+
+        tf2::toMsg(box.getExtents(), msg.scale);
+        msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.getPose().translation());
+        msg.pose.orientation = tf2::toMsg(Eigen::Quaterniond(box.getPose().linear()));
+
+        msg.color.g = 1.0;
+        msg.color.a = 0.5;
+        msg.type = visualization_msgs::Marker::CUBE;
+        msg.action = visualization_msgs::Marker::ADD;
+        msg.ns = "obbox/" + this->shapesToLinks.at(shapeHandle).cacheKey;
+        msg.frame_locked = static_cast<unsigned char>(true);
+
+        boundingBoxDebugMsg.markers.push_back(msg);
+      }
+    }
+
+    if (this->computeDebugOrientedBoundingBox) {
+      this->orientedBoundingBoxDebugMarkerPublisher.publish(boundingBoxDebugMsg);
+    }
+  }
+
+  if (this->computeOrientedBoundingBox)
+  {
+    bodies::OrientedBoundingBox box;
+    bodies::mergeOrientedBoundingBoxesApprox(boxes, box);
+
+    robot_body_filter::OrientedBoundingBoxStamped boundingBoxMsg;
+
+    boundingBoxMsg.header.stamp = scanTime;
+    boundingBoxMsg.header.frame_id = this->fixedFrame;
+
+    tf2::toMsg(box.getExtents(), boundingBoxMsg.obb.extents);
+    tf2::toMsg(box.getPose().translation(), boundingBoxMsg.obb.pose.translation);
+    boundingBoxMsg.obb.pose.rotation = tf2::toMsg(Eigen::Quaterniond(box.getPose().linear()));
+
+    this->orientedBoundingBoxPublisher.publish(boundingBoxMsg);
+
+    if (this->publishOrientedBoundingBoxMarker)
+    {
+      visualization_msgs::Marker msg;
+      msg.header.stamp = scanTime;
+      msg.header.frame_id = this->fixedFrame;
+
+      tf2::toMsg(box.getExtents(), msg.scale);
+      msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.getPose().translation());
+      msg.pose.orientation = tf2::toMsg(Eigen::Quaterniond(box.getPose().linear()));
+
+      msg.color.r = 1.0;
+      msg.color.a = 0.5;
+      msg.type = visualization_msgs::Marker::CUBE;
+      msg.action = visualization_msgs::Marker::ADD;
+      msg.ns = "oriented_bounding_box";
+      msg.frame_locked = static_cast<unsigned char>(true);
+
+      this->orientedBoundingBoxMarkerPublisher.publish(msg);
+    }
+
+    // compute and publish the scan_point_cloud with robot bounding box removed
+    if (this->publishNoOrientedBoundingBoxPointcloud) {
+
+      pcl::PCLPointCloud2::Ptr bboxCropInput(new pcl::PCLPointCloud2());
+      pcl_conversions::toPCL(projectedPointCloud, *(bboxCropInput));
+
+      pcl::CropBox<pcl::PCLPointCloud2> cropBox;
+      cropBox.setNegative(true);
+      cropBox.setInputCloud(bboxCropInput);
+      cropBox.setKeepOrganized(this->keepCloudsOrganized);
+
+      const auto e = box.getExtents();
+      cropBox.setMin(Eigen::Vector4f(-e.x()/2, -e.y()/2, -e.z()/2, 0.0));
+      cropBox.setMax(Eigen::Vector4f(e.x()/2, e.y()/2, e.z()/2, 0.0));
+      cropBox.setTransform(box.getPose().cast<float>());
+
+      pcl::PCLPointCloud2 pclOutput;
+      cropBox.filter(pclOutput);
+
+      sensor_msgs::PointCloud2Ptr boxFilteredCloud(new sensor_msgs::PointCloud2());
+      pcl_conversions::moveFromPCL(pclOutput, *boxFilteredCloud);
+      boxFilteredCloud->header.stamp = scanTime;  // PCL strips precision of timestamp
+
+      this->scanPointCloudNoOrientedBoundingBoxPublisher.publish(boxFilteredCloud);
+    }
+  }
+}
+
+template<typename T>
+void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
+    const sensor_msgs::PointCloud2& projectedPointCloud) const
+{
+  if (!this->computeLocalBoundingBox && !this->computeDebugLocalBoundingBox)
+    return;
+
+  // assume this->modelMutex is locked
+
+  const auto& scanTime = projectedPointCloud.header.stamp;
+  std::string err;
+  try {
+    if (!this->tfBuffer->canTransform(this->localBoundingBoxFrame,
+                                      this->fixedFrame,
+                                      scanTime,
+                                      this->reachableTransformTimeout, &err)) {
+      ROS_ERROR_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
+                         this->fixedFrame.c_str(),
+                         this->localBoundingBoxFrame.c_str(), err.c_str());
+      return;
+    }
+  } catch (tf2::TransformException& e) {
+    ROS_ERROR_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
+                       this->fixedFrame.c_str(),
+                       this->localBoundingBoxFrame.c_str(), e.what());
+    return;
+  }
+
+  const auto localTfMsg = this->tfBuffer->lookupTransform(this->localBoundingBoxFrame,
+      this->fixedFrame, scanTime);
+  Eigen::Isometry3d localTf, oldPose;
+  localTf = tf2::transformToEigen(localTfMsg.transform);
+
+  std::vector<bodies::AxisAlignedBoundingBox> boxes;
+
+  {
+    visualization_msgs::MarkerArray boundingBoxDebugMsg;
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodies())
+    {
+      const auto& shapeHandle = shapeHandleAndBody.first;
+      const auto& body = shapeHandleAndBody.second;
+
+      bodies::AxisAlignedBoundingBox box;
+      oldPose = body->getPose();
+      body->setPose(localTf * oldPose);
+      bodies::computeBoundingBox(body, box);
+      body->setPose(oldPose);
+
+      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) == this->shapesIgnoredInBoundingBox.end())
+      {
+        boxes.push_back(box);
+      }
+
+      if (this->computeDebugLocalBoundingBox) {
+        visualization_msgs::Marker msg;
+        msg.header.stamp = scanTime;
+        msg.header.frame_id = this->localBoundingBoxFrame;
+
+        tf2::toMsg(box.sizes(), msg.scale);
+        msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.center());
+        msg.pose.orientation.w = 1;
+
+        msg.color.g = 1.0;
+        msg.color.a = 0.5;
+        msg.type = visualization_msgs::Marker::CUBE;
+        msg.action = visualization_msgs::Marker::ADD;
+        msg.ns = "lbbox/" + this->shapesToLinks.at(shapeHandle).cacheKey;
+        msg.frame_locked = static_cast<unsigned char>(true);
+
+        boundingBoxDebugMsg.markers.push_back(msg);
+      }
+    }
+
+    if (this->computeDebugLocalBoundingBox) {
+      this->localBoundingBoxDebugMarkerPublisher.publish(boundingBoxDebugMsg);
+    }
+  }
+
+  if (this->computeLocalBoundingBox)
+  {
+    bodies::AxisAlignedBoundingBox box;
+    bodies::mergeAxisAlignedBoundingBoxes(boxes, box);
+
+    geometry_msgs::PolygonStamped boundingBoxMsg;
+
+    boundingBoxMsg.header.stamp = scanTime;
+    boundingBoxMsg.header.frame_id = this->localBoundingBoxFrame;
+
+    boundingBoxMsg.polygon.points.resize(2);
+    tf2::toMsg(box.min(), boundingBoxMsg.polygon.points[0]);
+    tf2::toMsg(box.max(), boundingBoxMsg.polygon.points[1]);
+
+    this->localBoundingBoxPublisher.publish(boundingBoxMsg);
+
+    if (this->publishLocalBoundingBoxMarker)
+    {
+      visualization_msgs::Marker msg;
+      msg.header.stamp = scanTime;
+      msg.header.frame_id = this->localBoundingBoxFrame;
+
+      tf2::toMsg(box.sizes(), msg.scale);
+      msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.center());
+      msg.pose.orientation.w = 1;
+
+      msg.color.r = 1.0;
+      msg.color.a = 0.5;
+      msg.type = visualization_msgs::Marker::CUBE;
+      msg.action = visualization_msgs::Marker::ADD;
+      msg.ns = "local_bounding_box";
+      msg.frame_locked = static_cast<unsigned char>(true);
+
+      this->localBoundingBoxMarkerPublisher.publish(msg);
+    }
+
+    // compute and publish the scan_point_cloud with robot bounding box removed
+    if (this->publishNoLocalBoundingBoxPointcloud) {
+
+      pcl::PCLPointCloud2::Ptr bboxCropInput(new pcl::PCLPointCloud2());
+      pcl_conversions::toPCL(projectedPointCloud, *(bboxCropInput));
+
+      pcl::CropBox<pcl::PCLPointCloud2> cropBox;
+      cropBox.setNegative(true);
+      cropBox.setInputCloud(bboxCropInput);
+      cropBox.setKeepOrganized(this->keepCloudsOrganized);
+
+      cropBox.setMin(Eigen::Vector4f(box.min()[0], box.min()[1], box.min()[2], 0.0));
+      cropBox.setMax(Eigen::Vector4f(box.max()[0], box.max()[1], box.max()[2], 0.0));
+
+      pcl::PCLPointCloud2 pclOutput;
+      cropBox.filter(pclOutput);
+
+      sensor_msgs::PointCloud2Ptr boxFilteredCloud(new sensor_msgs::PointCloud2());
+      pcl_conversions::moveFromPCL(pclOutput, *boxFilteredCloud);
+      boxFilteredCloud->header.stamp = scanTime;  // PCL strips precision of timestamp
+
+      this->scanPointCloudNoLocalBoundingBoxPublisher.publish(boxFilteredCloud);
     }
   }
 }

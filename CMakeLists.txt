@@ -13,7 +13,13 @@ set(MESSAGE_DEPS geometry_msgs std_msgs)
 find_package(catkin REQUIRED COMPONENTS ${THIS_PACKAGE_DEPS} ${MESSAGE_DEPS} message_generation tf2_eigen tf2_sensor_msgs)
 find_package(PCL REQUIRED COMPONENTS common filters)
 
-add_message_files(FILES Sphere.msg SphereStamped.msg)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBFCL_PC REQUIRED fcl)
+find_path(LIBFCL_INCLUDE_DIRS fcl/config.h HINTS ${LIBFCL_PC_INCLUDE_DIR} ${LIBFCL_PC_INCLUDE_DIRS})
+find_library(LIBFCL_LIBRARIES fcl HINTS ${LIBFCL_PC_LIBRARY_DIRS})
+
+
+add_message_files(FILES OrientedBoundingBox.msg OrientedBoundingBoxStamped.msg Sphere.msg SphereStamped.msg)
 generate_messages(DEPENDENCIES ${MESSAGE_DEPS})
 
 catkin_package(
@@ -22,17 +28,19 @@ catkin_package(
     LIBRARIES ${PROJECT_NAME} utils
 )
 
+include_directories(SYSTEM ${LIBFCL_INCLUDE_DIRS})
 include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 
 add_library(utils
   src/utils/bodies.cpp
   src/utils/cloud.cpp
+  src/utils/obb.cpp
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
   src/utils/tf2_eigen.cpp
   src/utils/time_utils.cpp
 )
-target_link_libraries(utils ${catkin_LIBRARIES})
+target_link_libraries(utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES})
 
 add_library(${PROJECT_NAME}
   src/RobotBodyFilter.cpp

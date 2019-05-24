@@ -52,24 +52,6 @@ RayCastingShapeMask::getBoundingSpheres() const
   return map;
 }
 
-std::map<point_containment_filter::ShapeHandle, bodies::AxisAlignedBoundingBox>
-RayCastingShapeMask::getAxisAlignedBoundingBoxes() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
-  std::map<point_containment_filter::ShapeHandle, bodies::AxisAlignedBoundingBox> map;
-
-  size_t bodyIndex = 0, boxIndex = 0;
-  for (const auto& seeShape : this->bodies_) {
-    if (this->bspheresBodyIndices[boxIndex] == bodyIndex) {
-      map[seeShape.handle] = this->boundingBoxes[boxIndex];
-      boxIndex++;
-    }
-    bodyIndex++;
-  }
-
-  return map;
-}
-
 bodies::BoundingSphere RayCastingShapeMask::getBoundingSphere() const
 {
   boost::mutex::scoped_lock _(this->shapes_lock_);
@@ -101,7 +83,6 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
   this->bspheres_.resize(this->bodies_.size());
   this->bspheresBodyIndices.resize(this->bodies_.size());
   this->bspheresForContainsTest.resize(this->bodies_.size());
-  this->boundingBoxes.resize(this->bodies_.size());
 
   Eigen::Isometry3d transform;
   point_containment_filter::ShapeHandle shapeHandle;
@@ -128,7 +109,6 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
       body->setPose(transform);
 
       this->bspheresBodyIndices[j] = i;
-      bodies::computeBoundingBox(body, this->boundingBoxes[j]);
       body->computeBoundingSphere(this->bspheres_[j]);
 
       if (this->ignoreInContainsTest.find(shapeHandle) == this->ignoreInContainsTest.end())
