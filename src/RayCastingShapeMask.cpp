@@ -12,9 +12,15 @@
 #include <geometric_shapes/body_operations.h>
 
 #include <ros/console.h>
+#include <ros/ros.h>
+#include <visualization_msgs/Marker.h>
 
 namespace robot_body_filter
 {
+
+ros::NodeHandle nh;
+ros::Publisher pub;
+visualization_msgs::Marker msg;
 
 struct RayCastingShapeMask::RayCastingShapeMaskPIMPL
 {
@@ -30,6 +36,7 @@ RayCastingShapeMask::RayCastingShapeMask(
       maxSensorDist(maxSensorDist)
 {
   this->data = std::make_unique<RayCastingShapeMaskPIMPL>();
+  pub = nh.advertise<visualization_msgs::Marker>("test", 10);
 }
 
 RayCastingShapeMask::~RayCastingShapeMask() = default;
@@ -80,6 +87,20 @@ void RayCastingShapeMask::updateBodyPoses()
 
 void RayCastingShapeMask::updateBodyPosesNoLock()
 {
+  msg.header.frame_id = "odom";
+  msg.header.stamp = ros::Time::now();
+  msg.action = visualization_msgs::Marker::ADD;
+  msg.pose.orientation.w = 1;
+  msg.frame_locked = true;
+  msg.lifetime = ros::Duration(1.0);
+  msg.ns = "test";
+  msg.type = visualization_msgs::Marker::LINE_LIST;
+  msg.scale.x = 0.001;
+  msg.color.a = 1.0;
+
+  pub.publish(msg);
+  msg.points.clear();
+  msg.colors.clear();
   this->bspheres_.resize(this->bodies_.size());
   this->bspheresBodyIndices.resize(this->bodies_.size());
   this->bspheresForContainsTest.resize(this->bodies_.size());
@@ -167,7 +188,13 @@ void RayCastingShapeMask::maskContainmentAndShadows(const Eigen::Vector3f& data,
 
   this->classifyPointNoLock(data, mask, sensorPos, bound);
 }
-
+geometry_msgs::Point fn(const Eigen::Vector3f& data) {
+  geometry_msgs::Point result;
+  result.x = data.x();
+  result.y = data.y();
+  result.z = data.z();
+  return result;
+}
 void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3f& data,
     RayCastingShapeMask::MaskValue &mask, const Eigen::Vector3f& sensorPos,
     const bodies::BoundingSphere &boundingSphereForContainsTest)
@@ -201,20 +228,56 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3f& data,
   // point is not inside the robot, check if it is a shadow point
   dir /= distance;
   EigenSTL::vector_Vector3d intersections;
+
+  std_msgs::ColorRGBA red;
+  std_msgs::ColorRGBA green;
+  std_msgs::ColorRGBA blue;
+  std_msgs::ColorRGBA white;
+  std_msgs::ColorRGBA yellow;
+
+  red.r = red.a = 1.0;
+  green.g = green.a = 1.0;
+  blue.b = blue.a = 1.0;
+  white.b = white.a = white.r = white.g = 1.0;
+  yellow.a = yellow.r = yellow.g = 1.0;
+
   for (const auto &seeShape : this->data->bodiesForShadowTest)
   {
+    auto print = seeShape.handle == 16 && fabs(data.x() - 0.86) < 0.1 &&
+                 fabs(data.y() - -0.09) < 0.1 && fabs(data.z() - 0.39) < 0.1;
     // get the 1st intersection of ray pt->sensor
     intersections.clear();  // intersectsRay doesn't clear the vector...
-    if (seeShape.body->intersectsRay(data.cast<double>(), dir, &intersections, 1))
+//    if (print) {
+//      ROS_WARN_STREAM(seeShape.body->getDimensions()[0] << " " << seeShape.body->getDimensions()[1] << " " << seeShape.body->getDimensions()[2] << "---\n" << seeShape.body->getPose().linear() << "$$$\n" << seeShape.body->getPose().translation() << "***\n");
+//      ROS_WARN_STREAM(data << "&&&\n" << dir);
+//    }
+    if (bodies::intersectsRay(seeShape.body, data.cast<double>(), dir, &intersections, 1))
     {
+//      if (print) ROS_WARN_STREAM(intersections[0] << "^^^\n");
       // is the intersection between point and sensor?
       if (dir.dot(sensorPos.cast<double>() - intersections[0]) >= 0.0)
       {
         mask = MaskValue::SHADOW;
+        msg.points.push_back(fn(data));
+        msg.points.push_back(fn(intersections[0].cast<float>()));
+        msg.points.push_back(fn(intersections[0].cast<float>()));
+        msg.points.push_back(fn(sensorPos));
+        msg.colors.push_back(green);
+        msg.colors.push_back(green);
+        msg.colors.push_back(white);
+        msg.colors.push_back(white);
         return;
+      } else {
+//        ROS_WARN("no collision");
       }
+    } else {
+
     }
   }
+  msg.points.push_back(fn(data));
+  msg.points.push_back(fn(sensorPos));
+  msg.colors.push_back(red);
+  msg.colors.push_back(red);
 }
 
 void RayCastingShapeMask::setIgnoreInContainsTest(
