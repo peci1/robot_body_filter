@@ -213,9 +213,6 @@ void computeBoundingBox(const bodies::ConvexMesh *body,
   computeBoundingBox(&body->bounding_box_, bbox);
 }
 
-// for some reason, the O2 optimization screws up this function which then gives wrong results
-#pragma GCC push_options
-#pragma GCC optimize("O1")
 bool intersectsRayBox(const bodies::Box *box, const Eigen::Vector3d &origin,
                    const Eigen::Vector3d &dir,
                    EigenSTL::vector_Vector3d *intersections,
@@ -299,7 +296,6 @@ bool intersectsRayBox(const bodies::Box *box, const Eigen::Vector3d &origin,
 
   return true;
 }
-#pragma GCC pop_options
 
 // the upstream method for box is buggy:
 // https://github.com/ros-planning/geometric_shapes/pull/108, https://github.com/ros-planning/geometric_shapes/pull/109
