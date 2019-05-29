@@ -1,4 +1,4 @@
-#ifndef robot_body_filter_BODIES_H
+#ifndef ROBOT_BODY_FILTER_BODIES_H
 #define ROBOT_BODY_FILTER_BODIES_H
 
 #include <geometric_shapes/bodies.h>
