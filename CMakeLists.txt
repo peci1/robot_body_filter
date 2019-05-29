@@ -5,8 +5,6 @@ set(CMAKE_CXX_STANDARD 17)  # we're using std::optional
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_compile_options("-O3")
-
 set(THIS_PACKAGE_DEPS filters geometric_shapes laser_geometry moveit_core moveit_ros_perception roscpp sensor_msgs tf2 tf2_ros urdf visualization_msgs)
 set(MESSAGE_DEPS geometry_msgs std_msgs)
 

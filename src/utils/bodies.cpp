@@ -10,6 +10,7 @@
 #include <robot_body_filter/utils/bodies.h>
 
 #include <ros/ros.h>
+#include <tf2_eigen/tf2_eigen.h>
 
 #include <geometric_shapes/mesh_operations.h>
 #include <geometric_shapes/shape_operations.h>
@@ -116,56 +117,47 @@ void mergeOrientedBoundingBoxesApprox(const std::vector<OrientedBoundingBox>& bo
     mergedBox.extendApprox(box);
 }
 
-shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body &body)
+shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body* body)
 {
   shapes::ShapePtr result;
 
-  switch (body.getType()) {
+  switch (body->getType()) {
     case shapes::SPHERE: {
       bodies::BoundingSphere sphere;
-      dynamic_cast<const bodies::Sphere*>(&body)->computeBoundingSphere(sphere);
+      dynamic_cast<const bodies::Sphere*>(body)->computeBoundingSphere(sphere);
       result.reset(new shapes::Sphere(sphere.radius));
       break;
     }
     case shapes::BOX: {
-      auto box = dynamic_cast<const bodies::Box*>(&body);
+      auto box = dynamic_cast<const bodies::Box*>(body);
       result.reset(new shapes::Box(2 * box->length2_, 2 * box->width2_, 2 * box->height2_));
       break;
     }
     case shapes::CYLINDER: {
       bodies::BoundingCylinder cylinder;
-      dynamic_cast<const bodies::Cylinder*>(&body)->computeBoundingCylinder(cylinder);
+      dynamic_cast<const bodies::Cylinder*>(body)->computeBoundingCylinder(cylinder);
       result.reset(new shapes::Cylinder(cylinder.radius, cylinder.length));
       break;
     }
     case shapes::MESH: {
-      auto mesh = dynamic_cast<const bodies::ConvexMesh*>(&body);
+      auto mesh = dynamic_cast<const bodies::ConvexMesh*>(body);
       result.reset(shapes::createMeshFromVertices(mesh->getScaledVertices()));
       break;
     }
     default: {
-      ROS_ERROR("Unknown body type: %d", (int) body.getType());
+      ROS_ERROR("Unknown body type: %d", (int) body->getType());
       break;
     }
   }
   return result;
 }
 
-void constructMarkerFromBody(const bodies::Body& body,
+void constructMarkerFromBody(const bodies::Body* body,
                              visualization_msgs::Marker& msg)
 {
     auto shape = bodies::constructShapeFromBody(body);
     shapes::constructMarkerFromShape(shape.get(), msg, false);
-
-    const auto& pose = body.getPose();
-    msg.pose.position.x = pose.translation().x();
-    msg.pose.position.y = pose.translation().y();
-    msg.pose.position.z = pose.translation().z();
-    const Eigen::Quaterniond q(pose.linear());
-    msg.pose.orientation.x = q.x();
-    msg.pose.orientation.y = q.y();
-    msg.pose.orientation.z = q.z();
-    msg.pose.orientation.w = q.w();
+    msg.pose = tf2::toMsg(body->getPose());
 }
 
 void computeBoundingBox(const bodies::Body *body,

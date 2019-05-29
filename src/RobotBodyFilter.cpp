@@ -1326,7 +1326,7 @@ void RobotBodyFilter<T>::createBodyVisualizationMsg(
     auto body = shapeHandleAndBody.second;
 
     visualization_msgs::Marker msg;
-    bodies::constructMarkerFromBody(*body, msg);
+    bodies::constructMarkerFromBody(body, msg);
 
     msg.header.stamp = stamp;
     msg.header.frame_id = this->fixedFrame;

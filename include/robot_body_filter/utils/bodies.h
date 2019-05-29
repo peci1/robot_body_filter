@@ -35,9 +35,9 @@ void mergeOrientedBoundingBoxesApprox(
     const std::vector<OrientedBoundingBox>& boxes,
     OrientedBoundingBox& mergedBox);
 
-shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body &body);
+shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body* body);
 
-void constructMarkerFromBody(const bodies::Body& body,
+void constructMarkerFromBody(const bodies::Body* body,
                              visualization_msgs::Marker& msg);
 
 }
