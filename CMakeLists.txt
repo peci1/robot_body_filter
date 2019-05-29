@@ -47,6 +47,9 @@ add_library(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
+add_executable(test src/test.cpp)
+target_link_libraries(test utils ${catkin_LIBRARIES})
+
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
