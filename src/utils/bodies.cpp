@@ -184,6 +184,7 @@ void computeBoundingBox(const bodies::Body *body,
   case shapes::CONE:
   case shapes::UNKNOWN_SHAPE:
   case shapes::OCTREE:
+  default:
     throw std::runtime_error("Unsupported geometric body type.");
   }
 }
@@ -210,6 +211,116 @@ void computeBoundingBox(const bodies::Cylinder *body,
 void computeBoundingBox(const bodies::ConvexMesh *body,
                                 OrientedBoundingBox &bbox) {
   computeBoundingBox(&body->bounding_box_, bbox);
+}
+
+// for some reason, the O2 optimization screws up this function which then gives wrong results
+#pragma GCC push_options
+#pragma GCC optimize("O1")
+bool intersectsRayBox(const bodies::Box *box, const Eigen::Vector3d &origin,
+                   const Eigen::Vector3d &dir,
+                   EigenSTL::vector_Vector3d *intersections,
+                   unsigned int count) {
+  const Eigen::Vector3d tmp(box->length2_, box->width2_, box->height2_);
+  const Eigen::Vector3d corner1 = box->center_ - tmp;
+  const Eigen::Vector3d corner2 = box->center_ + tmp;
+
+  // Brian Smits. Efficient bounding box intersection. Ray tracing news 15(1), 2002
+  float tmin, tmax, tymin, tymax, tzmin, tzmax;
+  float divx, divy, divz;
+  const Eigen::Vector3d o(box->pose_.rotation().inverse() * (origin - box->center_) + box->center_);
+  const Eigen::Vector3d d(box->pose_.rotation().inverse() * dir);
+
+  divx = 1 / d.x();
+  if (divx >= 0)
+  {
+    tmin = (corner1.x() - o.x()) * divx;
+    tmax = (corner2.x() - o.x()) * divx;
+  }
+  else
+  {
+    tmax = (corner1.x() - o.x()) * divx;
+    tmin = (corner2.x() - o.x()) * divx;
+  }
+
+  divy = 1 / d.y();
+  if (d.y() >= 0)
+  {
+    tymin = (corner1.y() - o.y()) * divy;
+    tymax = (corner2.y() - o.y()) * divy;
+  }
+  else
+  {
+    tymax = (corner1.y() - o.y()) * divy;
+    tymin = (corner2.y() - o.y()) * divy;
+  }
+
+  if ((tmin > tymax || tymin > tmax))
+    return false;
+
+  if (tymin > tmin)
+    tmin = tymin;
+  if (tymax < tmax)
+    tmax = tymax;
+
+  divz = 1 / d.z();
+  if (d.z() >= 0)
+  {
+    tzmin = (corner1.z() - o.z()) * divz;
+    tzmax = (corner2.z() - o.z()) * divz;
+  }
+  else
+  {
+    tzmax = (corner1.z() - o.z()) * divz;
+    tzmin = (corner2.z() - o.z()) * divz;
+  }
+
+  if ((tmin > tzmax || tzmin > tmax))
+    return false;
+
+  if (tzmin > tmin)
+    tmin = tzmin;
+  if (tzmax < tmax)
+    tmax = tzmax;
+
+  if (tmax < 0)
+    return false;
+
+  if (intersections)
+  {
+    if (tmax - tmin > 1e-9)
+    {
+      intersections->push_back(tmin * dir + origin);
+      if (count == 0 || count > 1)
+        intersections->push_back(tmax * dir + origin);
+    }
+    else
+      intersections->push_back(tmax * dir + origin);
+  }
+
+  return true;
+}
+#pragma GCC pop_options
+
+// the upstream method for box is buggy:
+// https://github.com/ros-planning/geometric_shapes/pull/108, https://github.com/ros-planning/geometric_shapes/pull/109
+bool intersectsRay(const bodies::Body *body, const Eigen::Vector3d &origin,
+                   const Eigen::Vector3d &dir,
+                   EigenSTL::vector_Vector3d *intersections,
+                   unsigned int count) {
+  if (body == nullptr)
+    return false;
+
+  switch (body->getType()) {
+
+  case shapes::SPHERE:
+  case shapes::CYLINDER:
+  case shapes::MESH:
+    return body->intersectsRay(origin, dir, intersections, count);
+  case shapes::BOX:
+    return intersectsRayBox(dynamic_cast<const bodies::Box*>(body), origin, dir, intersections, count);
+  default:
+    throw std::runtime_error("Unsupported geometric body type.");
+  }
 }
 
 }

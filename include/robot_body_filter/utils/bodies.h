@@ -40,6 +40,9 @@ shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body* body);
 void constructMarkerFromBody(const bodies::Body* body,
                              visualization_msgs::Marker& msg);
 
+bool intersectsRay(const bodies::Body* body, const Eigen::Vector3d& origin, const Eigen::Vector3d& dir,
+                   EigenSTL::vector_Vector3d* intersections = nullptr, unsigned int count = 0);
+
 }
 
 #endif //ROBOT_BODY_FILTER_BODIES_H
