@@ -134,9 +134,10 @@ shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body* body)
       break;
     }
     case shapes::CYLINDER: {
-      bodies::BoundingCylinder cylinder;
-      dynamic_cast<const bodies::Cylinder*>(body)->computeBoundingCylinder(cylinder);
-      result.reset(new shapes::Cylinder(cylinder.radius, cylinder.length));
+      // computation should use bounding cylinder, but there is a bug in it:
+      // https://github.com/ros-planning/geometric_shapes/pull/107
+      const auto* cylinder = dynamic_cast<const bodies::Cylinder*>(body);
+      result.reset(new shapes::Cylinder(cylinder->radiusU_, 2 * cylinder->length2_));
       break;
     }
     case shapes::MESH: {
