@@ -31,7 +31,8 @@ public:
 
   point_containment_filter::ShapeHandle addShape(
       const shapes::ShapeConstPtr& shape, double scale = 1.0,
-      double padding = 0.0, bool updateInternalStructures = true);
+      double padding = 0.0, bool updateInternalStructures = true,
+      const std::string& name = "");
   void removeShape(point_containment_filter::ShapeHandle handle,
       bool updateInternalStructures = true);
 
@@ -81,7 +82,7 @@ public:
   void maskContainmentAndShadows(
       const Cloud& data,
       std::vector<MaskValue>& mask,
-      const Eigen::Vector3f& sensorPos = Eigen::Vector3f::Zero());
+      const Eigen::Vector3d& sensorPos = Eigen::Vector3d::Zero());
 
   /** \brief Decide whether the point is either INSIDE the robot,
    * OUTSIDE of it, SHADOWed by the robot body, or CLIPped by min/max sensor
@@ -100,7 +101,7 @@ public:
   void maskContainmentAndShadows(
       const Eigen::Vector3f& data,
       MaskValue& mask,
-      const Eigen::Vector3f& sensorPos = Eigen::Vector3d::Zero(),
+      const Eigen::Vector3d& sensorPos = Eigen::Vector3d::Zero(),
       bool updateBodyPoses = true);
 
   /**
@@ -154,9 +155,9 @@ protected:
    *       call to updateBodyPoses(). It also doesn't lock shapes_mutex_.
   */
   void classifyPointNoLock(
-      const Eigen::Vector3f& data,
+      const Eigen::Vector3d& data,
       MaskValue &mask,
-      const Eigen::Vector3f& sensorPos,
+      const Eigen::Vector3d& sensorPos,
       const bodies::BoundingSphere &boundingSphereForContainsTest);
 
   /**

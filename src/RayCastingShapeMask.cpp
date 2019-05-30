@@ -20,6 +20,7 @@ struct RayCastingShapeMask::RayCastingShapeMaskPIMPL
 {
   std::set<SeeShape, SortBodies> bodiesForContainsTest;
   std::set<SeeShape, SortBodies> bodiesForShadowTest;
+  std::map<point_containment_filter::ShapeHandle, std::string> shapeNames;
 };
 
 RayCastingShapeMask::RayCastingShapeMask(
@@ -97,12 +98,22 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
     if (!this->transform_callback_(shapeHandle, transform))
     {
       if (body == nullptr)
-        ROS_ERROR_STREAM_NAMED("shape_mask",
+        ROS_ERROR_STREAM_DELAYED_THROTTLE_NAMED(3, "shape_mask",
             "Missing transform for shape with handle " << shapeHandle
             << " without a body");
-      else
-        ROS_ERROR_STREAM_NAMED("shape_mask", "Missing transform for shape "
-            << body->getType() << " with handle " << shapeHandle);
+      else {
+        std::string name;
+        if (this->data->shapeNames.find(shapeHandle) != this->data->shapeNames.end())
+          name = this->data->shapeNames.at(shapeHandle);
+
+        if (name.empty())
+          ROS_ERROR_STREAM_DELAYED_THROTTLE_NAMED(3, "shape_mask",
+              "Missing transform for shape " << body->getType()
+              << " with handle " << shapeHandle);
+        else
+          ROS_ERROR_STREAM_DELAYED_THROTTLE_NAMED(3, "shape_mask",
+              "Missing transform for shape " << name << " (" << body->getType() << ")");
+      }
     }
     else
     {
@@ -126,7 +137,7 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
 
 void RayCastingShapeMask::maskContainmentAndShadows(
     const Cloud& data, std::vector<RayCastingShapeMask::MaskValue>& mask,
-    const Eigen::Vector3f& sensorPos)
+    const Eigen::Vector3d& sensorPos)
 {
   boost::mutex::scoped_lock _(this->shapes_lock_);
 
@@ -136,7 +147,7 @@ void RayCastingShapeMask::maskContainmentAndShadows(
   this->updateBodyPosesNoLock();
 
   // compute a sphere that bounds the entire robot
-  const bodies::BoundingSphere bound = this->getBoundingSphereForContainsTestNoLock();
+  const auto bound = this->getBoundingSphereForContainsTestNoLock();
 
   // we now decide which points we keep
   CloudConstIter iter_x(data, "x");
@@ -148,13 +159,15 @@ void RayCastingShapeMask::maskContainmentAndShadows(
   //#pragma omp parallel for schedule(dynamic)
   for (size_t i = 0; i < np; ++i)
   {
-    const Eigen::Vector3f pt(*(iter_x + i), *(iter_y + i), *(iter_z + i));
+    const Eigen::Vector3d pt(static_cast<double>(*(iter_x + i)),
+                             static_cast<double>(*(iter_y + i)),
+                             static_cast<double>(*(iter_z + i)));
     this->classifyPointNoLock(pt, mask[i], sensorPos, bound);
   }
 }
 
 void RayCastingShapeMask::maskContainmentAndShadows(const Eigen::Vector3f& data,
-    RayCastingShapeMask::MaskValue& mask, const Eigen::Vector3f& sensorPos,
+    RayCastingShapeMask::MaskValue& mask, const Eigen::Vector3d& sensorPos,
     const bool updateBodyPoses)
 {
   boost::mutex::scoped_lock _(this->shapes_lock_);
@@ -165,17 +178,17 @@ void RayCastingShapeMask::maskContainmentAndShadows(const Eigen::Vector3f& data,
   // compute a sphere that bounds the entire robot
   const bodies::BoundingSphere bound = this->getBoundingSphereForContainsTestNoLock();
 
-  this->classifyPointNoLock(data, mask, sensorPos, bound);
+  this->classifyPointNoLock(data.cast<double>(), mask, sensorPos, bound);
 }
 
-void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3f& data,
-    RayCastingShapeMask::MaskValue &mask, const Eigen::Vector3f& sensorPos,
+void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
+    RayCastingShapeMask::MaskValue &mask, const Eigen::Vector3d& sensorPos,
     const bodies::BoundingSphere &boundingSphereForContainsTest)
 {
   mask = MaskValue::OUTSIDE;
 
   // direction from measured point to sensor
-  Eigen::Vector3d dir(sensorPos.cast<double>() - data.cast<double>());
+  Eigen::Vector3d dir(sensorPos - data);
   const auto distance = dir.norm();
 
   if (distance < this->minSensorDist || (this->maxSensorDist > 0.0 && distance > this->maxSensorDist)) {
@@ -186,11 +199,11 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3f& data,
 
   // check if it is inside the scaled body
   const auto radiusSquared = pow(boundingSphereForContainsTest.radius, 2);
-  if ((boundingSphereForContainsTest.center - data.cast<double>()).squaredNorm() < radiusSquared)
+  if ((boundingSphereForContainsTest.center - data).squaredNorm() < radiusSquared)
   {
     for (const auto &seeShape : this->data->bodiesForContainsTest)
     {
-      if (seeShape.body->containsPoint(data.cast<double>()))
+      if (seeShape.body->containsPoint(data))
       {
         mask = MaskValue::INSIDE;
         return;
@@ -205,10 +218,10 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3f& data,
   {
     // get the 1st intersection of ray pt->sensor
     intersections.clear();  // intersectsRay doesn't clear the vector...
-    if (seeShape.body->intersectsRay(data.cast<double>(), dir, &intersections, 1))
+    if (bodies::intersectsRay(seeShape.body, data, dir, &intersections, 1))
     {
       // is the intersection between point and sensor?
-      if (dir.dot(sensorPos.cast<double>() - intersections[0]) >= 0.0)
+      if (dir.dot(sensorPos - intersections[0]) >= 0.0)
       {
         mask = MaskValue::SHADOW;
         return;
@@ -237,9 +250,10 @@ void RayCastingShapeMask::setIgnoreInShadowTest(
 
 point_containment_filter::ShapeHandle RayCastingShapeMask::addShape(
     const shapes::ShapeConstPtr &shape, const double scale, const double padding,
-    const bool updateInternalStructures)
+    const bool updateInternalStructures, const std::string& name)
 {
   const auto result = ShapeMask::addShape(shape, scale, padding);
+  this->data->shapeNames[result] = name;
   if (updateInternalStructures)
     this->updateInternalShapeLists();
   return result;
@@ -250,6 +264,7 @@ void RayCastingShapeMask::removeShape(
     const bool updateInternalStructures)
 {
   ShapeMask::removeShape(handle);
+  this->data->shapeNames.erase(handle);
   if (updateInternalStructures)
     this->updateInternalShapeLists();
 }

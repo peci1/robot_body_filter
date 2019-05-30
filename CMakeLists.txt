@@ -23,13 +23,13 @@ generate_messages(DEPENDENCIES ${MESSAGE_DEPS})
 catkin_package(
     CATKIN_DEPENDS ${THIS_PACKAGE_DEPS} ${MESSAGE_DEPS} message_runtime
     INCLUDE_DIRS include
-    LIBRARIES ${PROJECT_NAME} utils
+    LIBRARIES ${PROJECT_NAME} ${PROJECT_NAME}_utils
 )
 
 include_directories(SYSTEM ${LIBFCL_INCLUDE_DIRS})
 include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 
-add_library(utils
+add_library(${PROJECT_NAME}_utils
   src/utils/bodies.cpp
   src/utils/cloud.cpp
   src/utils/obb.cpp
@@ -38,19 +38,19 @@ add_library(utils
   src/utils/tf2_eigen.cpp
   src/utils/time_utils.cpp
 )
-target_link_libraries(utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES})
 
 add_library(${PROJECT_NAME}
   src/RobotBodyFilter.cpp
   src/TFFramesWatchdog.cpp
   src/RayCastingShapeMask.cpp)
-target_link_libraries(${PROJECT_NAME} utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
-install(TARGETS ${PROJECT_NAME} utils
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_utils
    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})

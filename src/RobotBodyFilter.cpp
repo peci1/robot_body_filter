@@ -295,7 +295,7 @@ bool RobotBodyFilter<T>::computeMask(
 
     // updates shapes according to tf cache (by calling getShapeTransform
     // for each shape) and masks contained points
-    this->shapeMask->maskContainmentAndShadows(projectedPointCloud, pointMask, sensorPosition.cast<float>());
+    this->shapeMask->maskContainmentAndShadows(projectedPointCloud, pointMask, sensorPosition);
   } else {
     CloudConstIter x_it(projectedPointCloud, "x");
     CloudConstIter y_it(projectedPointCloud, "y");
@@ -338,7 +338,8 @@ bool RobotBodyFilter<T>::computeMask(
     // update transforms cache, which is then used in body masking
     this->updateTransformCache(scanTime, afterScanTime);
 
-    Eigen:: Vector3f point, viewPoint;
+    Eigen::Vector3f point;
+    Eigen::Vector3d viewPoint;
     RayCastingShapeMask::MaskValue mask;
 
     for (size_t i = 0; i < num_points(projectedPointCloud); ++i, ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it, ++index_it)
@@ -347,9 +348,9 @@ bool RobotBodyFilter<T>::computeMask(
       point.y() = *y_it;
       point.z() = *z_it;
 
-      viewPoint.x() = *vp_x_it;
-      viewPoint.y() = *vp_y_it;
-      viewPoint.z() = *vp_z_it;
+      viewPoint.x() = static_cast<double>(*vp_x_it);
+      viewPoint.y() = static_cast<double>(*vp_y_it);
+      viewPoint.z() = static_cast<double>(*vp_z_it);
 
       const auto updateBodyPoses = i % updateBodyPosesEvery == 0;
 
@@ -419,7 +420,7 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
             remainingTime(scanTime, this->reachableTransformTimeout), &err) ||
             !this->tfBuffer->canTransform(this->fixedFrame, this->sensorFrame, afterScanTime,
                 remainingTime(afterScanTime, this->reachableTransformTimeout), &err)) {
-        ROS_ERROR_THROTTLE(3, "RobotBodyFilter: Cannot transform laser scan to "
+        ROS_ERROR_DELAYED_THROTTLE(3, "RobotBodyFilter: Cannot transform laser scan to "
           "fixed frame. Something's wrong with TFs: %s", err.c_str());
         return false;
       }
@@ -527,7 +528,7 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
   }
 
   if (this->pointByPointScan) {
-    if (inputCloud.height != 1 && inputCloud.is_dense == false) {
+    if (inputCloud.height != 1 && inputCloud.is_dense == 0) {
       ROS_WARN_ONCE("RobotBodyFilter: The pointcloud seems to be an organized "
                     "pointcloud, which usually means it was captured all at once."
                     " Consider setting 'point_by_point_scan' to false to get a "
@@ -542,7 +543,7 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
                   "which indicates each point was probably captured at a "
                   "different time instant. Consider setting parameter "
                   "'point_by_point_scan' to true to get correct results.");
-  } else if (inputCloud.height == 1 && inputCloud.is_dense == true) {
+  } else if (inputCloud.height == 1 && inputCloud.is_dense == 1) {
     ROS_WARN_ONCE("RobotBodyFilter: The pointcloud is dense, which usually means"
                   "it was captured each point at a different time instant. "
                   "Consider setting 'point_by_point_scan! to true to get a more"
@@ -574,7 +575,7 @@ bool RobotBodyFilter<T>::getShapeTransform(point_containment_filter::ShapeHandle
 
   // check if the given shapeHandle has been registered to a link during addRobotMaskFromUrdf call.
   if (this->shapesToLinks.find(shapeHandle) == this->shapesToLinks.end()) {
-    ROS_ERROR_STREAM("RobotBodyFilter: Invalid shape handle: " << to_string(shapeHandle));
+    ROS_ERROR_STREAM_THROTTLE(3, "RobotBodyFilter: Invalid shape handle: " << to_string(shapeHandle));
     return false;
   }
 
@@ -711,8 +712,7 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
             link->name,
             link->name + "::" + collision->name,
             "*::" + collision->name,
-            // not std::to_string - we need a locale-independent thing!
-            link->name + "::" + boost::lexical_cast<string>(collisionIndex),
+            link->name + "::" + std::to_string(collisionIndex),
         };
 
         // if the link is ignored, go on
@@ -722,10 +722,17 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
         }
 
         const auto collisionShape = constructShape(*collision->geometry);
+        std::stringstream ss(link->name);
+        ss << "::";
+        if (collision->name.empty())
+          ss << std::to_string(collisionIndex);
+        else
+          ss << collision->name;
+        const auto shapeName = ss.str();
 
         // add the collision shape to shapeMask; the inflation parameters come into play here
         const auto shapeHandle = this->shapeMask->addShape(collisionShape,
-            this->inflationScale, this->inflationPadding, false);
+            this->inflationScale, this->inflationPadding, false, shapeName);
         this->shapesToLinks[shapeHandle] = CollisionBodyWithLink(collision, link, collisionIndex);
 
         if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredInBoundingSphere)) {
@@ -1190,13 +1197,13 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
                                       this->fixedFrame,
                                       scanTime,
                                       this->reachableTransformTimeout, &err)) {
-      ROS_ERROR_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
+      ROS_ERROR_DELAYED_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
                          this->fixedFrame.c_str(),
                          this->localBoundingBoxFrame.c_str(), err.c_str());
       return;
     }
   } catch (tf2::TransformException& e) {
-    ROS_ERROR_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
+    ROS_ERROR_DELAYED_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
                        this->fixedFrame.c_str(),
                        this->localBoundingBoxFrame.c_str(), e.what());
     return;
