@@ -224,8 +224,9 @@ bool intersectsRayBox(const bodies::Box *box, const Eigen::Vector3d &origin,
   // Brian Smits. Efficient bounding box intersection. Ray tracing news 15(1), 2002
   float tmin, tmax, tymin, tymax, tzmin, tzmax;
   float divx, divy, divz;
-  const Eigen::Vector3d o(box->pose_.rotation().inverse() * (origin - box->center_) + box->center_);
-  const Eigen::Vector3d d(box->pose_.rotation().inverse() * dir);
+  const Eigen::Matrix3d invRot(box->pose_.linear().transpose());
+  const Eigen::Vector3d o(invRot * (origin - box->center_) + box->center_);
+  const Eigen::Vector3d d(invRot * dir);
 
   divx = 1 / d.x();
   if (divx >= 0)
