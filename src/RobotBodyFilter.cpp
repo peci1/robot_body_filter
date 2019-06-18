@@ -420,8 +420,15 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
             remainingTime(scanTime, this->reachableTransformTimeout), &err) ||
             !this->tfBuffer->canTransform(this->fixedFrame, this->sensorFrame, afterScanTime,
                 remainingTime(afterScanTime, this->reachableTransformTimeout), &err)) {
-        ROS_ERROR_DELAYED_THROTTLE(3, "RobotBodyFilter: Cannot transform laser scan to "
-          "fixed frame. Something's wrong with TFs: %s", err.c_str());
+        if (err.find("future") != string::npos) {
+          const auto delay = ros::Time::now() - scanTime;
+          ROS_ERROR_THROTTLE(3, "RobotBodyFilter: Cannot transform laser scan to "
+            "fixed frame. The scan is too much delayed (%s s). TF error: %s",
+            to_string(delay).c_str(), err.c_str());
+        } else {
+          ROS_ERROR_DELAYED_THROTTLE(3, "RobotBodyFilter: Cannot transform laser scan to "
+            "fixed frame. Something's wrong with TFs: %s", err.c_str());
+        }
         return false;
       }
     }
@@ -633,7 +640,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
 
     {
       auto linkTransformTfOptional = this->tfFramesWatchdog->lookupTransform(
-          linkFrame, time, this->reachableTransformTimeout);
+          linkFrame, time, remainingTime(time, this->reachableTransformTimeout));
 
       if (!linkTransformTfOptional.has_value())
         continue;
@@ -650,7 +657,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
     if (afterScanTime.sec != 0)
     {
       auto linkTransformTfOptional = this->tfFramesWatchdog->lookupTransform(
-          linkFrame, afterScanTime, this->reachableTransformTimeout);
+          linkFrame, afterScanTime, remainingTime(time, this->reachableTransformTimeout));
 
       if (!linkTransformTfOptional.has_value())
         continue;
@@ -1196,7 +1203,8 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
     if (!this->tfBuffer->canTransform(this->localBoundingBoxFrame,
                                       this->fixedFrame,
                                       scanTime,
-                                      this->reachableTransformTimeout, &err)) {
+                                      remainingTime(scanTime, this->reachableTransformTimeout),
+                                      &err)) {
       ROS_ERROR_DELAYED_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
                          this->fixedFrame.c_str(),
                          this->localBoundingBoxFrame.c_str(), err.c_str());

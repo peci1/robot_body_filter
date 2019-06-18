@@ -131,7 +131,9 @@ Filters the robot's body out of point clouds.
 - `transforms/timeout/reachable` (`float`, default `0.1 s`)
 
     How long to wait while getting reachable TF (i.e. transform which was 
-    previously available).
+    previously available). Please note that this timeout is computed not from
+    the lookup start time, but from the scan timestamp - this allows you to tell
+    how old scans you still want to process.
 - `transforms/timeout/unreachable` (`float`, default `0.2 s`)
     
     How long to wait while getting unreachable TF.     

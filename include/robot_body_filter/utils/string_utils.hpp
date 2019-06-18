@@ -3,6 +3,8 @@
 
 #include <iterator>
 #include <map>
+#include <ros/duration.h>
+#include <ros/time.h>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -79,6 +81,47 @@ inline std::string to_string(const std::map<K, V> &value)
     ss << "\"" << to_string(pair.first) << "\": \"" << to_string(pair.second) << "\", ";
   }
   ss << "}";
+  return ss.str();
+}
+
+
+template<>
+inline std::string to_string(const ros::Time& value)
+{
+  std::stringstream ss;
+  ss << value;
+  return ss.str();
+}
+
+template<>
+inline std::string to_string(const ros::WallTime& value)
+{
+  std::stringstream ss;
+  ss << value;
+  return ss.str();
+}
+
+template<>
+inline std::string to_string(const ros::SteadyTime& value)
+{
+  std::stringstream ss;
+  ss << value;
+  return ss.str();
+}
+
+template<>
+inline std::string to_string(const ros::Duration& value)
+{
+  std::stringstream ss;
+  ss << value;
+  return ss.str();
+}
+
+template<>
+inline std::string to_string(const ros::WallDuration& value)
+{
+  std::stringstream ss;
+  ss << value;
   return ss.str();
 }
 
