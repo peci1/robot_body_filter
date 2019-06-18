@@ -106,6 +106,11 @@ std::optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform
   if (!this->isReachable(frame))
     return std::nullopt;
 
+  std::string tmpErrstr;
+  if (errstr == nullptr) {
+    errstr = &tmpErrstr;
+  }
+
   if (!this->tfBuffer->canTransform(this->robotFrame, frame, time,
       remainingTime(time, timeout), errstr)) {
     ROS_WARN_THROTTLE(3,
