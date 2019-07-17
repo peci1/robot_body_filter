@@ -126,6 +126,10 @@ protected:
    */
   std::string sensorFrame;
 
+  /** \brief Frame in which the filter is applied. For point-by-point scans, it
+   * has to be a fixed frame, otherwise, it can be the sensor frame. */
+  std::string filteringFrame;
+
   //! The minimum distance of points from the sensor to keep them (in meters).
   double minDistance;
 
@@ -153,6 +157,7 @@ protected:
   std::set<std::string> linksIgnoredInContainsTest;
   std::set<std::string> linksIgnoredInShadowTest;
   std::set<std::string> linksIgnoredEverywhere;
+  std::set<std::string> onlyLinks;
 
   //! Publisher of robot bounding sphere (relative to fixed frame).
   ros::Publisher boundingSpherePublisher;
@@ -374,6 +379,9 @@ public:
   bool update(const sensor_msgs::LaserScan &inputScan, sensor_msgs::LaserScan &filteredScan) override;
 
   virtual bool configure();
+
+protected:
+  laser_geometry::LaserProjection laserProjector;
 };
 
 class RobotBodyFilterPointCloud2 : public RobotBodyFilter<sensor_msgs::PointCloud2>
@@ -383,6 +391,10 @@ public:
   bool update(const sensor_msgs::PointCloud2 &inputCloud, sensor_msgs::PointCloud2 &filteredCloud) override;
 
   virtual bool configure();
+
+protected:
+  /** \brief Frame into which the output data should be transformed. */
+  std::string outputFrame;
 };
 
 }

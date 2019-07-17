@@ -7,7 +7,7 @@ namespace robot_body_filter {
 
 void warnLeadingSlash(const std::string& s)
 {
-  ROS_WARN_STREAM("Found initial slash in " << s);
+  ROS_WARN_STREAM_ONCE("Found initial slash in " << s);
 }
 
 void stripLeadingSlash(std::string &s, const bool warn)

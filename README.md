@@ -89,13 +89,21 @@ Filters the robot's body out of point clouds.
 
     The fixed frame. Usually base_link for stationary robots (or sensor
     frame if both robot and sensor are stationary). For mobile robots, it
-    can be e.g. odom or map.
+    can be e.g. odom or map. Only needed for point-by-point scans.
 - `frames/sensor` (`string`, default `"laser"`)
 
-    Frame of the sensor. For LaserScan version, it is automatically read
-    from the incoming data (this parameter has no effect). For PointCloud2,
-    you have to specify it explicitly because the pointcloud could have
-    already been transformed e.g. to the fixed frame.
+    Frame of the sensor. In LaserScan version, it has to match the
+    `frame_id` of the incoming scans. In PointCloud2 version, the data 
+    can come in a different frame from `frames/sensor`.
+- `frames/filtering` (`string`, default: for point-by-point scans, default is `frames/fixed`, otherwise `frames/sensor`)
+
+    Frame in which the filter is applied. For point-by-point scans, it
+    has to be a fixed frame, otherwise, it can be the sensor frame or
+    any other frame.
+- `frames/output` (`string`, default: `frames/filtering`)
+
+    Frame into which output data are transformed. Only applicable in
+    PointCloud2 version.
 - `sensor/min_distance` (`float`, default: `0.0 m`)
 
     The minimum distance of points from the laser to keep them.
@@ -125,6 +133,22 @@ Filters the robot's body out of point clouds.
     separately (might be computationally exhaustive). If non-zero, it will only 
     update the model once in this interval, which makes the masking algorithm a 
     little bit less precise but more computationally affordable.
+    
+- `filter/do_clipping` (`bool`, default `true`)
+
+    If `true`, the filter will mark points outside `sensor/(min|max)_distance` 
+    as `CLIP`. If `false`, such points will be marked `OUTSIDE`.
+    
+- `filter/do_contains_test` (`bool`, default `true`)
+
+    If `true`, the filter will mark points inside robot body 
+    as `INSIDE`. If `false`, such points will be marked `OUTSIDE`.
+    
+- `filter/do_shadow_test` (`bool`, default `true`)
+
+    If `true`, the filter will mark points shadowed by robot body 
+    as `SHADOW`. If `false`, such points will be marked `OUTSIDE`.
+    
 - `transforms/buffer_length` (`float`, default `60.0 s`)
 
     Duration for which transforms will be stored in TF buffer.
@@ -200,6 +224,10 @@ Filters the robot's body out of point clouds.
 - `ignored_links/everywhere` (`list[string]`, default `[]`)
 
     List of links to be completely ignored. Same naming rules as above.
+- `only_links` (`list[string]`, default `[]`)
+
+    If non-empty, only the specified links will be processed. The 
+    above-mentioned `ignored_links/*` filters will still be applied.
 - `body_model/dynamic_robot_description/field_name` (`string`, 
     default `robot_model`)
 

@@ -27,11 +27,12 @@
 #include <tf2_eigen/tf2_eigen.h>
 
 #include <robot_body_filter/utils/bodies.h>
-#include <robot_body_filter/utils/time_utils.hpp>
 #include <robot_body_filter/utils/set_utils.hpp>
-#include <robot_body_filter/utils/string_utils.hpp>
 #include <robot_body_filter/utils/shapes.h>
+#include <robot_body_filter/utils/string_utils.hpp>
 #include <robot_body_filter/utils/tf2_eigen.h>
+#include <robot_body_filter/utils/tf2_sensor_msgs.h>
+#include <robot_body_filter/utils/time_utils.hpp>
 #include <robot_body_filter/utils/urdf_eigen.hpp>
 
 using namespace std;
@@ -59,7 +60,11 @@ bool RobotBodyFilter<T>::configure() {
   }
 
   this->fixedFrame = this->getParamVerbose("frames/fixed", "base_link");
+  stripLeadingSlash(this->fixedFrame, true);
   this->sensorFrame = this->getParamVerbose("frames/sensor", "laser");
+  stripLeadingSlash(this->sensorFrame, true);
+  this->filteringFrame = this->getParamVerbose("frames/filtering", this->pointByPointScan ? this->fixedFrame : this->sensorFrame);
+  stripLeadingSlash(this->filteringFrame, true);
   this->minDistance = this->getParamVerbose("sensor/min_distance", 0.0, "m");
   this->maxDistance = this->getParamVerbose("sensor/max_distance", 0.0, "m");
   this->inflationPadding = this->getParamVerbose("body_model/inflation/padding", 0.0, "m");
@@ -67,6 +72,9 @@ bool RobotBodyFilter<T>::configure() {
   this->robotDescriptionParam = this->getParamVerbose("body_model/robot_description_param", "robot_description");
   this->keepCloudsOrganized = this->getParamVerbose("filter/keep_clouds_organized", true);
   this->modelPoseUpdateInterval = this->getParamVerbose("filter/model_pose_update_interval", ros::Duration(0, 0), "s");
+  const bool doClipping = this->getParamVerbose("filter/do_clipping", true);
+  const bool doContainsTest = this->getParamVerbose("filter/do_contains_test", true);
+  const bool doShadowTest = this->getParamVerbose("filter/do_shadow_test", true);
   this->reachableTransformTimeout = this->getParamVerbose("transforms/timeout/reachable", ros::Duration(0.1), "s");
   this->unreachableTransformTimeout = this->getParamVerbose("transforms/timeout/unreachable", ros::Duration(0.2), "s");
   this->publishNoBoundingSpherePointcloud = this->getParamVerbose("bounding_sphere/publish_cut_out_pointcloud", false);
@@ -98,6 +106,7 @@ bool RobotBodyFilter<T>::configure() {
   this->linksIgnoredInContainsTest = this->template getParamVerboseSet<set<string> >("ignored_links/contains_test");
   this->linksIgnoredInShadowTest = this->template getParamVerboseSet<set<string> >("ignored_links/shadow_test", { "laser" });
   this->linksIgnoredEverywhere = this->template getParamVerboseSet<set<string> >("ignored_links/everywhere");
+  this->onlyLinks = this->template getParamVerboseSet<set<string> >("only_links");
 
   this->robotDescriptionUpdatesFieldName = this->getParamVerbose("body_model/dynamic_robot_description/field_name", "robot_model");
   // subscribe for robot_description param changes
@@ -208,7 +217,8 @@ bool RobotBodyFilter<T>::configure() {
   // initialize the 3D body masking tool
   auto getShapeTransformCallback = std::bind(&RobotBodyFilter::getShapeTransform, this, std::placeholders::_1, std::placeholders::_2);
   shapeMask = std::make_unique<RayCastingShapeMask>(getShapeTransformCallback,
-      this->minDistance, this->maxDistance);
+      this->minDistance, this->maxDistance,
+      doClipping, doContainsTest, doShadowTest);
 
   { // initialize the robot body to be masked out
 
@@ -232,7 +242,7 @@ bool RobotBodyFilter<T>::configure() {
     for (const auto& shapeToLink : this->shapesToLinks)
       monitoredFrames.insert(shapeToLink.second.link->name);
 
-    this->tfFramesWatchdog = std::make_shared<TFFramesWatchdog>(this->fixedFrame,
+    this->tfFramesWatchdog = std::make_shared<TFFramesWatchdog>(this->filteringFrame,
         monitoredFrames, this->tfBuffer, this->unreachableTransformTimeout,
         ros::Rate(ros::Duration(1.0)));
     this->tfFramesWatchdog->start();
@@ -243,6 +253,26 @@ bool RobotBodyFilter<T>::configure() {
   }
 
   ROS_INFO("RobotBodyFilter: Successfully configured.");
+  ROS_INFO("Filtering data in frame %s", this->filteringFrame.c_str());
+  ROS_INFO("RobotBodyFilter: Filtering into the following categories:");
+  ROS_INFO("RobotBodyFilter: \tOUTSIDE");
+  if (doClipping) ROS_INFO("RobotBodyFilter: \tCLIP");
+  if (doContainsTest) ROS_INFO("RobotBodyFilter: \tINSIDE");
+  if (doShadowTest) ROS_INFO("RobotBodyFilter: \tSHADOW");
+
+  if (this->onlyLinks.empty()) {
+    if (this->linksIgnoredEverywhere.empty()) {
+      ROS_INFO("RobotBodyFilter: Filtering applied to all links.");
+    } else {
+      ROS_INFO("RobotBodyFilter: Filtering applied to all links except %s.", to_string(this->linksIgnoredEverywhere).c_str());
+    }
+  } else {
+    if (this->linksIgnoredEverywhere.empty()) {
+      ROS_INFO("RobotBodyFilter: Filtering applied to links %s.", to_string(this->onlyLinks).c_str());
+    } else {
+      ROS_INFO("RobotBodyFilter: Filtering applied to links %s with these links excluded: %s.", to_string(this->onlyLinks).c_str(), to_string(this->linksIgnoredEverywhere).c_str());
+    }
+  }
 
   this->timeConfigured = ros::Time::now();
 
@@ -250,21 +280,21 @@ bool RobotBodyFilter<T>::configure() {
 }
 
 bool RobotBodyFilterLaserScan::configure() {
-  bool success = RobotBodyFilter::configure();
-  if (!success)
-    return false;
-
   this->pointByPointScan = this->getParamVerbose("sensor/point_by_point", true);
 
-  return true;
+  bool success = RobotBodyFilter::configure();
+  return success;
 }
 
 bool RobotBodyFilterPointCloud2::configure() {
+  this->pointByPointScan = this->getParamVerbose("sensor/point_by_point", false);
+
   bool success = RobotBodyFilter::configure();
   if (!success)
     return false;
 
-  this->pointByPointScan = this->getParamVerbose("sensor/point_by_point", false);
+  this->outputFrame = this->getParamVerbose("frames/output", this->filteringFrame);
+  stripLeadingSlash(this->outputFrame, true);
 
   return true;
 }
@@ -279,11 +309,17 @@ bool RobotBodyFilter<T>::computeMask(
   const clock_t stopwatchOverall = clock();
   const auto& scanTime = projectedPointCloud.header.stamp;
 
-  const auto sensorTf = this->tfBuffer->lookupTransform(
-      this->fixedFrame, this->sensorFrame, scanTime,
-      remainingTime(scanTime, this->reachableTransformTimeout));
   Eigen::Vector3d sensorPosition;
-  tf2::fromMsg(sensorTf.transform.translation, sensorPosition);
+  try {
+    const auto sensorTf = this->tfBuffer->lookupTransform(
+        this->filteringFrame, this->sensorFrame, scanTime,
+        remainingTime(scanTime, this->reachableTransformTimeout));
+    tf2::fromMsg(sensorTf.transform.translation, sensorPosition);
+  } catch (tf2::TransformException& e) {
+    ROS_ERROR("RobotBodyFilter: Could not compute filtering mask do to this "
+              "TF exception: %s", e.what());
+    return false;
+  }
 
   // compute a mask of point indices for points from projectedPointCloud
   // that tells if they are inside or outside robot, or shadow points
@@ -398,8 +434,14 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
   const clock_t stopwatchOverall = clock();
 
   // tf2 doesn't like frames starting with slash
-  this->sensorFrame = inputScan.header.frame_id;
-  stripLeadingSlash(this->sensorFrame, true);
+  const auto scanFrame = stripLeadingSlash(inputScan.header.frame_id, true);
+  if (scanFrame != this->sensorFrame)
+  {
+    ROS_ERROR("Input laser scan has frame_id %s, but `frames/sensor` is set to "
+              "%s. Please, fix filter configuration and run it again.",
+              scanFrame.c_str(), this->sensorFrame.c_str());
+    throw std::runtime_error("Input scan frame doesn't match filter configuration.");
+  }
 
   // create the output copy of the input scan
   filteredScan = inputScan;
@@ -411,6 +453,7 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
   { // acquire the lock here, because we work with the tfBuffer all the time
     std::lock_guard<std::mutex> guard(*this->modelMutex);
 
+    if (this->pointByPointScan)
     { // make sure we have all the tfs between sensor frame and fixedFrame during the time of scan acquisition
       const auto scanDuration = inputScan.ranges.size() * inputScan.time_increment;
       const auto afterScanTime = scanTime + ros::Duration().fromSec(scanDuration);
@@ -434,24 +477,54 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     }
 
     // The point cloud will have fields x, y, z, intensity (float32) and index (int32)
+    // and for point-by-point scans also timestamp and viewpoint
     sensor_msgs::PointCloud2 projectedPointCloud;
-    { // project the scan measurements to a point cloud in the fixedFrame
-      const auto channelOptions =
-          laser_geometry::channel_option::Intensity |
-          laser_geometry::channel_option::Index |
-          laser_geometry::channel_option::Timestamp |
-          laser_geometry::channel_option::Viewpoint;
-      laser_geometry::LaserProjection laserProjector;
-      laserProjector.transformLaserScanToPointCloud(this->fixedFrame,
-          inputScan, projectedPointCloud, *this->tfBuffer, -1, channelOptions);
+    { // project the scan measurements to a point cloud in the filteringFrame
+
+      sensor_msgs::PointCloud2 tmpPointCloud;
 
       // the projected point cloud can omit some measurements if they are out of the defined scan's range;
       // for this case, the second channel ("index") contains indices of the point cloud's points into the scan
+      auto channelOptions =
+          laser_geometry::channel_option::Intensity |
+          laser_geometry::channel_option::Index;
 
-      projectedPointCloud.header.frame_id = this->fixedFrame;
-      // according to LaserProjector, the point cloud is created so that it corresponds to the time of the first
-      // measurement
-      projectedPointCloud.header.stamp = scanTime;
+      if (this->pointByPointScan) {
+        ROS_INFO_ONCE("RobotBodyFilter: Applying complex laser scan projection.");
+        // perform the complex laser scan projection
+        channelOptions |=
+            laser_geometry::channel_option::Timestamp |
+            laser_geometry::channel_option::Viewpoint;
+
+        laserProjector.transformLaserScanToPointCloud(
+            this->fixedFrame, inputScan, tmpPointCloud, *this->tfBuffer,
+            -1, channelOptions);
+      } else {
+        ROS_INFO_ONCE("RobotBodyFilter: Applying simple laser scan projection.");
+        // perform simple laser scan projection
+        laserProjector.projectLaser(inputScan, tmpPointCloud, -1.0,
+            channelOptions);
+      }
+
+      // convert to filtering frame
+      if (tmpPointCloud.header.frame_id == this->filteringFrame) {
+        projectedPointCloud = std::move(tmpPointCloud);
+      } else {
+        ROS_INFO_ONCE("RobotBodyFilter: Transforming scan from frame %s to %s",
+            tmpPointCloud.header.frame_id.c_str(), this->filteringFrame.c_str());
+        std::string err;
+        if (!this->tfBuffer->canTransform(this->filteringFrame,
+            tmpPointCloud.header.frame_id, scanTime,
+            remainingTime(scanTime, this->reachableTransformTimeout), &err)) {
+          ROS_ERROR_DELAYED_THROTTLE(3, "RobotBodyFilter: Cannot transform "
+              "laser scan to filtering frame. Something's wrong with TFs: %s",
+              err.c_str());
+          return false;
+        }
+
+        transformWithChannels(tmpPointCloud, projectedPointCloud,
+            *this->tfBuffer, this->filteringFrame);
+      }
     }
 
     ROS_DEBUG("RobotBodyFilter: Scan transformation run time is %.5f secs.", double(clock()-stopwatchOverall) / CLOCKS_PER_SEC);
@@ -513,12 +586,10 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
     return false;
   }
 
-  bool hasIndexField = false, hasStampsField = false;
+  bool hasStampsField = false;
   bool hasVpXField = false, hasVpYField = false, hasVpZField = false;
   for (const auto& field : inputCloud.fields) {
-    if (field.name == "index" && field.datatype == sensor_msgs::PointField::INT32)
-      hasIndexField = true;
-    else if (field.name == "stamps" && field.datatype == sensor_msgs::PointField::FLOAT32)
+    if (field.name == "stamps" && field.datatype == sensor_msgs::PointField::FLOAT32)
       hasStampsField = true;
     else if (field.name == "vp_x" && field.datatype == sensor_msgs::PointField::FLOAT32)
       hasVpXField = true;
@@ -529,10 +600,6 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
   }
 
   // Verify the pointcloud and its fields
-
-  if (!hasIndexField) {
-    throw std::runtime_error("The input pointcloud has to contain an int32 'index' field.");
-  }
 
   if (this->pointByPointScan) {
     if (inputCloud.height != 1 && inputCloud.is_dense == 0) {
@@ -552,9 +619,31 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
                   "'point_by_point_scan' to true to get correct results.");
   } else if (inputCloud.height == 1 && inputCloud.is_dense == 1) {
     ROS_WARN_ONCE("RobotBodyFilter: The pointcloud is dense, which usually means"
-                  "it was captured each point at a different time instant. "
-                  "Consider setting 'point_by_point_scan! to true to get a more"
+                  " it was captured each point at a different time instant. "
+                  "Consider setting 'point_by_point_scan' to true to get a more"
                   " accurate version.");
+  }
+
+  // Transform to filtering frame
+
+  sensor_msgs::PointCloud2 transformedCloud;
+  if (inputCloud.header.frame_id == this->filteringFrame) {
+    transformedCloud = inputCloud;
+  } else {
+    ROS_INFO_ONCE("RobotBodyFilter: Transforming cloud from frame %s to %s",
+                  inputCloud.header.frame_id.c_str(), this->filteringFrame.c_str());
+    std::lock_guard<std::mutex> guard(*this->modelMutex);
+    std::string err;
+    if (!this->tfBuffer->canTransform(this->filteringFrame,
+        inputCloud.header.frame_id, scanTime,
+        remainingTime(scanTime, this->reachableTransformTimeout), &err)) {
+      ROS_ERROR_DELAYED_THROTTLE(3, "RobotBodyFilter: Cannot transform "
+          "point cloud to filtering frame. Something's wrong with TFs: %s",
+          err.c_str());
+      return false;
+    }
+
+    transformWithChannels(inputCloud, transformedCloud, *this->tfBuffer, this->filteringFrame);
   }
 
   // Compute the mask and use it
@@ -563,15 +652,39 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
   {
     std::lock_guard<std::mutex> guard(*this->modelMutex);
 
-    const auto success = this->computeMask(inputCloud, pointMask);
+    const auto success = this->computeMask(transformedCloud, pointMask);
     if (!success)
       return false;
   }
 
-  createFilteredCloud(inputCloud,
+  // Filter the cloud
+
+  sensor_msgs::PointCloud2 tmpCloud;
+  createFilteredCloud(transformedCloud,
     [pointMask] (size_t index, float, float, float) -> bool {
       return pointMask[index] == RayCastingShapeMask::MaskValue::OUTSIDE;
-    }, filteredCloud, this->keepCloudsOrganized);
+    }, tmpCloud, this->keepCloudsOrganized);
+
+  // Transform to output frame
+
+  if (tmpCloud.header.frame_id == this->outputFrame) {
+    filteredCloud = std::move(tmpCloud);
+  } else {
+    ROS_INFO_ONCE("RobotBodyFilter: Transforming cloud from frame %s to %s",
+        tmpCloud.header.frame_id.c_str(), this->outputFrame.c_str());
+    std::lock_guard<std::mutex> guard(*this->modelMutex);
+    std::string err;
+    if (!this->tfBuffer->canTransform(this->outputFrame,
+        tmpCloud.header.frame_id, scanTime,
+        remainingTime(scanTime, this->reachableTransformTimeout), &err)) {
+      ROS_ERROR_DELAYED_THROTTLE(3, "RobotBodyFilter: Cannot transform "
+          "point cloud to output frame. Something's wrong with TFs: %s",
+          err.c_str());
+      return false;
+    }
+
+    transformWithChannels(tmpCloud, filteredCloud, *this->tfBuffer, this->outputFrame);
+  }
 
   return true;
 }
@@ -721,6 +834,14 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
             "*::" + collision->name,
             link->name + "::" + std::to_string(collisionIndex),
         };
+
+        // if onlyLinks is nonempty, make sure this collision belongs to a specified link
+        if (!this->onlyLinks.empty()) {
+          if (isSetIntersectionEmpty(collisionNames, this->onlyLinks)) {
+            ++collisionIndex;
+            continue;
+          }
+        }
 
         // if the link is ignored, go on
         if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredEverywhere)) {

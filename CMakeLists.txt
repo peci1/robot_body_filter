@@ -36,6 +36,7 @@ add_library(${PROJECT_NAME}_utils
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
   src/utils/tf2_eigen.cpp
+  src/utils/tf2_sensor_msgs.cpp
   src/utils/time_utils.cpp
 )
 target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES})

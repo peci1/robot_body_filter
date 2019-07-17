@@ -5,6 +5,7 @@
 #include <map>
 #include <ros/duration.h>
 #include <ros/time.h>
+#include <set>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -63,6 +64,16 @@ inline std::string to_string(const XmlRpc::XmlRpcValue &value)
 
 template<typename T>
 inline std::string to_string(const std::vector<T> &value)
+{
+  std::stringstream ss;
+  ss << "[";
+  std::copy(value.begin(), value.end(), std::ostream_iterator<T>(ss, ", "));
+  ss << "]";
+  return ss.str();
+}
+
+template<typename T>
+inline std::string to_string(const std::set<T> &value)
 {
   std::stringstream ss;
   ss << "[";

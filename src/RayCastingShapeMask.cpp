@@ -25,10 +25,14 @@ struct RayCastingShapeMask::RayCastingShapeMaskPIMPL
 
 RayCastingShapeMask::RayCastingShapeMask(
     const TransformCallback& transformCallback,
-    const double minSensorDist, const double maxSensorDist)
+    const double minSensorDist, const double maxSensorDist,
+    const bool doClipping, const bool doContainsTest, const bool doShadowTest)
     : ShapeMask(transformCallback),
       minSensorDist(minSensorDist),
-      maxSensorDist(maxSensorDist)
+      maxSensorDist(maxSensorDist),
+      doClipping(doClipping),
+      doContainsTest(doContainsTest),
+      doShadowTest(doShadowTest)
 {
   this->data = std::make_unique<RayCastingShapeMaskPIMPL>();
 }
@@ -191,7 +195,7 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
   Eigen::Vector3d dir(sensorPos - data);
   const auto distance = dir.norm();
 
-  if (distance < this->minSensorDist || (this->maxSensorDist > 0.0 && distance > this->maxSensorDist)) {
+  if (this->doClipping && (distance < this->minSensorDist || (this->maxSensorDist > 0.0 && distance > this->maxSensorDist))) {
     // check if the point is inside measurement range
     mask = MaskValue::CLIP;
     return;
@@ -199,7 +203,7 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
 
   // check if it is inside the scaled body
   const auto radiusSquared = pow(boundingSphereForContainsTest.radius, 2);
-  if ((boundingSphereForContainsTest.center - data).squaredNorm() < radiusSquared)
+  if (this->doContainsTest && (boundingSphereForContainsTest.center - data).squaredNorm() < radiusSquared)
   {
     for (const auto &seeShape : this->data->bodiesForContainsTest)
     {
@@ -211,20 +215,19 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
     }
   }
 
-  // point is not inside the robot, check if it is a shadow point
-  dir /= distance;
-  EigenSTL::vector_Vector3d intersections;
-  for (const auto &seeShape : this->data->bodiesForShadowTest)
-  {
-    // get the 1st intersection of ray pt->sensor
-    intersections.clear();  // intersectsRay doesn't clear the vector...
-    if (bodies::intersectsRay(seeShape.body, data, dir, &intersections, 1))
-    {
-      // is the intersection between point and sensor?
-      if (dir.dot(sensorPos - intersections[0]) >= 0.0)
-      {
-        mask = MaskValue::SHADOW;
-        return;
+  if (this->doShadowTest) {
+    // point is not inside the robot, check if it is a shadow point
+    dir /= distance;
+    EigenSTL::vector_Vector3d intersections;
+    for (const auto &seeShape : this->data->bodiesForShadowTest) {
+      // get the 1st intersection of ray pt->sensor
+      intersections.clear(); // intersectsRay doesn't clear the vector...
+      if (bodies::intersectsRay(seeShape.body, data, dir, &intersections, 1)) {
+        // is the intersection between point and sensor?
+        if (dir.dot(sensorPos - intersections[0]) >= 0.0) {
+          mask = MaskValue::SHADOW;
+          return;
+        }
       }
     }
   }

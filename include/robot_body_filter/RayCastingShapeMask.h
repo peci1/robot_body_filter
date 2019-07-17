@@ -25,7 +25,9 @@ public:
 
   explicit RayCastingShapeMask(
       const TransformCallback& transformCallback,
-      double minSensorDist = 0.0, double maxSensorDist = 1e10);
+      double minSensorDist = 0.0, double maxSensorDist = 1e10,
+      bool doClipping = true, bool doContainsTest = true,
+      bool doShadowTest = true);
 
   virtual ~RayCastingShapeMask();
 
@@ -181,6 +183,10 @@ protected:
   /** \brief Shapes to be ignored when doing test for SHADOW in maskContainmentAndShadows.
    *  E.g. the sensor collision shape should be listed here. */
   std::set<point_containment_filter::ShapeHandle> ignoreInShadowTest;
+
+  bool doClipping = true;
+  bool doContainsTest = true;
+  bool doShadowTest = true;
 
   class RayCastingShapeMaskPIMPL;
   std::unique_ptr<RayCastingShapeMaskPIMPL> data;
