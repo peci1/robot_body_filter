@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.0 (2019-07-18)
+------------------
 * Increasing performance.
 * More descriptive frame configurations. Added the possibility to leave out clipping, contains or shadow tests.
 * Repurposed param ~transforms/timeout/reachable to be always used with remainingTime.
