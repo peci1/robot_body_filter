@@ -660,10 +660,8 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
   // Filter the cloud
 
   sensor_msgs::PointCloud2 tmpCloud;
-  createFilteredCloud(transformedCloud,
-    [pointMask] (size_t index, float, float, float) -> bool {
-      return pointMask[index] == RayCastingShapeMask::MaskValue::OUTSIDE;
-    }, tmpCloud, this->keepCloudsOrganized);
+  CREATE_FILTERED_CLOUD(transformedCloud, tmpCloud, this->keepCloudsOrganized,
+                        (pointMask[i] != RayCastingShapeMask::MaskValue::OUTSIDE))
 
   // Transform to output frame
 
@@ -949,30 +947,24 @@ void RobotBodyFilter<T>::publishDebugPointClouds(
   if (this->publishDebugPclInside)
   {
     sensor_msgs::PointCloud2 insideCloud;
-    createFilteredCloud(projectedPointCloud,
-      [&pointMask] (size_t i, float, float, float) -> bool {
-        return pointMask[i] == RayCastingShapeMask::MaskValue::INSIDE;
-      }, insideCloud, this->keepCloudsOrganized);
+    CREATE_FILTERED_CLOUD(projectedPointCloud, insideCloud, this->keepCloudsOrganized,
+      (pointMask[i] != RayCastingShapeMask::MaskValue::INSIDE));
     this->debugPointCloudInsidePublisher.publish(insideCloud);
   }
 
   if (this->publishDebugPclClip)
   {
     sensor_msgs::PointCloud2 clipCloud;
-    createFilteredCloud(projectedPointCloud,
-      [&pointMask] (size_t i, float, float, float) -> bool {
-        return pointMask[i] == RayCastingShapeMask::MaskValue::CLIP;
-      }, clipCloud, this->keepCloudsOrganized);
+    CREATE_FILTERED_CLOUD(projectedPointCloud, clipCloud, this->keepCloudsOrganized,
+      (pointMask[i] != RayCastingShapeMask::MaskValue::CLIP));
     this->debugPointCloudClipPublisher.publish(clipCloud);
   }
 
   if (this->publishDebugPclShadow)
   {
     sensor_msgs::PointCloud2 shadowCloud;
-    createFilteredCloud(projectedPointCloud,
-      [&pointMask] (size_t i, float, float, float) -> bool {
-        return pointMask[i] == RayCastingShapeMask::MaskValue::SHADOW;
-      }, shadowCloud, this->keepCloudsOrganized);
+    CREATE_FILTERED_CLOUD(projectedPointCloud, shadowCloud, this->keepCloudsOrganized,
+      (pointMask[i] != RayCastingShapeMask::MaskValue::SHADOW));
     this->debugPointCloudShadowPublisher.publish(shadowCloud);
   }
 }
@@ -1067,11 +1059,8 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
     if (this->publishNoBoundingSpherePointcloud)
     {
       sensor_msgs::PointCloud2 noSphereCloud;
-      createFilteredCloud(projectedPointCloud,
-                          [&boundingSphere] (size_t i, float x, float y, float z) -> bool {
-                            const Eigen::Vector3d pt(x, y, z);
-                            return (pt - boundingSphere.center).norm() > boundingSphere.radius;
-                          }, noSphereCloud, this->keepCloudsOrganized);
+      CREATE_FILTERED_CLOUD(projectedPointCloud, noSphereCloud, this->keepCloudsOrganized,
+        ((Eigen::Vector3d(*x_it, *y_it, *z_it)- boundingSphere.center).norm() <= boundingSphere.radius));
       this->scanPointCloudNoBoundingBoxPublisher.publish(noSphereCloud);
     }
   }
