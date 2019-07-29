@@ -39,6 +39,9 @@
   <build_depend>libfcl-dev</build_depend>
   <exec_depend>libfcl-dev</exec_depend>
 
+  <build_depend>pcl_conversions</build_depend>
+  <exec_depend>pcl_conversions</exec_depend>
+
   <build_depend>pkg-config</build_depend>
   <build_depend>tf2_eigen</build_depend>
   <build_depend>tf2_sensor_msgs</build_depend>
