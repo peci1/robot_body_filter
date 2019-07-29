@@ -16,6 +16,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
 
+  <depend>dynamic_reconfigure</depend>
   <depend>filters</depend>
   <depend>geometric_shapes</depend>
   <depend>geometry_msgs</depend>
