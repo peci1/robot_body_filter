@@ -18,7 +18,6 @@
 #include <geometric_shapes/shape_to_marker.h>
 
 #include <sensor_msgs/point_cloud_conversion.h>
-#include <eigen_conversions/eigen_msg.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 
 #include <pcl_conversions/pcl_conversions.h>
