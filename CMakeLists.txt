@@ -10,6 +10,7 @@ set(MESSAGE_DEPS geometry_msgs std_msgs)
 
 find_package(catkin REQUIRED COMPONENTS ${THIS_PACKAGE_DEPS} ${MESSAGE_DEPS} message_generation tf2_eigen tf2_sensor_msgs)
 find_package(PCL REQUIRED COMPONENTS common filters)
+find_package(Threads REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBFCL_PC REQUIRED fcl)
