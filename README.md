@@ -2,6 +2,18 @@
 
 Filters the robot's body out of point clouds.
 
+## Build Status
+
+### Dev job
+| ROS Version | Build Status |
+|-|-|
+| __Melodic__ | [![Build Status](http://build.ros.org/buildStatus/icon?job=Mdev__robot_body_filter__ubuntu_bionic_amd64)](http://build.ros.org/job/Mdev__robot_body_filter__ubuntu_bionic_amd64) |
+
+### Release jobs
+| ROS Version | Ubuntu amd64 | Ubuntu armhf | Ubuntu arm64 | Debian amd64 | Debian arm64 |
+|-|-|-|-|-|-|
+| __Melodic__ | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary)](http://build.ros.org/job/Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary)](http://build.ros.org/job/Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary)](http://build.ros.org/job/Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary)](http://build.ros.org/job/Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary)](http://build.ros.org/job/Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary) |
+
 ## Subscribed topics
 
 - `/tf`, `/tf_static`
