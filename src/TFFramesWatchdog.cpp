@@ -93,7 +93,7 @@ void TFFramesWatchdog::clear() {
   reachableFrames.clear();
 }
 
-std::optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform(
+optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform(
     const std::string &frame,
     const ros::Time &time,
     const ros::Duration &timeout,
@@ -104,7 +104,7 @@ std::optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform
 
   // Return immediately for unreachable frames
   if (!this->isReachable(frame))
-    return std::nullopt;
+    return nullopt;
 
   std::string tmpErrstr;
   if (errstr == nullptr) {
@@ -119,7 +119,7 @@ std::optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform
 
     // if we couldn't get TF for this reachable frame, mark it unreachable
     this->markUnreachable(frame);
-    return std::nullopt;
+    return nullopt;
   }
 
   try
@@ -133,7 +133,7 @@ std::optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform
 
     // if we couldn't get TF for this reachable frame, mark it unreachable
     this->markUnreachable(frame);
-    return std::nullopt;
+    return nullopt;
   }
 }
 

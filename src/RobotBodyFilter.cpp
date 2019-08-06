@@ -112,9 +112,8 @@ bool RobotBodyFilter<T>::configure() {
   this->robotDescriptionUpdatesListener = this->nodeHandle.subscribe(
     "dynamic_robot_model_server/parameter_updates", 10, &RobotBodyFilter::robotDescriptionUpdated, this);
 
-  // for some reason, I have to do this template black magic here :(
-  this->reloadRobotModelServiceServer = this->privateNodeHandle.advertiseService<RobotBodyFilter<T>, std_srvs::TriggerRequest, std_srvs::TriggerResponse>(
-      "reload_model", &RobotBodyFilter<T>::triggerModelReload, (RobotBodyFilter<T>*)this);
+  this->reloadRobotModelServiceServer = this->privateNodeHandle.advertiseService(
+      "reload_model", &RobotBodyFilter::triggerModelReload, this);
 
   if (this->computeBoundingSphere) {
     this->boundingSpherePublisher = this->nodeHandle.template advertise<SphereStamped>("robot_bounding_sphere", 100);
@@ -752,7 +751,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
       auto linkTransformTfOptional = this->tfFramesWatchdog->lookupTransform(
           linkFrame, time, remainingTime(time, this->reachableTransformTimeout));
 
-      if (!linkTransformTfOptional.has_value())
+      if (!linkTransformTfOptional)  // has no value
         continue;
 
       const auto &linkTransformTf = linkTransformTfOptional.value();
@@ -769,7 +768,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
       auto linkTransformTfOptional = this->tfFramesWatchdog->lookupTransform(
           linkFrame, afterScanTime, remainingTime(time, this->reachableTransformTimeout));
 
-      if (!linkTransformTfOptional.has_value())
+      if (!linkTransformTfOptional)  // has no value
         continue;
 
       const auto &linkTransformTf = linkTransformTfOptional.value();

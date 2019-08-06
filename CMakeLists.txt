@@ -1,16 +1,14 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(robot_body_filter)
 
-# we're using std::optional
-if(CMAKE_VERSION VERSION_LESS "3.8")
-  # CMake 3.7 in Debian Stretch doesn't know C++17 yet
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-  endif()
+set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(DetectOptional)
+
+if(${ROBOT_BODY_FILTER_HAVE_CXX_OPTIONAL})
+  # add_compile_definitions would be nicer, but isn't available in Stretch
+  add_compile_options(-DROBOT_BODY_FILTER_USE_CXX_OPTIONAL=1)
 else()
-  set(CMAKE_CXX_STANDARD 17)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS OFF)
+  add_compile_options(-DROBOT_BODY_FILTER_USE_CXX_OPTIONAL=0)
 endif()
 
 set(THIS_PACKAGE_DEPS dynamic_reconfigure filters geometric_shapes laser_geometry moveit_core moveit_ros_perception roscpp sensor_msgs tf2 tf2_ros urdf visualization_msgs)
