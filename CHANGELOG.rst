@@ -2,6 +2,11 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fixed a bug in filtering unorganized point clouds.
+* Contributors: Martin Pecka
+
 1.1.1 (2019-07-30)
 ------------------
 * Fixed dependencies
