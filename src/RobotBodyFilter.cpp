@@ -659,7 +659,7 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
 
   sensor_msgs::PointCloud2 tmpCloud;
   CREATE_FILTERED_CLOUD(transformedCloud, tmpCloud, this->keepCloudsOrganized,
-                        (pointMask[i] != RayCastingShapeMask::MaskValue::OUTSIDE))
+                        (pointMask[i] == RayCastingShapeMask::MaskValue::OUTSIDE))
 
   // Transform to output frame
 
@@ -946,7 +946,7 @@ void RobotBodyFilter<T>::publishDebugPointClouds(
   {
     sensor_msgs::PointCloud2 insideCloud;
     CREATE_FILTERED_CLOUD(projectedPointCloud, insideCloud, this->keepCloudsOrganized,
-      (pointMask[i] != RayCastingShapeMask::MaskValue::INSIDE));
+      (pointMask[i] == RayCastingShapeMask::MaskValue::INSIDE));
     this->debugPointCloudInsidePublisher.publish(insideCloud);
   }
 
@@ -954,7 +954,7 @@ void RobotBodyFilter<T>::publishDebugPointClouds(
   {
     sensor_msgs::PointCloud2 clipCloud;
     CREATE_FILTERED_CLOUD(projectedPointCloud, clipCloud, this->keepCloudsOrganized,
-      (pointMask[i] != RayCastingShapeMask::MaskValue::CLIP));
+      (pointMask[i] == RayCastingShapeMask::MaskValue::CLIP));
     this->debugPointCloudClipPublisher.publish(clipCloud);
   }
 
@@ -962,7 +962,7 @@ void RobotBodyFilter<T>::publishDebugPointClouds(
   {
     sensor_msgs::PointCloud2 shadowCloud;
     CREATE_FILTERED_CLOUD(projectedPointCloud, shadowCloud, this->keepCloudsOrganized,
-      (pointMask[i] != RayCastingShapeMask::MaskValue::SHADOW));
+      (pointMask[i] == RayCastingShapeMask::MaskValue::SHADOW));
     this->debugPointCloudShadowPublisher.publish(shadowCloud);
   }
 }
@@ -1058,7 +1058,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
     {
       sensor_msgs::PointCloud2 noSphereCloud;
       CREATE_FILTERED_CLOUD(projectedPointCloud, noSphereCloud, this->keepCloudsOrganized,
-        ((Eigen::Vector3d(*x_it, *y_it, *z_it)- boundingSphere.center).norm() <= boundingSphere.radius));
+        ((Eigen::Vector3d(*x_it, *y_it, *z_it)- boundingSphere.center).norm() > boundingSphere.radius));
       this->scanPointCloudNoBoundingBoxPublisher.publish(noSphereCloud);
     }
   }

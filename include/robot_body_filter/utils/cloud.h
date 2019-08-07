@@ -26,6 +26,7 @@ size_t num_points(const Cloud &cloud);
  * \brief Create a pointcloud that contains a subset of point of `IN` defined by
  * the filter `FILTER`. The result is saved into `OUT`. `FILTER` should be a boolean expression
  * which can use the following: `i`: index of the point, `x_it, y_it, z_it` iterators to XYZ coordinates.
+ * Points for which FILTER is true are part of the final pointcloud.
  */
 #define CREATE_FILTERED_CLOUD(IN, OUT, KEEP_ORGANIZED, FILTER) {\
   const auto inputIsOrganized = IN.height > 1; \
@@ -66,7 +67,7 @@ size_t num_points(const Cloud &cloud);
     const auto invalidValue = std::numeric_limits<float>::quiet_NaN(); \
     \
     for (size_t i = 0; i < numPoints; ++i, ++x_it, ++y_it, ++z_it, ++x_out_it, ++y_out_it, ++z_out_it) { \
-      if (FILTER) { \
+      if (!(FILTER)) { \
         *x_out_it = *y_out_it = *z_out_it = invalidValue; \
         OUT.is_dense = false; \
       } \
