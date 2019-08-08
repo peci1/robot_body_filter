@@ -27,15 +27,8 @@ shapes::ShapeConstPtr robot_body_filter::constructShape(const urdf::Geometry& ge
     case urdf::Geometry::MESH: {
       const auto* mesh = dynamic_cast<const urdf::Mesh*>(&geometry);
       if (!mesh->filename.empty()) {
-        result.reset(shapes::createMeshFromResource(mesh->filename));
-
-        // TODO watch https://github.com/ros-planning/geometric_shapes/issues/29 if it is solved
-        if (mesh->scale.x != mesh->scale.y || mesh->scale.y != mesh->scale.z || mesh->scale.x != mesh->scale.z) {
-          ROS_WARN_STREAM("Nonuniform mesh scaling not supported in meshes for laser filtering." <<
-                          " Using X scale as the general scale. The problematic mesh: " << mesh->filename);
-        }
-
-        result->scale(mesh->scale.x);
+        Eigen::Vector3d scale(mesh->scale.x, mesh->scale.y, mesh->scale.z);
+        result.reset(shapes::createMeshFromResource(mesh->filename, scale));
       } else
         ROS_WARN("Empty mesh filename");
       break;
