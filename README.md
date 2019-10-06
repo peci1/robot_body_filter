@@ -1,10 +1,9 @@
 # robot_body_filter
 
-Filters the robot's body out of point clouds.
+Filters the robot's body out of point clouds and laser scans.
 
 ## Changes vs [PR2/robot_self_filter](https://github.com/PR2/robot_self_filter):
-- Now the package is a normal `filters::FilterBase` filter and not a standalone 
-   node.
+- Now the package is a normal `filters::FilterBase` filter and not a standalone node.
 - Using both containment and ray-tracing tests. 
 - Using all collision elements for each link instead of only the first one.
 - Enabling generic point type, removing PCL dependency and unnecessary params.
@@ -26,6 +25,10 @@ Filters the robot's body out of point clouds.
 | __Melodic__ | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary)](http://build.ros.org/job/Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary)](http://build.ros.org/job/Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary)](http://build.ros.org/job/Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary)](http://build.ros.org/job/Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary)](http://build.ros.org/job/Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary) |
 
 ## Basic Operation
+
+### `filters::FilterBase` API
+
+The basic workings of this filter are done via the [`filters::FilterBase` API](http://wiki.ros.org/filters) implemented for `sensor_msgs::LaserScan` and `sensor_msgs::PointCloud2` types. This means you can load this filter into a FilterChain along other filters as usual. Different from the standard filters, this one can also publish several interesting topics and subscribes to TF.
 
 ### Subscribed Topics
 
