@@ -2,6 +2,15 @@
 
 Filters the robot's body out of point clouds.
 
+## Changes vs [PR2/robot_self_filter](https://github.com/PR2/robot_self_filter):
+- Now the package is a normal `filters::FilterBase` filter and not a standalone 
+   node.
+- Using both containment and ray-tracing tests. 
+- Using all collision elements for each link instead of only the first one.
+- Enabling generic point type, removing PCL dependency and unnecessary params.
+- Using bodies.h and shapes.h from geometric_shapes.
+- As a by-product, the filter can compute robot's bounding box or sphere.
+
 ## Build Status
 
 ### Dev job
@@ -16,7 +25,9 @@ Filters the robot's body out of point clouds.
 |---|---|---|---|---|---|
 | __Melodic__ | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary)](http://build.ros.org/job/Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary)](http://build.ros.org/job/Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary)](http://build.ros.org/job/Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary)](http://build.ros.org/job/Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary)](http://build.ros.org/job/Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary) |
 
-## Subscribed topics
+## Basic Operation
+
+### Subscribed Topics
 
 - `/tf`, `/tf_static`
 
@@ -27,7 +38,7 @@ Filters the robot's body out of point clouds.
     The model is read from a field defined by parameter 
     `body_model/dynamic_robot_description/field_name`.
 
-## Published topics
+### Published Topics
 
 - `scan_point_cloud_no_bbox` (`sensor_msgs/PointCloud2`)
 
@@ -45,50 +56,14 @@ Filters the robot's body out of point clouds.
 
     Bounding box of the robot body. First point is the minimal point, second one
     is the maximal point. Turned on by `bounding_box/compute` parameter.
-- `robot_bounding_sphere_marker` (`visualization_msgs/Marker`) 
 
-    Marker of the bounding sphere of the robot body. Turned on by 
-    `bounding_sphere/marker` parameter.
-- `robot_bounding_box_marker` (`visualization_msgs/Marker`) 
-
-    Marker of the bounding box of the robot body. Turned on by 
-    `bounding_box/marker` parameter.
-- `robot_bounding_sphere_debug` (`visualization_msgs/MarkerArray`)
-
-    Marker array containing the bounding sphere for each collision element.
-    Turned on by `bounding_sphere/debug` parameter.
-- `robot_bounding_box_debug` (`visualization_msgs/MarkerArray`)
-
-    Marker array containing the bounding box for each collision element.
-    Turned on by `bounding_box/debug` parameter.
-- `robot_model_for_contains_test` (`visualization_msgs/MarkerArray`)
-
-    Marker array containing the exact robot model used for contains tests.
-    Turned on by `debug/marker/contains` parameter.
-- `robot_model_for_shadow_test` (`visualization_msgs/MarkerArray`)
-
-    Marker array containing the exact robot model used for shadow tests.
-    Turned on by `debug/marker/shadow` parameter.
-- `scan_point_cloud_inside` (`sensor_msgs/PointCloud2`)
-
-    Debugging pointcloud with points classified as `INSIDE`. Turned on by
-    `debug/pcl/inside` parameter.
-- `scan_point_cloud_clip` (`sensor_msgs/PointCloud2`)
-
-    Debugging pointcloud with points classified as `CLIP`. Turned on by
-    `debug/pcl/clip` parameter.
-- `scan_point_cloud_shadow` (`sensor_msgs/PointCloud2`)
-
-    Debugging pointcloud with points classified as `SHADOW`. Turned on by
-    `debug/pcl/shadow` parameter.
-
-## Provided services
+### Provided Services
 
 - `~reload_model` (`std_srvs/Trigger`)
 
     Call this service to re-read the URDF model from parameter server.
 
-## Filter parameters
+### Filter Parameters
 
 - `sensor/point_by_point` (`bool`, default: `false` for PointCloud2 version, 
    `true` for LaserScan)
@@ -181,14 +156,6 @@ Filters the robot's body out of point clouds.
 - `bounding_box/compute` (`bool`, default `false`)
  
     Whether to compute and publish bounding box.
-- `bounding_sphere/debug` (`bool`, default `false`)
-
-    Whether to compute and publish debug bounding spheres (marker array of 
-    spheres for each collision).
-- `bounding_box/debug` (`bool`, default `false`)
-
-    Whether to compute and publish debug bounding boxes (marker array of boxes
-    for each collision).
 - `bounding_sphere/publish_cut_out_pointcloud` (`bool`, default `false`)
 
     Whether to compute and publish pointcloud from which points in the
@@ -199,23 +166,6 @@ Filters the robot's body out of point clouds.
     Whether to compute and publish pointcloud from which points in the
     bounding box are removed. Will be published on `scan_point_cloud_no_bbox`.
     Implies `bounding_sphere/compute`.
-- `debug/pcl/inside` (`bool`, default `false`)
-
-    Whether to publish debugging pointcloud with points marked as `INSIDE`.
-- `debug/pcl/clip` (`bool`, default `false`)
-
-    Whether to publish debugging pointcloud with points marked as `CLIP`.
-- `debug/pcl/shadow` (`bool`, default `false`)
-
-    Whether to publish debugging pointcloud with points marked as `SHADOW`.
-- `debug/marker/contains` (`bool`, default `false`)
-
-    Whether to publish debugging marker array containing the exact robot body 
-    model used for containment test.
-- `debug/marker/shadow` (`bool`, default `false`)
-
-    Whether to publish debugging marker array containing the exact robot body 
-    model used for shadow test.
 - `ignored_links/bounding_sphere` (`list[string]`, default `[]`)
 
     List of links to be ignored in bounding sphere computation. Can be either 
@@ -248,11 +198,73 @@ Filters the robot's body out of point clouds.
     If robot model is published by dynamic reconfigure, this is the name of the 
     Config message field which holds the robot model.
 
-## Changes vs [PR2/robot_self_filter](https://github.com/PR2/robot_self_filter):
-- Now the package is a normal `filters::FilterBase` filter and not a standalone 
-   node.
-- Using both containment and ray-tracing tests. 
-- Using all collision elements for each link instead of only the first one.
-- Enabling generic point type, removing PCL dependency and unnecessary params.
-- Using bodies.h and shapes.h from geometric_shapes.
-- As a by-product, the filter can compute robot's bounding box or sphere.
+## Debug Operation
+
+These options are there to help correctly set up and debug the filter operation and should be turned off in production environments since they can degrade performance of the filter.
+
+### Published Topics
+
+- `robot_bounding_sphere_marker` (`visualization_msgs/Marker`) 
+
+    Marker of the bounding sphere of the robot body. Turned on by 
+    `bounding_sphere/marker` parameter.
+- `robot_bounding_box_marker` (`visualization_msgs/Marker`) 
+
+    Marker of the bounding box of the robot body. Turned on by 
+    `bounding_box/marker` parameter.
+- `robot_bounding_sphere_debug` (`visualization_msgs/MarkerArray`)
+
+    Marker array containing the bounding sphere for each collision element.
+    Turned on by `bounding_sphere/debug` parameter.
+- `robot_bounding_box_debug` (`visualization_msgs/MarkerArray`)
+
+    Marker array containing the bounding box for each collision element.
+    Turned on by `bounding_box/debug` parameter.
+- `robot_model_for_contains_test` (`visualization_msgs/MarkerArray`)
+
+    Marker array containing the exact robot model used for contains tests.
+    Turned on by `debug/marker/contains` parameter.
+- `robot_model_for_shadow_test` (`visualization_msgs/MarkerArray`)
+
+    Marker array containing the exact robot model used for shadow tests.
+    Turned on by `debug/marker/shadow` parameter.
+- `scan_point_cloud_inside` (`sensor_msgs/PointCloud2`)
+
+    Debugging pointcloud with points classified as `INSIDE`. Turned on by
+    `debug/pcl/inside` parameter.
+- `scan_point_cloud_clip` (`sensor_msgs/PointCloud2`)
+
+    Debugging pointcloud with points classified as `CLIP`. Turned on by
+    `debug/pcl/clip` parameter.
+- `scan_point_cloud_shadow` (`sensor_msgs/PointCloud2`)
+
+    Debugging pointcloud with points classified as `SHADOW`. Turned on by
+    `debug/pcl/shadow` parameter.
+
+### Filter Parameters
+
+- `bounding_sphere/debug` (`bool`, default `false`)
+
+    Whether to compute and publish debug bounding spheres (marker array of 
+    spheres for each collision).
+- `bounding_box/debug` (`bool`, default `false`)
+
+    Whether to compute and publish debug bounding boxes (marker array of boxes
+    for each collision).
+- `debug/pcl/inside` (`bool`, default `false`)
+
+    Whether to publish debugging pointcloud with points marked as `INSIDE`.
+- `debug/pcl/clip` (`bool`, default `false`)
+
+    Whether to publish debugging pointcloud with points marked as `CLIP`.
+- `debug/pcl/shadow` (`bool`, default `false`)
+
+    Whether to publish debugging pointcloud with points marked as `SHADOW`.
+- `debug/marker/contains` (`bool`, default `false`)
+
+    Whether to publish debugging marker array containing the exact robot body 
+    model used for containment test.
+- `debug/marker/shadow` (`bool`, default `false`)
+
+    Whether to publish debugging marker array containing the exact robot body 
+    model used for shadow test.
