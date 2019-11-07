@@ -82,12 +82,8 @@ The basic workings of this filter are done via the [`filters::FilterBase` API](h
     The fixed frame. Usually base_link for stationary robots (or sensor
     frame if both robot and sensor are stationary). For mobile robots, it
     can be e.g. odom or map. Only needed for point-by-point scans.
-- `frames/sensor` (`string`, default `"laser"`)
 
-    Frame of the sensor. In LaserScan version, it has to match the
-    `frame_id` of the incoming scans. In PointCloud2 version, the data 
-    can come in a different frame from `frames/sensor`.
-- `frames/filtering` (`string`, default: for point-by-point scans, default is `frames/fixed`, otherwise `frames/sensor`)
+- `frames/filtering` (`string`, default: default is `frames/fixed`)
 
     Frame in which the filter is applied. For point-by-point scans, it
     has to be a fixed frame, otherwise, it can be the sensor frame or
