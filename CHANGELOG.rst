@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.5 (2019-11-08)
+------------------
 * refactor(RobotBodyFilter): Made frames/sensor parameter optional (`#2 <https://github.com/peci1/robot_body_filter/issues/2>`_)
   The sensor frame will now be derived from the incoming sensor messages.
   This way, messages from different sensors can be processed and the
