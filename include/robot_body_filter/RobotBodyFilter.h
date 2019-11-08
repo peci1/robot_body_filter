@@ -119,6 +119,13 @@ protected:
    * odom or map. */
   std::string fixedFrame;
 
+  /** \brief Frame of the sensor. For LaserScan version, it is automatically
+   * read from the incoming data. For PointCloud2, you have to specify it
+   * explicitly because the pointcloud could have already been transformed e.g.
+   * to the fixed frame.
+   */
+  std::string sensorFrame;
+
   /** \brief Frame in which the filter is applied. For point-by-point scans, it
    * has to be a fixed frame, otherwise, it can be the sensor frame. */
   std::string filteringFrame;
@@ -282,11 +289,13 @@ protected:
    *                            point captured at different time, it also needs
    *                            a float32 "stamps" channel and viewpoint
    *                            channels vp_x, vp_y and vp_z.
+   * \param sensorFrame Sensor frame id
    * \param mask Output mask of the points. Indices to the mask are taken from
    *             the INDEX channel.
    * \return Whether the computation succeeded.
    */
-  bool computeMask(const sensor_msgs::PointCloud2& projectedPointCloud, std::vector<RayCastingShapeMask::MaskValue>& mask);
+  bool computeMask(const sensor_msgs::PointCloud2& projectedPointCloud, const std::string& sensorFrame,
+                   std::vector<RayCastingShapeMask::MaskValue>& mask);
 
   /** \brief Return the latest cached transform for the link corresponding to the given shape handle.
    *
