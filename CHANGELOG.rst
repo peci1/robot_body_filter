@@ -2,6 +2,17 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* refactor(RobotBodyFilter): Made frames/sensor parameter optional (`#2 <https://github.com/peci1/robot_body_filter/issues/2>`_)
+  The sensor frame will now be derived from the incoming sensor messages.
+  This way, messages from different sensors can be processed and the
+  filter can be configured without any knowledge of the sensor.
+* Improved readme.
+* Reorganized the readme.
+* Added support for non-uniform scaling of collision meshes.
+* Contributors: Martin Pecka, Rein Appeldoorn
+
 1.1.4 (2019-08-07)
 ------------------
 * Fixed a bug in filtering unorganized point clouds.
