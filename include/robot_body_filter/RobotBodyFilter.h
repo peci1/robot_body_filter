@@ -289,14 +289,14 @@ protected:
    *                            point captured at different time, it also needs
    *                            a float32 "stamps" channel and viewpoint
    *                            channels vp_x, vp_y and vp_z.
-   * \param sensorFrame Sensor frame id
    * \param mask Output mask of the points. Indices to the mask are taken from
    *             the INDEX channel.
+   * \param sensorFrame Sensor frame id
    * \return Whether the computation succeeded.
    */
   bool computeMask(const sensor_msgs::PointCloud2& projectedPointCloud,
-                   const std::string& sensorFrame,
-                   std::vector<RayCastingShapeMask::MaskValue>& mask);
+                   std::vector<RayCastingShapeMask::MaskValue>& mask,
+                   const std::string& sensorFrame);
 
   /** \brief Return the latest cached transform for the link corresponding to the given shape handle.
    *

@@ -76,9 +76,7 @@ The basic workings of this filter are done via the [`filters::FilterBase` API](h
     once. If this is true, the processing pipeline expects the pointcloud
     to have fields int32 index, float32 stamps, and float32 vp_x, vp_y
     and vp_z viewpoint positions. If one of these fields is missing,
-    computeMask() throws runtime exception. For the LaserScan version, this
-    parameter should be set to the sensor frame if all messages are coming
-    from the same sensor. This will save some some conversions (cpu cycles).
+    computeMask() throws runtime exception.
 - `frames/fixed` (`string`, default: `"base_link"`)
 
     The fixed frame. Usually base_link for stationary robots (or sensor
@@ -86,15 +84,19 @@ The basic workings of this filter are done via the [`filters::FilterBase` API](h
     can be e.g. odom or map. Only needed for point-by-point scans.
 - `frames/sensor` (`string`, default `""`)
 
-    Frame of the sensor. In LaserScan version, it has to match the
-    `frame_id` of the incoming scans. In PointCloud2 version, the data
-    can come in a different frame from `frames/sensor`. The frame_id from
-    the incoming message will be taken as sensor frame if this value is `""`.
+    Frame of the sensor. If set to empty string, it will be read from
+    `header.frame_id` of each incoming message. In LaserScan version, if
+    nonempty, it has to match the `frame_id` of the incoming scans.
+    In PointCloud2 version, the data can come in a different frame from
+    `frames/sensor`.
 - `frames/filtering` (`string`, default: `frames/fixed`)
 
     Frame in which the filter is applied. For point-by-point scans, it
     has to be a fixed frame, otherwise, it can be the sensor frame or
-    any other frame.
+    any other frame. Setting to sensor frame will save some computations,
+    but this frame cannot be empty string, so sensor frame can only be
+    used if all data are coming from a single sensor and you know the scan
+    frame in advance.
 - `frames/output` (`string`, default: `frames/filtering`)
 
     Frame into which output data are transformed. Only applicable in
