@@ -294,7 +294,8 @@ protected:
    *             the INDEX channel.
    * \return Whether the computation succeeded.
    */
-  bool computeMask(const sensor_msgs::PointCloud2& projectedPointCloud, const std::string& sensorFrame,
+  bool computeMask(const sensor_msgs::PointCloud2& projectedPointCloud,
+                   const std::string& sensorFrame,
                    std::vector<RayCastingShapeMask::MaskValue>& mask);
 
   /** \brief Return the latest cached transform for the link corresponding to the given shape handle.
