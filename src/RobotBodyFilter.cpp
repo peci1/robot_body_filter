@@ -300,8 +300,8 @@ bool RobotBodyFilterPointCloud2::configure() {
 template <typename T>
 bool RobotBodyFilter<T>::computeMask(
     const sensor_msgs::PointCloud2 &projectedPointCloud,
-    const std::string &sensorFrame,
-    std::vector<RayCastingShapeMask::MaskValue> &pointMask) {
+    std::vector<RayCastingShapeMask::MaskValue> &pointMask,
+    const std::string &sensorFrame) {
 
   // this->modelMutex has to be already locked!
 
@@ -529,7 +529,7 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     ROS_DEBUG("RobotBodyFilter: Scan transformation run time is %.5f secs.", double(clock()-stopwatchOverall) / CLOCKS_PER_SEC);
 
     vector<RayCastingShapeMask::MaskValue> pointMask;
-    const auto success = this->computeMask(projectedPointCloud, scanFrame, pointMask);
+    const auto success = this->computeMask(projectedPointCloud, pointMask, scanFrame);
     if (!success)
       return false;
 
@@ -653,7 +653,7 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
   {
     std::lock_guard<std::mutex> guard(*this->modelMutex);
 
-    const auto success = this->computeMask(transformedCloud, cloudFrame, pointMask);
+    const auto success = this->computeMask(transformedCloud, pointMask, cloudFrame);
     if (!success)
       return false;
   }
