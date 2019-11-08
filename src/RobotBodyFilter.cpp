@@ -60,9 +60,9 @@ bool RobotBodyFilter<T>::configure() {
 
   this->fixedFrame = this->getParamVerbose("frames/fixed", "base_link");
   stripLeadingSlash(this->fixedFrame, true);
-  this->sensorFrame = this->getParamVerbose("frames/sensor", "laser");
+  this->sensorFrame = this->getParamVerbose("frames/sensor", "");
   stripLeadingSlash(this->sensorFrame, true);
-  this->filteringFrame = this->getParamVerbose("frames/filtering", this->pointByPointScan ? this->fixedFrame : this->sensorFrame);
+  this->filteringFrame = this->getParamVerbose("frames/filtering", this->fixedFrame);
   stripLeadingSlash(this->filteringFrame, true);
   this->minDistance = this->getParamVerbose("sensor/min_distance", 0.0, "m");
   this->maxDistance = this->getParamVerbose("sensor/max_distance", 0.0, "m");
@@ -300,6 +300,7 @@ bool RobotBodyFilterPointCloud2::configure() {
 template <typename T>
 bool RobotBodyFilter<T>::computeMask(
     const sensor_msgs::PointCloud2 &projectedPointCloud,
+    const std::string &sensorFrame,
     std::vector<RayCastingShapeMask::MaskValue> &pointMask) {
 
   // this->modelMutex has to be already locked!
@@ -310,7 +311,7 @@ bool RobotBodyFilter<T>::computeMask(
   Eigen::Vector3d sensorPosition;
   try {
     const auto sensorTf = this->tfBuffer->lookupTransform(
-        this->filteringFrame, this->sensorFrame, scanTime,
+        this->filteringFrame, sensorFrame, scanTime,
         remainingTime(scanTime, this->reachableTransformTimeout));
     tf2::fromMsg(sensorTf.transform.translation, sensorPosition);
   } catch (tf2::TransformException& e) {
@@ -433,17 +434,17 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
 
   // tf2 doesn't like frames starting with slash
   const auto scanFrame = stripLeadingSlash(inputScan.header.frame_id, true);
-  if (scanFrame != this->sensorFrame)
-  {
-    ROS_ERROR("Input laser scan has frame_id %s, but `frames/sensor` is set to "
-              "%s. Please, fix filter configuration and run it again.",
-              scanFrame.c_str(), this->sensorFrame.c_str());
-    throw std::runtime_error("Input scan frame doesn't match filter configuration.");
+
+  // Passing a sensorFrame does not make sense. Scan messages can't be transformed to other frames.
+  if (!this->sensorFrame.empty() && this->sensorFrame != scanFrame) {
+    ROS_WARN_ONCE("RobotBodyFilter: frames/sensor is set to frame_id '%s' different than "
+                  "the frame_id of the incoming message '%s'. This is an invalid configuration: "
+                  "the frames/sensor parameter will be neglected.", this->sensorFrame.c_str(), scanFrame.c_str());
   }
 
   // create the output copy of the input scan
   filteredScan = inputScan;
-  filteredScan.header.frame_id = this->sensorFrame;
+  filteredScan.header.frame_id = scanFrame;
   filteredScan.range_min = max(inputScan.range_min, (float) this->minDistance);
   if (this->maxDistance > 0.0)
     filteredScan.range_max = min(inputScan.range_max, (float) this->maxDistance);
@@ -457,9 +458,9 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
       const auto afterScanTime = scanTime + ros::Duration().fromSec(scanDuration);
 
       string err;
-      if (!this->tfBuffer->canTransform(this->fixedFrame, this->sensorFrame, scanTime,
+      if (!this->tfBuffer->canTransform(this->fixedFrame, scanFrame, scanTime,
             remainingTime(scanTime, this->reachableTransformTimeout), &err) ||
-            !this->tfBuffer->canTransform(this->fixedFrame, this->sensorFrame, afterScanTime,
+            !this->tfBuffer->canTransform(this->fixedFrame, scanFrame, afterScanTime,
                 remainingTime(afterScanTime, this->reachableTransformTimeout), &err)) {
         if (err.find("future") != string::npos) {
           const auto delay = ros::Time::now() - scanTime;
@@ -528,7 +529,7 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     ROS_DEBUG("RobotBodyFilter: Scan transformation run time is %.5f secs.", double(clock()-stopwatchOverall) / CLOCKS_PER_SEC);
 
     vector<RayCastingShapeMask::MaskValue> pointMask;
-    const auto success = this->computeMask(projectedPointCloud, pointMask);
+    const auto success = this->computeMask(projectedPointCloud, scanFrame, pointMask);
     if (!success)
       return false;
 
@@ -644,13 +645,15 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
     transformWithChannels(inputCloud, transformedCloud, *this->tfBuffer, this->filteringFrame);
   }
 
-  // Compute the mask and use it
+  // Compute the mask and use it (transform message only if sensorFrame is specified)
+  const auto cloudFrame = this->sensorFrame.empty() ?
+        stripLeadingSlash(inputCloud.header.frame_id, true) : this->sensorFrame;
 
   vector<RayCastingShapeMask::MaskValue> pointMask;
   {
     std::lock_guard<std::mutex> guard(*this->modelMutex);
 
-    const auto success = this->computeMask(transformedCloud, pointMask);
+    const auto success = this->computeMask(transformedCloud, cloudFrame, pointMask);
     if (!success)
       return false;
   }
