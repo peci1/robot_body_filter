@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.6 (2019-11-11)
+------------------
 * Avoid subtracting from ROS time.
   This may lead to exceptions in simulation, where current time is 0. ros::Time cannot be negative.
 * Contributors: Martin Pecka
