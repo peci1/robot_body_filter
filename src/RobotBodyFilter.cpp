@@ -419,11 +419,15 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     ROS_DEBUG("RobotBodyFilter: Ignore scan from time %u.%u - filter not yet initialized.",
               scanTime.sec, scanTime.nsec);
     return false;
-  } else if ((scanTime < timeConfigured) && (scanTime >= (timeConfigured - tfBufferLength))) {
+  }
+
+  if ((scanTime < timeConfigured) && ((scanTime + tfBufferLength) >= timeConfigured)) {
     ROS_DEBUG("RobotBodyFilter: Ignore scan from time %u.%u - filter not yet initialized.",
               scanTime.sec, scanTime.nsec);
     return false;
-  } else if ((scanTime < timeConfigured) && (scanTime < (timeConfigured - tfBufferLength))) {
+  }
+
+  if ((scanTime < timeConfigured) && ((scanTime + tfBufferLength) < timeConfigured)) {
     ROS_WARN("RobotBodyFilter: Old TF data received. Clearing TF buffer and reconfiguring laser filter. If you're replaying a "
              "bag file, make sure rosparam /use_sim_time is set to true");
     this->configure();
@@ -573,11 +577,15 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
     ROS_DEBUG("RobotBodyFilter: Ignore cloud from time %u.%u - filter not yet initialized.",
               scanTime.sec, scanTime.nsec);
     return false;
-  } else if ((scanTime < this->timeConfigured) && (scanTime >= (this->timeConfigured - this->tfBufferLength))) {
+  }
+
+  if ((scanTime < this->timeConfigured) && ((scanTime + this->tfBufferLength) >= this->timeConfigured)) {
     ROS_DEBUG("RobotBodyFilter: Ignore cloud from time %u.%u - filter not yet initialized.",
               scanTime.sec, scanTime.nsec);
     return false;
-  } else if ((scanTime < this->timeConfigured) && (scanTime < (this->timeConfigured - this->tfBufferLength))) {
+  }
+
+  if ((scanTime < this->timeConfigured) && ((scanTime + this->tfBufferLength) < this->timeConfigured)) {
     ROS_WARN("RobotBodyFilter: Old TF data received. Clearing TF buffer and "
              "reconfiguring laser filter. If you're replaying a bag file, make "
              "sure rosparam /use_sim_time is set to true");
