@@ -2,6 +2,12 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Avoid subtracting from ROS time.
+  This may lead to exceptions in simulation, where current time is 0. ros::Time cannot be negative.
+* Contributors: Martin Pecka
+
 1.1.5 (2019-11-08)
 ------------------
 * refactor(RobotBodyFilter): Made frames/sensor parameter optional (`#2 <https://github.com/peci1/robot_body_filter/issues/2>`_)
