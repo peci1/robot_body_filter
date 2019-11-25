@@ -51,6 +51,12 @@ inline std::string to_string(const T &value)
 }
 
 template<>
+inline std::string to_string(const bool &value)
+{
+  return value ? "True" : "False";
+}
+
+template<>
 inline std::string to_string(const std::string &value)
 {
   return value;
