@@ -73,6 +73,12 @@ public:
   bool isReachable(const std::string& frame) const;
 
   /**
+   * \brief Return whether all monitored frames are reachable.
+   * \return Whether all monitored frames are reachable.
+   */
+  bool areAllFramesReachable() const;
+
+  /**
    * \brief Looks for a transform if it is marked reachable. Returns immediately
    *        for transforms marked unreachable.
    * \param frame Source frame.

@@ -157,7 +157,10 @@ The basic workings of this filter are done via the [`filters::FilterBase` API](h
     how old scans you still want to process.
 - `transforms/timeout/unreachable` (`float`, default `0.2 s`)
     
-    How long to wait while getting unreachable TF.     
+    How long to wait while getting unreachable TF.
+- `transforms/require_all_reachable` (`bool`, default `false`)
+
+   If true, the filter won't publish anything until all transforms are reachable.
 - `bounding_sphere/compute` (`bool`, default `false`)
 
     Whether to compute and publish bounding sphere.

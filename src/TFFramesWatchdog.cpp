@@ -168,4 +168,10 @@ void TFFramesWatchdog::markUnreachable(const std::string &frame)
   this->reachableFrames.erase(frame);
 }
 
+bool TFFramesWatchdog::areAllFramesReachable() const
+{
+  std::lock_guard<std::mutex> guard(this->framesMutex);
+  return this->reachableFrames.size() == this->monitoredFrames.size();
+}
+
 }

@@ -248,6 +248,9 @@ protected:
   //! Timeout for unreachable transforms.
   ros::Duration unreachableTransformTimeout;
 
+  //! Whether to process data when there are some unreachable frames.
+  bool requireAllFramesReachable;
+
   //! A mutex that has to be locked in order to work with shapesToLinks or tfBuffer.
   std::shared_ptr<std::mutex> modelMutex;
 

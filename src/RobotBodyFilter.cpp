@@ -76,6 +76,7 @@ bool RobotBodyFilter<T>::configure() {
   const bool doShadowTest = this->getParamVerbose("filter/do_shadow_test", true);
   this->reachableTransformTimeout = this->getParamVerbose("transforms/timeout/reachable", ros::Duration(0.1), "s");
   this->unreachableTransformTimeout = this->getParamVerbose("transforms/timeout/unreachable", ros::Duration(0.2), "s");
+  this->requireAllFramesReachable = this->getParamVerbose("transforms/require_all_reachable", false);
   this->publishNoBoundingSpherePointcloud = this->getParamVerbose("bounding_sphere/publish_cut_out_pointcloud", false);
   this->publishNoBoundingBoxPointcloud = this->getParamVerbose("bounding_box/publish_cut_out_pointcloud", false);
   this->publishNoOrientedBoundingBoxPointcloud = this->getParamVerbose("oriented_bounding_box/publish_cut_out_pointcloud", false);
@@ -434,6 +435,18 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     return false;
   }
 
+  if (!this->tfFramesWatchdog->isReachable(this->sensorFrame))
+  {
+    ROS_DEBUG("RobotBodyFilter: Throwing away scan since sensor frame is unreachable.");
+    return false;
+  }
+
+  if (this->requireAllFramesReachable && !this->tfFramesWatchdog->areAllFramesReachable())
+  {
+    ROS_DEBUG("RobotBodyFilter: Throwing away scan since not all frames are reachable.");
+    return false;
+  }
+
   const clock_t stopwatchOverall = clock();
 
   // tf2 doesn't like frames starting with slash
@@ -590,6 +603,18 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
              "reconfiguring laser filter. If you're replaying a bag file, make "
              "sure rosparam /use_sim_time is set to true");
     this->configure();
+    return false;
+  }
+
+  if (!this->tfFramesWatchdog->isReachable(this->sensorFrame))
+  {
+    ROS_DEBUG("RobotBodyFilter: Throwing away scan since sensor frame is unreachable.");
+    return false;
+  }
+
+  if (this->requireAllFramesReachable && !this->tfFramesWatchdog->areAllFramesReachable())
+  {
+    ROS_DEBUG("RobotBodyFilter: Throwing away scan since not all frames are reachable.");
     return false;
   }
 
