@@ -240,6 +240,9 @@ bool RobotBodyFilter<T>::configure() {
     std::set<std::string> monitoredFrames;
     for (const auto& shapeToLink : this->shapesToLinks)
       monitoredFrames.insert(shapeToLink.second.link->name);
+    // Issue #6: Monitor sensor frame even if it is not a part of the model
+    if (!this->sensorFrame.empty())
+      monitoredFrames.insert(this->sensorFrame);
 
     this->tfFramesWatchdog = std::make_shared<TFFramesWatchdog>(this->filteringFrame,
         monitoredFrames, this->tfBuffer, this->unreachableTransformTimeout,
@@ -429,15 +432,31 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
   }
 
   if ((scanTime < timeConfigured) && ((scanTime + tfBufferLength) < timeConfigured)) {
-    ROS_WARN("RobotBodyFilter: Old TF data received. Clearing TF buffer and reconfiguring laser filter. If you're replaying a "
-             "bag file, make sure rosparam /use_sim_time is set to true");
+    ROS_WARN("RobotBodyFilter: Old TF data received. Clearing TF buffer and reconfiguring laser"
+             "filter. If you're replaying a bag file, make sure rosparam /use_sim_time is set to "
+             "true");
     this->configure();
     return false;
   }
 
-  if (!this->tfFramesWatchdog->isReachable(this->sensorFrame))
+  // tf2 doesn't like frames starting with slash
+  const auto scanFrame = stripLeadingSlash(inputScan.header.frame_id, true);
+
+  // Passing a sensorFrame does not make sense. Scan messages can't be transformed to other frames.
+  if (!this->sensorFrame.empty() && this->sensorFrame != scanFrame) {
+    ROS_WARN_ONCE("RobotBodyFilter: frames/sensor is set to frame_id '%s' different than "
+                  "the frame_id of the incoming message '%s'. This is an invalid configuration: "
+                  "the frames/sensor parameter will be neglected.",
+                  this->sensorFrame.c_str(), scanFrame.c_str());
+  }
+
+  if (!this->tfFramesWatchdog->isReachable(scanFrame))
   {
     ROS_DEBUG("RobotBodyFilter: Throwing away scan since sensor frame is unreachable.");
+    // if this->sensorFrame is empty, it can happen that we're not actually monitoring the sensor
+    // frame, so start monitoring it
+    if (!this->tfFramesWatchdog->isMonitored(scanFrame))
+      this->tfFramesWatchdog->addMonitoredFrame(scanFrame);
     return false;
   }
 
@@ -448,16 +467,6 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
   }
 
   const clock_t stopwatchOverall = clock();
-
-  // tf2 doesn't like frames starting with slash
-  const auto scanFrame = stripLeadingSlash(inputScan.header.frame_id, true);
-
-  // Passing a sensorFrame does not make sense. Scan messages can't be transformed to other frames.
-  if (!this->sensorFrame.empty() && this->sensorFrame != scanFrame) {
-    ROS_WARN_ONCE("RobotBodyFilter: frames/sensor is set to frame_id '%s' different than "
-                  "the frame_id of the incoming message '%s'. This is an invalid configuration: "
-                  "the frames/sensor parameter will be neglected.", this->sensorFrame.c_str(), scanFrame.c_str());
-  }
 
   // create the output copy of the input scan
   filteredScan = inputScan;
@@ -606,9 +615,16 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
     return false;
   }
 
-  if (!this->tfFramesWatchdog->isReachable(this->sensorFrame))
+  const auto inputCloudFrame = this->sensorFrame.empty() ?
+      stripLeadingSlash(inputCloud.header.frame_id, true) : this->sensorFrame;
+
+  if (!this->tfFramesWatchdog->isReachable(inputCloudFrame))
   {
     ROS_DEBUG("RobotBodyFilter: Throwing away scan since sensor frame is unreachable.");
+    // if this->sensorFrame is empty, it can happen that we're not actually monitoring the cloud
+    // frame, so start monitoring it
+    if (!this->tfFramesWatchdog->isMonitored(inputCloudFrame))
+      this->tfFramesWatchdog->addMonitoredFrame(inputCloudFrame);
     return false;
   }
 
@@ -679,14 +695,11 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
   }
 
   // Compute the mask and use it (transform message only if sensorFrame is specified)
-  const auto cloudFrame = this->sensorFrame.empty() ?
-        stripLeadingSlash(inputCloud.header.frame_id, true) : this->sensorFrame;
-
   vector<RayCastingShapeMask::MaskValue> pointMask;
   {
     std::lock_guard<std::mutex> guard(*this->modelMutex);
 
-    const auto success = this->computeMask(transformedCloud, pointMask, cloudFrame);
+    const auto success = this->computeMask(transformedCloud, pointMask, inputCloudFrame);
     if (!success)
       return false;
   }
