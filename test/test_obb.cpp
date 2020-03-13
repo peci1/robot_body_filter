@@ -16,9 +16,7 @@ TEST(OBB, ConstructFromExtentsAndPose)
   EXPECT_DOUBLE_EQ(extents.y(), obb.getExtents().y());
   EXPECT_DOUBLE_EQ(extents.z(), obb.getExtents().z());
 
-  for (size_t r = 0; r < 4; ++r)
-    for (size_t c = 0; c < 4; ++c)
-      EXPECT_DOUBLE_EQ(pose.matrix()(r, c), obb.getPose().matrix()(r, c));
+  expectTransformsDoubleEq(pose, obb.getPose());
 }
 
 TEST(OBB, SetPoseAndExtents)
@@ -33,16 +31,7 @@ TEST(OBB, SetPoseAndExtents)
   EXPECT_DOUBLE_EQ(0.0, obb.getExtents().y());
   EXPECT_DOUBLE_EQ(0.0, obb.getExtents().z());
 
-  for (size_t r = 0; r < 4; ++r)
-  {
-    for (size_t c = 0; c < 4; ++c)
-    {
-      if (r == c)
-        EXPECT_DOUBLE_EQ(1.0, obb.getPose().matrix()(r, c));
-      else
-        EXPECT_DOUBLE_EQ(0.0, obb.getPose().matrix()(r, c));
-    }
-  }
+  expectTransformsDoubleEq(Eigen::Isometry3d::Identity(), obb.getPose());
 
   obb.setPoseAndExtents(pose, extents);
 
@@ -50,9 +39,7 @@ TEST(OBB, SetPoseAndExtents)
   EXPECT_DOUBLE_EQ(extents.y(), obb.getExtents().y());
   EXPECT_DOUBLE_EQ(extents.z(), obb.getExtents().z());
 
-  for (size_t r = 0; r < 4; ++r)
-    for (size_t c = 0; c < 4; ++c)
-      EXPECT_DOUBLE_EQ(pose.matrix()(r, c), obb.getPose().matrix()(r, c));
+  expectTransformsDoubleEq(pose, obb.getPose());
 }
 
 TEST(OBB, ComputeVertices)
@@ -209,9 +196,7 @@ TEST(OBB, Extend)
   EXPECT_EQ(extents.x(), obb.getExtents().x());
   EXPECT_EQ(extents.y(), obb.getExtents().y());
   EXPECT_EQ(extents.z(), obb.getExtents().z());
-  EXPECT_EQ(pose.translation().x(), obb.getPose().translation().x());
-  EXPECT_EQ(pose.translation().y(), obb.getPose().translation().y());
-  EXPECT_EQ(pose.translation().z(), obb.getPose().translation().z());
+  expectTransformsDoubleEq(pose, obb.getPose());
 
   const auto extents2 = extents * 1.01;
   OBB obb2(pose, extents2);
@@ -222,9 +207,7 @@ TEST(OBB, Extend)
   EXPECT_EQ(extents2.x(), obb.getExtents().x());
   EXPECT_EQ(extents2.y(), obb.getExtents().y());
   EXPECT_EQ(extents2.z(), obb.getExtents().z());
-  EXPECT_EQ(pose.translation().x(), obb.getPose().translation().x());
-  EXPECT_EQ(pose.translation().y(), obb.getPose().translation().y());
-  EXPECT_EQ(pose.translation().z(), obb.getPose().translation().z());
+  expectTransformsDoubleEq(pose, obb.getPose());
 
   OBB obb3(Eigen::Isometry3d(Eigen::Translation3d(-1, -1, -1)), {2, 2, 2});
   OBB obb4(Eigen::Isometry3d(Eigen::Translation3d(1, 1, 1)), {2, 2, 2});

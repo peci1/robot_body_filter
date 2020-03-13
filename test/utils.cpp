@@ -36,3 +36,23 @@ void expectVector3dSetsEqual(EigenSTL::vector_Vector3d vec1, EigenSTL::vector_Ve
     EXPECT_NEAR(vec1[i].z(), vec2[i].z(), upToError);
   }
 }
+
+Eigen::Isometry3d randomPose()
+{
+  return Eigen::Quaterniond::UnitRandom() * Eigen::Translation3d(Eigen::Vector3d::Random());
+}
+
+void expectTransformsDoubleEq(const Eigen::Isometry3d& i1, const Eigen::Isometry3d& i2)
+{
+  auto t1 = i1.translation();
+  auto t2 = i2.translation();
+  EXPECT_DOUBLE_EQ(t1.x(), t2.x());
+  EXPECT_DOUBLE_EQ(t1.y(), t2.y());
+  EXPECT_DOUBLE_EQ(t1.z(), t2.z());
+  auto q1 = Eigen::Quaterniond(i1.rotation());
+  auto q2 = Eigen::Quaterniond(i2.rotation());
+  EXPECT_DOUBLE_EQ(q1.x(), q2.x());
+  EXPECT_DOUBLE_EQ(q1.y(), q2.y());
+  EXPECT_DOUBLE_EQ(q1.z(), q2.z());
+  EXPECT_DOUBLE_EQ(q1.w(), q2.w());
+}

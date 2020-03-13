@@ -28,8 +28,7 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
-  EXPECT_EQ(obb1.getPose().translation(), obb2.getPose().translation());
-  EXPECT_EQ(obb1.getPose().rotation(), obb2.getPose().rotation());
+  expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
   EXPECT_DOUBLE_EQ(-1.0, bbox1.min().x());
   EXPECT_DOUBLE_EQ(0.0, bbox1.min().y());
@@ -67,8 +66,7 @@ TEST(Bodies, ComputeBoundingBoxBox)
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
-  EXPECT_EQ(obb1.getPose().translation(), obb2.getPose().translation());
-  EXPECT_EQ(obb1.getPose().rotation(), obb2.getPose().rotation());
+  expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
   EXPECT_DOUBLE_EQ(-0.5, bbox1.min().x());
   EXPECT_DOUBLE_EQ(1.0, bbox1.min().y());
@@ -107,8 +105,7 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
-  EXPECT_EQ(obb1.getPose().translation(), obb2.getPose().translation());
-  EXPECT_EQ(obb1.getPose().rotation(), obb2.getPose().rotation());
+  expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
   EXPECT_DOUBLE_EQ(-0.5, bbox1.min().x());
   EXPECT_DOUBLE_EQ(0.0, bbox1.min().y());
@@ -150,8 +147,7 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
-  EXPECT_EQ(obb1.getPose().translation(), obb2.getPose().translation());
-  EXPECT_EQ(obb1.getPose().rotation(), obb2.getPose().rotation());
+  expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
   EXPECT_DOUBLE_EQ(-0.5, bbox1.min().x());
   EXPECT_DOUBLE_EQ(1.0, bbox1.min().y());
