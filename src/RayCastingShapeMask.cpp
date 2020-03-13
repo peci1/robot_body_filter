@@ -47,6 +47,9 @@ RayCastingShapeMask::getBoundingSpheres() const
 
   size_t bodyIndex = 0, sphereIndex = 0;
   for (const auto& seeShape : this->bodies_) {
+    if (sphereIndex >= this->bspheresBodyIndices.size()) {
+      break;
+    }
     if (this->bspheresBodyIndices[sphereIndex] == bodyIndex) {
       map[seeShape.handle] = this->bspheres_[sphereIndex];
       sphereIndex++;
@@ -92,7 +95,7 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
   Eigen::Isometry3d transform;
   point_containment_filter::ShapeHandle shapeHandle;
   bodies::Body* body;
-  size_t i = 0, j = 0, k = 0;
+  size_t bodyIdx = 0, validBodyIdx = 0, validContainsTestIdx = 0;
 
   for (const auto& seeShape : this->bodies_)
   {
@@ -123,20 +126,23 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
     {
       body->setPose(transform);
 
-      this->bspheresBodyIndices[j] = i;
-      body->computeBoundingSphere(this->bspheres_[j]);
+      this->bspheresBodyIndices[validBodyIdx] = bodyIdx;
+      body->computeBoundingSphere(this->bspheres_[validBodyIdx]);
 
       if (this->ignoreInContainsTest.find(shapeHandle) == this->ignoreInContainsTest.end())
       {
-        this->bspheresForContainsTest[k] = this->bspheres_[j];
-        k++;
+        this->bspheresForContainsTest[validContainsTestIdx] = this->bspheres_[validBodyIdx];
+        validContainsTestIdx++;
       }
 
-      j++;
+      validBodyIdx++;
     }
 
-    i++;
+    bodyIdx++;
   }
+  this->bspheres_.resize(validBodyIdx);
+  this->bspheresForContainsTest.resize(validContainsTestIdx);
+  this->bspheresBodyIndices.resize(validBodyIdx);
 }
 
 void RayCastingShapeMask::maskContainmentAndShadows(

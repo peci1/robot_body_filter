@@ -102,4 +102,7 @@ if (CATKIN_ENABLE_TESTING)
 
   catkin_add_gtest(test_tf_frames_watchdog test/test_tf_frames_watchdog.cpp)
   target_link_libraries(test_tf_frames_watchdog ${PROJECT_NAME} ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_ray_casting_shape_mask test/test_ray_casting_shape_mask.cpp)
+  target_link_libraries(test_ray_casting_shape_mask ${PROJECT_NAME} ${catkin_LIBRARIES})
 endif()
