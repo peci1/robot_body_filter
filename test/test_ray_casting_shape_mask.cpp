@@ -787,7 +787,11 @@ TEST(RayCastingShapeMask, MaskPerformancePoints)
   mask.setTransformCallback(cb);
   mask.setIgnoreInShadowTest({handleSensor});
 
+#if RELEASE_BUILD == 1
+  const size_t numPoints = 10000000;
+#else
   const size_t numPoints = 100000;
+#endif
 
   Cloud cloud;
   CloudModifier mod(cloud);
@@ -822,7 +826,11 @@ TEST(RayCastingShapeMask, MaskPerformancePoints)
   ros::WallTime end = ros::WallTime::now();
 
   ASSERT_EQ(numPoints, vals.size());
+#if RELEASE_BUILD == 1
+  EXPECT_GT(2.0, (end - start).toSec());
+#else
   EXPECT_GT(1.5, (end - start).toSec());
+#endif
 }
 
 TEST(RayCastingShapeMask, MaskPerformanceBodies)
@@ -839,7 +847,12 @@ TEST(RayCastingShapeMask, MaskPerformanceBodies)
   };
   TestMask mask(cb, 0.1, 10.0, true, true, true);
 
+#if RELEASE_BUILD == 1
+  const size_t numBodies = 1000000;
+#else
   const size_t numBodies = 20000;
+#endif
+
   for (size_t i = 0; i < numBodies / 2; ++i)
   {
     shapes::ShapeConstPtr shape1(new shapes::Box(2.0, 2.0, 2.0));
@@ -879,7 +892,11 @@ TEST(RayCastingShapeMask, MaskPerformanceBodies)
   ros::WallTime end = ros::WallTime::now();
 
   ASSERT_EQ(numPoints, vals.size());
+#if RELEASE_BUILD == 1
   EXPECT_GT(1.0, (end - start).toSec());
+#else
+  EXPECT_GT(2.0, (end - start).toSec());
+#endif
 }
 
 TEST(RayCastingShapeMask, MaskPerformanceBodiesMesh)
@@ -896,7 +913,12 @@ TEST(RayCastingShapeMask, MaskPerformanceBodiesMesh)
   };
   TestMask mask(cb, 0.1, 10.0, true, true, true);
 
+#if RELEASE_BUILD == 1
+  const size_t numBodies = 10000;
+#else
   const size_t numBodies = 5000;
+#endif
+
   auto g = urdf::Mesh();
   g.scale = {1.0, 2.0, 3.0};
   g.filename = "package://robot_body_filter/test/box.dae";
@@ -909,7 +931,11 @@ TEST(RayCastingShapeMask, MaskPerformanceBodiesMesh)
 
   const Eigen::Vector3d sensorPos(0.0, 0.0, 0.0);
 
+#if RELEASE_BUILD == 1
+  const size_t numPoints = 10000;
+#else
   const size_t numPoints = 10;
+#endif
 
   Cloud cloud;
   CloudModifier mod(cloud);
@@ -937,7 +963,11 @@ TEST(RayCastingShapeMask, MaskPerformanceBodiesMesh)
   ros::WallTime end = ros::WallTime::now();
 
   ASSERT_EQ(numPoints, vals.size());
+#if RELEASE_BUILD == 1
+  EXPECT_GT(0.1, (end - start).toSec());
+#else
   EXPECT_GT(1.0, (end - start).toSec());
+#endif
 }
 
 int main(int argc, char **argv)
