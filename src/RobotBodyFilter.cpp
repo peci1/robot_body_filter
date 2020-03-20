@@ -1052,10 +1052,10 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
       const auto &shapeHandle = shapeHandleAndSphere.first;
       const auto &sphere = shapeHandleAndSphere.second;
 
-      if (this->shapesIgnoredInBoundingSphere.find(shapeHandle) == this->shapesIgnoredInBoundingSphere.end())
-      {
-        spheres.push_back(sphere);
-      }
+      if (this->shapesIgnoredInBoundingSphere.find(shapeHandle) != this->shapesIgnoredInBoundingSphere.end())
+        continue;
+
+      spheres.push_back(sphere);
 
       if (this->computeDebugBoundingSphere)
       {
@@ -1160,10 +1160,10 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
       bodies::AxisAlignedBoundingBox box;
       bodies::computeBoundingBox(body, box);
 
-      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) == this->shapesIgnoredInBoundingBox.end())
-      {
-        boxes.push_back(box);
-      }
+      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
+        continue;
+
+      boxes.push_back(box);
 
       if (this->computeDebugBoundingBox) {
         visualization_msgs::Marker msg;
@@ -1285,10 +1285,10 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
       bodies::OrientedBoundingBox box;
       bodies::computeBoundingBox(body, box);
 
-      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) == this->shapesIgnoredInBoundingBox.end())
-      {
-        boxes.push_back(box);
-      }
+      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
+        continue;
+
+      boxes.push_back(box);
 
       if (this->computeDebugOrientedBoundingBox) {
         visualization_msgs::Marker msg;
@@ -1422,16 +1422,16 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
 
+      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
+        continue;
+
       bodies::AxisAlignedBoundingBox box;
       oldPose = body->getPose();
       body->setPose(localTf * oldPose);
       bodies::computeBoundingBox(body, box);
       body->setPose(oldPose);
 
-      if (this->shapesIgnoredInBoundingBox.find(shapeHandle) == this->shapesIgnoredInBoundingBox.end())
-      {
-        boxes.push_back(box);
-      }
+      boxes.push_back(box);
 
       if (this->computeDebugLocalBoundingBox) {
         visualization_msgs::Marker msg;
