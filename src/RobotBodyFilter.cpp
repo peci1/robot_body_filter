@@ -1068,6 +1068,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
         msg.pose.position.x = sphere.center[0];
         msg.pose.position.y = sphere.center[1];
         msg.pose.position.z = sphere.center[2];
+        msg.pose.orientation.w = 1;
 
         msg.color.g = 1.0;
         msg.color.a = 0.5;
@@ -1110,6 +1111,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
       msg.pose.position.x = boundingSphere.center[0];
       msg.pose.position.y = boundingSphere.center[1];
       msg.pose.position.z = boundingSphere.center[2];
+      msg.pose.orientation.w = 1;
 
       msg.color.g = 1.0;
       msg.color.a = 0.5;
