@@ -380,6 +380,7 @@ bool RobotBodyFilter<T>::computeMask(
     Eigen::Vector3d viewPoint;
     RayCastingShapeMask::MaskValue mask;
 
+    this->cacheLookupBetweenScansRatio = 0.0;
     for (size_t i = 0; i < num_points(projectedPointCloud); ++i, ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it, ++index_it)
     {
       point.x() = *x_it;
@@ -392,7 +393,7 @@ bool RobotBodyFilter<T>::computeMask(
 
       const auto updateBodyPoses = i % updateBodyPosesEvery == 0;
 
-      if (updateBodyPoses)
+      if (updateBodyPoses && scanDuration > 0.0)
         this->cacheLookupBetweenScansRatio = static_cast<double>(*stamps_it) / scanDuration;
 
       // updates shapes according to tf cache (by calling getShapeTransform
