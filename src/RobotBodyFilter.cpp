@@ -220,6 +220,15 @@ bool RobotBodyFilter<T>::configure() {
       this->minDistance, this->maxDistance,
       doClipping, doContainsTest, doShadowTest);
 
+  // the other case happens when configure() is called again from update() (e.g. when a new bag file
+  // started playing)
+  if (this->tfFramesWatchdog == nullptr) {
+    this->tfFramesWatchdog = std::make_shared<TFFramesWatchdog>(this->filteringFrame,
+        std::set<std::string>({this->sensorFrame}), this->tfBuffer,
+        this->unreachableTransformTimeout, ros::Rate(ros::Duration(1.0)));
+    this->tfFramesWatchdog->start();
+  }
+
   { // initialize the robot body to be masked out
 
     string robotUrdf;
@@ -237,27 +246,11 @@ bool RobotBodyFilter<T>::configure() {
       ros::Duration(1.0).sleep();
     }
 
+    // happens when configure() is called again from update() (e.g. when a new bag file started
+    // playing)
     if (!this->shapesToLinks.empty())
       this->clearRobotMask();
     this->addRobotMaskFromUrdf(robotUrdf);
-  }
-
-  if (this->tfFramesWatchdog == nullptr) {
-    std::set<std::string> monitoredFrames;
-    for (const auto& shapeToLink : this->shapesToLinks)
-      monitoredFrames.insert(shapeToLink.second.link->name);
-    // Issue #6: Monitor sensor frame even if it is not a part of the model
-    if (!this->sensorFrame.empty())
-      monitoredFrames.insert(this->sensorFrame);
-
-    this->tfFramesWatchdog = std::make_shared<TFFramesWatchdog>(this->filteringFrame,
-        monitoredFrames, this->tfBuffer, this->unreachableTransformTimeout,
-        ros::Rate(ros::Duration(1.0)));
-    this->tfFramesWatchdog->start();
-  } else {
-    this->tfFramesWatchdog->pause();
-    this->tfFramesWatchdog->clear();
-    this->tfFramesWatchdog->unpause();
   }
 
   ROS_INFO("RobotBodyFilter: Successfully configured.");
@@ -944,6 +937,15 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
     this->shapeMask->setIgnoreInShadowTest(ignoreInShadowTest);
 
     this->shapeMask->updateInternalShapeLists();
+
+    std::set<std::string> monitoredFrames;
+    for (const auto& shapeToLink : this->shapesToLinks)
+      monitoredFrames.insert(shapeToLink.second.link->name);
+    // Issue #6: Monitor sensor frame even if it is not a part of the model
+    if (!this->sensorFrame.empty())
+      monitoredFrames.insert(this->sensorFrame);
+
+    this->tfFramesWatchdog->setMonitoredFrames(monitoredFrames);
   }
 }
 
@@ -1580,7 +1582,8 @@ bool RobotBodyFilter<T>::triggerModelReload(std_srvs::TriggerRequest &,
 
 template<typename T>
 RobotBodyFilter<T>::~RobotBodyFilter(){
-  this->tfFramesWatchdog->stop();
+  if (this->tfFramesWatchdog != nullptr)
+    this->tfFramesWatchdog->stop();
 }
 
 }
