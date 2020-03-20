@@ -35,6 +35,10 @@ void TFFramesWatchdog::run() {
   }
 }
 
+bool TFFramesWatchdog::isRunning() const {
+  return this->started;
+}
+
 void TFFramesWatchdog::searchForReachableFrames()
 {
 

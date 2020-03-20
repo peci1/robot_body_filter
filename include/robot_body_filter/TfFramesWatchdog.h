@@ -42,6 +42,12 @@ public:
   void run();
 
   /**
+   * \brief Return true if the watchdog is running.
+   * \return Whether the watchdog is running or not.
+   */
+  bool isRunning() const;
+
+  /**
    * \brief Pause thread execution.
    */
   void pause();
