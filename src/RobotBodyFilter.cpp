@@ -555,7 +555,7 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     ROS_DEBUG("RobotBodyFilter: Scan transformation run time is %.5f secs.", double(clock()-stopwatchOverall) / CLOCKS_PER_SEC);
 
     vector<RayCastingShapeMask::MaskValue> pointMask;
-    const auto success = this->computeMask(projectedPointCloud, pointMask, scanFrame);
+    const auto success = this->computeMask(projectedPointCloud, pointMask);
     if (!success)
       return false;
 
