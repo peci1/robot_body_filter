@@ -1128,7 +1128,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
       sensor_msgs::PointCloud2 noSphereCloud;
       CREATE_FILTERED_CLOUD(projectedPointCloud, noSphereCloud, this->keepCloudsOrganized,
         ((Eigen::Vector3d(*x_it, *y_it, *z_it)- boundingSphere.center).norm() > boundingSphere.radius));
-      this->scanPointCloudNoBoundingBoxPublisher.publish(noSphereCloud);
+      this->scanPointCloudNoBoundingSpherePublisher.publish(noSphereCloud);
     }
   }
 }
