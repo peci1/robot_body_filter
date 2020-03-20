@@ -39,6 +39,7 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 add_library(${PROJECT_NAME}_utils
   src/utils/bodies.cpp
   src/utils/cloud.cpp
+  src/utils/crop_box.cpp
   src/utils/obb.cpp
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
