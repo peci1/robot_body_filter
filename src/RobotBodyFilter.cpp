@@ -1035,6 +1035,14 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
 
   // assume this->modelMutex is locked
 
+  // when computing bounding spheres for publication, we want to publish them to the time of the
+  // scan, so we need to set cacheLookupBetweenScansRatio again to zero
+  if (this->cacheLookupBetweenScansRatio != 0.0)
+  {
+    this->cacheLookupBetweenScansRatio = 0.0;
+    this->shapeMask->updateBodyPoses();
+  }
+
   const auto& scanTime = projectedPointCloud.header.stamp;
   std::vector<bodies::BoundingSphere> spheres;
   {
@@ -1131,6 +1139,14 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
     return;
 
   // assume this->modelMutex is locked
+
+  // when computing bounding boxes for publication, we want to publish them to the time of the
+  // scan, so we need to set cacheLookupBetweenScansRatio again to zero
+  if (this->cacheLookupBetweenScansRatio != 0.0)
+  {
+    this->cacheLookupBetweenScansRatio = 0.0;
+    this->shapeMask->updateBodyPoses();
+  }
 
   const auto& scanTime = projectedPointCloud.header.stamp;
   std::vector<bodies::AxisAlignedBoundingBox> boxes;
@@ -1247,6 +1263,14 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
     return;
 
   // assume this->modelMutex is locked
+
+  // when computing bounding boxes for publication, we want to publish them to the time of the
+  // scan, so we need to set cacheLookupBetweenScansRatio again to zero
+  if (this->cacheLookupBetweenScansRatio != 0.0)
+  {
+    this->cacheLookupBetweenScansRatio = 0.0;
+    this->shapeMask->updateBodyPoses();
+  }
 
   const auto& scanTime = projectedPointCloud.header.stamp;
   std::vector<bodies::OrientedBoundingBox> boxes;
@@ -1502,6 +1526,14 @@ void RobotBodyFilter<T>::createBodyVisualizationMsg(
     const ros::Time& stamp, const std_msgs::ColorRGBA& color,
     visualization_msgs::MarkerArray& markerArray) const
 {
+  // when computing the markers for publication, we want to publish them to the time of the
+  // scan, so we need to set cacheLookupBetweenScansRatio again to zero
+  if (this->cacheLookupBetweenScansRatio != 0.0)
+  {
+    this->cacheLookupBetweenScansRatio = 0.0;
+    this->shapeMask->updateBodyPoses();
+  }
+
   for (const auto &shapeHandleAndBody : bodies)
   {
     const auto &shapeHandle = shapeHandleAndBody.first;
