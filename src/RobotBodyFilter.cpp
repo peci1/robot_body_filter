@@ -224,6 +224,11 @@ bool RobotBodyFilter<T>::configure() {
 
     string robotUrdf;
     while (!this->nodeHandle.getParam(this->robotDescriptionParam, robotUrdf) || robotUrdf.length() == 0) {
+      if (this->failWithoutRobotDescription)
+      {
+        throw std::runtime_error(
+            "RobotBodyFilter: " + this->robotDescriptionParam + " is empty or not set.");
+      }
       if (!ros::ok())
         return false;
 

@@ -283,7 +283,11 @@ protected:
   std::map<std::string, std::shared_ptr<Eigen::Isometry3d> > transformCacheAfterScan;
 
   //! If the scan is pointByPoint, set this variable to the ratio between scan start and end time you're looking for with getShapeTransform().
-  double cacheLookupBetweenScansRatio;
+  mutable double cacheLookupBetweenScansRatio;
+
+  //! Used in tests. If false, configure() waits until robot description becomes available. If true,
+  //! configure() fails with std::runtime_exception if robot description is not available.
+  bool failWithoutRobotDescription = false;
 
   /**
    * \brief Perform the actual computation of mask.
