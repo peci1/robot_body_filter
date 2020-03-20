@@ -386,7 +386,7 @@ public:
   //! Apply the filter.
   bool update(const sensor_msgs::LaserScan &inputScan, sensor_msgs::LaserScan &filteredScan) override;
 
-  virtual bool configure();
+  bool configure() override;
 
 protected:
   laser_geometry::LaserProjection laserProjector;
@@ -398,7 +398,7 @@ public:
   //! Apply the filter.
   bool update(const sensor_msgs::PointCloud2 &inputCloud, sensor_msgs::PointCloud2 &filteredCloud) override;
 
-  virtual bool configure();
+  bool configure() override;
 
 protected:
   /** \brief Frame into which the output data should be transformed. */
