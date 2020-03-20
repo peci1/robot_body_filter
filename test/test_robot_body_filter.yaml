@@ -13,11 +13,11 @@ test_chain_config:
     filter/model_pose_update_interval: 0.002  # do not get lower, the processing is then too slow
     test/negative: -1
     sensor/point_by_point: True
-    sensor/min_distance: 0.03
-    sensor/max_distance: 50.0
+    sensor/min_distance: 0.1
+    sensor/max_distance: 10.0
     ignored_links/bounding_sphere: ["antenna", "base_link::big_collision_box"]
     ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
-    body_model/inflation/scale: 1.07
+    body_model/inflation/scale: 1.1
     body_model/inflation/padding: 0.01
     body_model/robot_description_param: 'test_robot_description'
     transforms/buffer_length: 60.0
@@ -56,11 +56,11 @@ test_dict_config:
     filter/model_pose_update_interval: 0.002  # do not get lower, the processing is then too slow
     test/negative: -1
     sensor/point_by_point: True
-    sensor/min_distance: 0.03
-    sensor/max_distance: 50.0
+    sensor/min_distance: 0.1
+    sensor/max_distance: 10.0
     ignored_links/bounding_sphere: ["antenna", "base_link::big_collision_box"]
     ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
-    body_model/inflation/scale: 1.07
+    body_model/inflation/scale: 1.1
     body_model/inflation/padding: 0.01
     body_model/robot_description_param: 'test_robot_description'
     transforms/buffer_length: 60.0
@@ -88,3 +88,141 @@ test_dict_config:
     debug/pcl/shadow: False
     debug/marker/contains: False
     debug/marker/shadow: False
+
+all_config:
+  name: "robot_body_filter"
+  type: "robot_body_filter/RobotBodyFilterLaserScan"
+  params:
+    frames/fixed: 'odom'
+    frames/sensor: 'laser'
+    frames/filtering: 'base_link'
+    filter/keep_clouds_organized: True
+    filter/model_pose_update_interval: 0.002  # do not get lower, the processing is then too slow
+    filter/do_clipping: True
+    filter/do_contains_test: True
+    filter/do_shadow_test: True
+    sensor/point_by_point: True
+    sensor/min_distance: 0.1
+    sensor/max_distance: 10.0
+    ignored_links/bounding_sphere: ["antenna", "base_link::big_collision_box"]
+    ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
+    ignored_links/bounding_box: ["base_link"]
+    ignored_links/contains_test: ["base_link"]
+    ignored_links/everywhere: ["base_link"]
+    only_links: ["laser"]
+    body_model/inflation/scale: 1.1
+    body_model/inflation/padding: 0.01
+    body_model/robot_description_param: 'test_robot_description'
+    body_model//dynamic_robot_description/field_name: 'robot'
+    transforms/buffer_length: 60.0
+    transforms/timeout/reachable: 0.2
+    transforms/timeout/unreachable: 0.2
+    transforms/require_all_reachable: True
+    bounding_sphere/compute: True
+    bounding_sphere/debug: True
+    bounding_sphere/marker: True
+    bounding_sphere/publish_cut_out_pointcloud: True
+    bounding_box/compute: True
+    bounding_box/debug: True
+    bounding_box/marker: True
+    bounding_box/publish_cut_out_pointcloud: True
+    oriented_bounding_box/compute: True
+    oriented_bounding_box/debug: True
+    oriented_bounding_box/marker: True
+    oriented_bounding_box/publish_cut_out_pointcloud: True
+    local_bounding_box/frame_id: "base_link"
+    local_bounding_box/compute: True
+    local_bounding_box/debug: True
+    local_bounding_box/marker: True
+    local_bounding_box/publish_cut_out_pointcloud: True
+    debug/pcl/inside: True
+    debug/pcl/clip: True
+    debug/pcl/shadow: True
+    debug/marker/contains: True
+    debug/marker/shadow: True
+
+compute_mask_config_point_by_point:
+  name: "robot_body_filter"
+  type: "robot_body_filter/RobotBodyFilterLaserScan"
+  params:
+    frames/fixed: 'odom'
+    frames/sensor: 'laser'
+    filter/keep_clouds_organized: False
+    filter/model_pose_update_interval: 0.002  # do not get lower, the processing is then too slow
+    sensor/point_by_point: True
+    sensor/min_distance: 0.1
+    sensor/max_distance: 10.0
+    ignored_links/bounding_sphere: ["antenna", "base_link::big_collision_box"]
+    ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
+    body_model/inflation/scale: 1.1
+    body_model/inflation/padding: 0.01
+    body_model/robot_description_param: 'test_robot_description'
+    transforms/buffer_length: 60.0
+    transforms/timeout/reachable: 0.2
+    transforms/timeout/unreachable: 0.2
+    bounding_sphere/compute: True
+    bounding_sphere/debug: True
+    bounding_sphere/marker: True
+    bounding_sphere/publish_cut_out_pointcloud: True
+    bounding_box/compute: True
+    bounding_box/debug: True
+    bounding_box/marker: True
+    bounding_box/publish_cut_out_pointcloud: True
+    oriented_bounding_box/compute: True
+    oriented_bounding_box/debug: True
+    oriented_bounding_box/marker: True
+    oriented_bounding_box/publish_cut_out_pointcloud: True
+    local_bounding_box/frame_id: "base_link"
+    local_bounding_box/compute: True
+    local_bounding_box/debug: True
+    local_bounding_box/marker: True
+    local_bounding_box/publish_cut_out_pointcloud: True
+    debug/pcl/inside: True
+    debug/pcl/clip: True
+    debug/pcl/shadow: True
+    debug/marker/contains: True
+    debug/marker/shadow: True
+
+compute_mask_config_all_at_once:
+  name: "robot_body_filter"
+  type: "robot_body_filter/RobotBodyFilterPointCloud2"
+  params:
+    frames/fixed: 'odom'
+    frames/sensor: 'laser'
+    frames/filtering: 'laser'
+    frames/output: 'base_link'
+    filter/keep_clouds_organized: True
+    filter/model_pose_update_interval: 0.002  # do not get lower, the processing is then too slow
+    sensor/point_by_point: False
+    sensor/min_distance: 0.1
+    sensor/max_distance: 10.0
+    ignored_links/bounding_sphere: ["antenna", "base_link::big_collision_box"]
+    ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
+    body_model/inflation/scale: 1.1
+    body_model/inflation/padding: 0.01
+    body_model/robot_description_param: 'test_robot_description'
+    transforms/buffer_length: 60.0
+    transforms/timeout/reachable: 0.2
+    transforms/timeout/unreachable: 0.2
+    bounding_sphere/compute: True
+    bounding_sphere/debug: True
+    bounding_sphere/marker: True
+    bounding_sphere/publish_cut_out_pointcloud: True
+    bounding_box/compute: True
+    bounding_box/debug: True
+    bounding_box/marker: True
+    bounding_box/publish_cut_out_pointcloud: True
+    oriented_bounding_box/compute: True
+    oriented_bounding_box/debug: True
+    oriented_bounding_box/marker: True
+    oriented_bounding_box/publish_cut_out_pointcloud: True
+    local_bounding_box/frame_id: "base_link"
+    local_bounding_box/compute: True
+    local_bounding_box/debug: True
+    local_bounding_box/marker: True
+    local_bounding_box/publish_cut_out_pointcloud: True
+    debug/pcl/inside: True
+    debug/pcl/clip: True
+    debug/pcl/shadow: True
+    debug/marker/contains: True
+    debug/marker/shadow: True

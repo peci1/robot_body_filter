@@ -56,3 +56,16 @@ void expectTransformsDoubleEq(const Eigen::Isometry3d& i1, const Eigen::Isometry
   EXPECT_DOUBLE_EQ(q1.z(), q2.z());
   EXPECT_DOUBLE_EQ(q1.w(), q2.w());
 }
+
+#define WAIT_FOR_MESSAGE(msg) \
+    { size_t i = 0;\
+      while (ros::ok() && msg == nullptr && i < 100) \
+      { \
+        ros::spinOnce(); \
+        ros::WallDuration(0.01).sleep(); \
+        ++i;\
+      } \
+      if (i == 100) GTEST_FAIL(); \
+    }
+
+#define EXPECT_NAN(num) EXPECT_TRUE(std::isnan(num))

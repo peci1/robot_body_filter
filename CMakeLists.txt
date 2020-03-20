@@ -116,4 +116,7 @@ if (CATKIN_ENABLE_TESTING)
   else()
     target_compile_definitions(test_ray_casting_shape_mask PRIVATE RELEASE_BUILD=0)
   endif()
+
+  add_rostest_gtest(test_robot_body_filter test/test_robot_body_filter.test test/test_robot_body_filter.cpp)
+  target_link_libraries(test_robot_body_filter ${PROJECT_NAME} ${catkin_LIBRARIES})
 endif()
