@@ -766,7 +766,7 @@ bool RobotBodyFilter<T>::getShapeTransform(point_containment_filter::ShapeHandle
     const Eigen::Quaterniond quat2(tf1.rotation().matrix());
     const auto r = this->cacheLookupBetweenScansRatio;
 
-    transform.translation() = tf1.translation() * r + tf2.translation() * (1 - r);
+    transform.translation() = tf1.translation() * (1 - r) + tf2.translation() * r;
     const Eigen::Quaterniond quat3 = quat1.slerp(r, quat2);
     transform.linear() = quat3.toRotationMatrix();
   }
