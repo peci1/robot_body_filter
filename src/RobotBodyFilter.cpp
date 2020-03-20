@@ -1061,7 +1061,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
       {
         visualization_msgs::Marker msg;
         msg.header.stamp = scanTime;
-        msg.header.frame_id = this->fixedFrame;
+        msg.header.frame_id = this->filteringFrame;
 
         msg.scale.x = msg.scale.y = msg.scale.z = sphere.radius * 2;
 
@@ -1093,7 +1093,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
 
     robot_body_filter::SphereStamped boundingSphereMsg;
     boundingSphereMsg.header.stamp = scanTime;
-    boundingSphereMsg.header.frame_id = this->fixedFrame;
+    boundingSphereMsg.header.frame_id = this->filteringFrame;
     boundingSphereMsg.sphere.radius =
         static_cast<float>(boundingSphere.radius);
     boundingSphereMsg.sphere.center = tf2::toMsg(boundingSphere.center);
@@ -1104,7 +1104,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
     {
       visualization_msgs::Marker msg;
       msg.header.stamp = scanTime;
-      msg.header.frame_id = this->fixedFrame;
+      msg.header.frame_id = this->filteringFrame;
 
       msg.scale.x = msg.scale.y = msg.scale.z = boundingSphere.radius * 2;
 
@@ -1170,7 +1170,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
       if (this->computeDebugBoundingBox) {
         visualization_msgs::Marker msg;
         msg.header.stamp = scanTime;
-        msg.header.frame_id = this->fixedFrame;
+        msg.header.frame_id = this->filteringFrame;
 
         // it is aligned to fixed frame, not necessarily robot frame
         tf2::toMsg(box.sizes(), msg.scale);
@@ -1202,7 +1202,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
     geometry_msgs::PolygonStamped boundingBoxMsg;
 
     boundingBoxMsg.header.stamp = scanTime;
-    boundingBoxMsg.header.frame_id = this->fixedFrame;
+    boundingBoxMsg.header.frame_id = this->filteringFrame;
 
     boundingBoxMsg.polygon.points.resize(2);
     tf2::toMsg(box.min(), boundingBoxMsg.polygon.points[0]);
@@ -1214,7 +1214,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
     {
       visualization_msgs::Marker msg;
       msg.header.stamp = scanTime;
-      msg.header.frame_id = this->fixedFrame;
+      msg.header.frame_id = this->filteringFrame;
 
       // it is aligned to fixed frame and not necessarily to robot frame
       tf2::toMsg(box.sizes(), msg.scale);
@@ -1295,7 +1295,7 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
       if (this->computeDebugOrientedBoundingBox) {
         visualization_msgs::Marker msg;
         msg.header.stamp = scanTime;
-        msg.header.frame_id = this->fixedFrame;
+        msg.header.frame_id = this->filteringFrame;
 
         tf2::toMsg(box.getExtents(), msg.scale);
         msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.getPose().translation());
@@ -1325,7 +1325,7 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
     robot_body_filter::OrientedBoundingBoxStamped boundingBoxMsg;
 
     boundingBoxMsg.header.stamp = scanTime;
-    boundingBoxMsg.header.frame_id = this->fixedFrame;
+    boundingBoxMsg.header.frame_id = this->filteringFrame;
 
     tf2::toMsg(box.getExtents(), boundingBoxMsg.obb.extents);
     tf2::toMsg(box.getPose().translation(), boundingBoxMsg.obb.pose.translation);
@@ -1337,7 +1337,7 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
     {
       visualization_msgs::Marker msg;
       msg.header.stamp = scanTime;
-      msg.header.frame_id = this->fixedFrame;
+      msg.header.frame_id = this->filteringFrame;
 
       tf2::toMsg(box.getExtents(), msg.scale);
       msg.pose.position = tf2::toMsg((Eigen::Vector3d)box.getPose().translation());
@@ -1394,24 +1394,24 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
   std::string err;
   try {
     if (!this->tfBuffer->canTransform(this->localBoundingBoxFrame,
-                                      this->fixedFrame,
+                                      this->filteringFrame,
                                       scanTime,
                                       remainingTime(scanTime, this->reachableTransformTimeout),
                                       &err)) {
       ROS_ERROR_DELAYED_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
-                         this->fixedFrame.c_str(),
+                         this->filteringFrame.c_str(),
                          this->localBoundingBoxFrame.c_str(), err.c_str());
       return;
     }
   } catch (tf2::TransformException& e) {
     ROS_ERROR_DELAYED_THROTTLE(3.0, "Cannot get transform %s->%s. Error is %s.",
-                       this->fixedFrame.c_str(),
+                       this->filteringFrame.c_str(),
                        this->localBoundingBoxFrame.c_str(), e.what());
     return;
   }
 
   const auto localTfMsg = this->tfBuffer->lookupTransform(this->localBoundingBoxFrame,
-      this->fixedFrame, scanTime);
+      this->filteringFrame, scanTime);
   Eigen::Isometry3d localTf, oldPose;
   localTf = tf2::transformToEigen(localTfMsg.transform);
 
@@ -1545,7 +1545,7 @@ void RobotBodyFilter<T>::createBodyVisualizationMsg(
     bodies::constructMarkerFromBody(body, msg);
 
     msg.header.stamp = stamp;
-    msg.header.frame_id = this->fixedFrame;
+    msg.header.frame_id = this->filteringFrame;
 
     msg.color = color;
     msg.action = visualization_msgs::Marker::ADD;
