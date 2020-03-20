@@ -754,7 +754,8 @@ bool RobotBodyFilter<T>::getShapeTransform(point_containment_filter::ShapeHandle
   if (!this->pointByPointScan) {
     transform = *this->transformCache.at(collision.cacheKey);
   } else {
-    if (this->transformCacheAfterScan.find(collision.cacheKey) == this->transformCache.end()) {
+    if (this->transformCacheAfterScan.find(collision.cacheKey) ==
+        this->transformCacheAfterScan.end()) {
       // do not log the error because shape mask would do it for us
       return false;
     }
