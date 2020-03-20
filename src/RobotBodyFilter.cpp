@@ -311,23 +311,23 @@ bool RobotBodyFilter<T>::computeMask(
   const clock_t stopwatchOverall = clock();
   const auto& scanTime = projectedPointCloud.header.stamp;
 
-  Eigen::Vector3d sensorPosition;
-  try {
-    const auto sensorTf = this->tfBuffer->lookupTransform(
-        this->filteringFrame, sensorFrame, scanTime,
-        remainingTime(scanTime, this->reachableTransformTimeout));
-    tf2::fromMsg(sensorTf.transform.translation, sensorPosition);
-  } catch (tf2::TransformException& e) {
-    ROS_ERROR("RobotBodyFilter: Could not compute filtering mask do to this "
-              "TF exception: %s", e.what());
-    return false;
-  }
-
   // compute a mask of point indices for points from projectedPointCloud
   // that tells if they are inside or outside robot, or shadow points
 
   if (!this->pointByPointScan)
   {
+    Eigen::Vector3d sensorPosition;
+    try {
+      const auto sensorTf = this->tfBuffer->lookupTransform(
+          this->filteringFrame, sensorFrame, scanTime,
+          remainingTime(scanTime, this->reachableTransformTimeout));
+      tf2::fromMsg(sensorTf.transform.translation, sensorPosition);
+    } catch (tf2::TransformException& e) {
+      ROS_ERROR("RobotBodyFilter: Could not compute filtering mask due to this "
+                "TF exception: %s", e.what());
+      return false;
+    }
+
     // update transforms cache, which is then used in body masking
     this->updateTransformCache(scanTime);
 
