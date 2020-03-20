@@ -287,26 +287,28 @@ protected:
 
   /**
    * \brief Perform the actual computation of mask.
-   * \param projectedPointCloud The input pointcloud. Needs at least the
-*                               int32 INDEX channel, and for clouds with each
-   *                            point captured at different time, it also needs
+   * \param projectedPointCloud The input pointcloud. For clouds with each
+   *                            point captured at different time, it needs
    *                            a float32 "stamps" channel and viewpoint
-   *                            channels vp_x, vp_y and vp_z.
-   * \param mask Output mask of the points. Indices to the mask are taken from
-   *             the INDEX channel.
-   * \param sensorFrame Sensor frame id
+   *                            channels vp_x, vp_y and vp_z. The stamps channel
+   *                            contains timestamps relative to the time in
+   *                            header.
+   * \param mask Output mask of the points.
+   * \param sensorFrame Sensor frame id. Only needed for clouds with all points
+   *                    captured at the same time. Point-by-point scans read
+   *                    sensor position from the viewpoint channels.
    * \return Whether the computation succeeded.
    */
   bool computeMask(const sensor_msgs::PointCloud2& projectedPointCloud,
                    std::vector<RayCastingShapeMask::MaskValue>& mask,
-                   const std::string& sensorFrame);
+                   const std::string& sensorFrame = "");
 
   /** \brief Return the latest cached transform for the link corresponding to the given shape handle.
    *
    * You should call updateTransformCache before calling this function.
    *
    * \param shapeHandle The handle of the shape for which we want the transform. The handle is from robot_shape_mask.
-   * \param[out] transform Transform of the corresponding link (wrt robot_frame).
+   * \param[out] transform Transform of the corresponding link (wrt filtering frame).
    * \return If the transform was found.
    */
   bool getShapeTransform(point_containment_filter::ShapeHandle shapeHandle, Eigen::Isometry3d& transform) const;
@@ -324,7 +326,7 @@ protected:
    */
   void clearRobotMask();
 
-  /** \brief Update the cache of link transforms relative to robot_frame.
+  /** \brief Update the cache of link transforms relative to filtering frame.
    *
    * \param time The time to get transforms for.
    * \param afterScantime The after scan time to get transforms for (if zero time is passed, after scan transforms are not computed).
