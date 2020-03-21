@@ -266,7 +266,7 @@ TEST(RobotBodyFilter, LoadParams)
   EXPECT_EQ("", filter->debugContainsMarkerPublisher.getTopic());
   EXPECT_EQ("", filter->debugShadowMarkerPublisher.getTopic());
 
-  EXPECT_EQ("/test_robot_body_filter/reload_model",
+  EXPECT_EQ(ros::this_node::getName() + "/reload_model",
       filter->reloadRobotModelServiceServer.getService());
 }
 
@@ -350,7 +350,7 @@ TEST(RobotBodyFilter, LoadParamsAllConfig)
   EXPECT_EQ("/robot_model_for_contains_test", filter->debugContainsMarkerPublisher.getTopic());
   EXPECT_EQ("/robot_model_for_shadow_test", filter->debugShadowMarkerPublisher.getTopic());
 
-  EXPECT_EQ("/test_robot_body_filter/reload_model",
+  EXPECT_EQ(ros::this_node::getName() + "/reload_model",
       filter->reloadRobotModelServiceServer.getService());
 }
 
