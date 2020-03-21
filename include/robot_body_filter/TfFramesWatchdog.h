@@ -31,6 +31,8 @@ public:
                    ros::Duration unreachableTfLookupTimeout = ros::Duration(0, 100000000),  // 0.1 sec
                    ros::Rate unreachableFramesCheckRate = ros::Rate(1.0));
 
+  virtual ~TFFramesWatchdog();
+
   /** Start the updater using a thread.
    */
   void start();

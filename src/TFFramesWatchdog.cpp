@@ -207,4 +207,9 @@ bool TFFramesWatchdog::isMonitoredNoLock(const std::string &frame) const
   return this->monitoredFrames.find(frame) != this->monitoredFrames.end();
 }
 
+TFFramesWatchdog::~TFFramesWatchdog()
+{
+  this->stop();
+}
+
 }
