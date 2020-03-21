@@ -1,7 +1,7 @@
 #ifndef ROBOT_BODY_FILTER_TF2_EIGEN_H
 #define ROBOT_BODY_FILTER_TF2_EIGEN_H
 
-#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <geometry_msgs/Point32.h>
 
 namespace tf2 {

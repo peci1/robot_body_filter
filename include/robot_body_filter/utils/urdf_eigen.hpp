@@ -1,8 +1,8 @@
 #ifndef ROBOT_BODY_FILTER_URDF_EIGEN_HPP
 #define ROBOT_BODY_FILTER_URDF_EIGEN_HPP
 
-#include <Eigen/Core>
-#include <urdf_model/types.h>
+#include <Eigen/Geometry>
+#include <urdf_model/pose.h>
 
 namespace robot_body_filter
 {
