@@ -72,9 +72,14 @@ void OBB::getPose(Eigen::Isometry3d& pose) const
 {
   pose = Eigen::Isometry3d::Identity();
   pose.translation() = fromFcl(obb_->To);
-  pose.linear().col(0) = fromFcl(obb_->axis[0]);
-  pose.linear().col(1) = fromFcl(obb_->axis[1]);
-  pose.linear().col(2) = fromFcl(obb_->axis[2]);
+  // If all axes are zero, we report the rotation as identity
+  // This happens if OBB is default-constructed
+  if (!obb_->axis[0].isZero() && !obb_->axis[3].isZero() && !obb_->axis[2].isZero())
+  {
+    pose.linear().col(0) = fromFcl(obb_->axis[0]);
+    pose.linear().col(1) = fromFcl(obb_->axis[1]);
+    pose.linear().col(2) = fromFcl(obb_->axis[2]);
+  }
 }
 
 Eigen::Isometry3d OBB::getPose() const
