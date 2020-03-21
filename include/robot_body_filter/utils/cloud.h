@@ -1,5 +1,6 @@
 //
 // Created by Tomas Petricek on 3/28/19.
+// Edited by Martin Pecka
 //
 
 #ifndef ROBOT_BODY_FILTER_CLOUD_H
@@ -23,7 +24,7 @@ typedef sensor_msgs::PointCloud2Modifier CloudModifier;
 size_t num_points(const Cloud &cloud);
 
 /**
- * \brief Create a pointcloud that contains a subset of point of `IN` defined by
+ * \brief Create a pointcloud that contains a subset of points of `IN` defined by
  * the filter `FILTER`. The result is saved into `OUT`. `FILTER` should be a boolean expression
  * which can use the following: `i`: index of the point, `x_it, y_it, z_it` iterators to XYZ coordinates.
  * Points for which FILTER is true are part of the final pointcloud.
@@ -41,11 +42,11 @@ size_t num_points(const Cloud &cloud);
   OUT.data.resize(0); \
   OUT.data.reserve(IN.data.size()); \
   \
-  CloudConstIter x_it(IN, "x"); \
-  CloudConstIter y_it(IN, "y"); \
-  CloudConstIter z_it(IN, "z"); \
+  ::robot_body_filter::CloudConstIter x_it(IN, "x"); \
+  ::robot_body_filter::CloudConstIter y_it(IN, "y"); \
+  ::robot_body_filter::CloudConstIter z_it(IN, "z"); \
   \
-  const auto numPoints = num_points(IN); \
+  const auto numPoints = ::robot_body_filter::num_points(IN); \
   \
   if (!outIsOrganized) { \
     for (size_t i = 0; i < numPoints; ++i, ++x_it, ++y_it, ++z_it) { \
@@ -61,9 +62,9 @@ size_t num_points(const Cloud &cloud);
   } else { \
     OUT.data.insert(OUT.data.end(), IN.data.begin(), IN.data.end()); \
     \
-    CloudIter x_out_it(OUT, "x"); \
-    CloudIter y_out_it(OUT, "y"); \
-    CloudIter z_out_it(OUT, "z"); \
+    ::robot_body_filter::CloudIter x_out_it(OUT, "x"); \
+    ::robot_body_filter::CloudIter y_out_it(OUT, "y"); \
+    ::robot_body_filter::CloudIter z_out_it(OUT, "z"); \
     const auto invalidValue = std::numeric_limits<float>::quiet_NaN(); \
     \
     for (size_t i = 0; i < numPoints; ++i, ++x_it, ++y_it, ++z_it, ++x_out_it, ++y_out_it, ++z_out_it) { \
