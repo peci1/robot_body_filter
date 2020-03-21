@@ -83,11 +83,11 @@ protected:
   }
 
   template<typename Foo>
-  std::set<std::string> getParamVerboseSet(const std::string &name,
-                                           const std::set<std::string> &defaultValue = std::set<std::string>(),
-                                           const std::string &unit = "")
+  std::set<std::string> getParamVerboseSet(
+      const std::string &name,
+      const std::set<std::string> &defaultValue = std::set<std::string>(),
+      const std::string &unit = "")
   {
-
     std::vector<std::string> vector(defaultValue.begin(), defaultValue.end());
     vector = this->getParamVerbose(name, vector, unit);
     return std::set<std::string>(vector.begin(), vector.end());
