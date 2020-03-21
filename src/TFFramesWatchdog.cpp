@@ -19,6 +19,7 @@ TFFramesWatchdog::TFFramesWatchdog(std::string robotFrame,
 }
 
 void TFFramesWatchdog::start() {
+  this->shouldStop = false;
   this->thisThread = std::thread(&TFFramesWatchdog::run, this);
   this->unpause();
 }
@@ -82,7 +83,10 @@ void TFFramesWatchdog::unpause() {
 void TFFramesWatchdog::stop() {
   ROS_INFO("Stopping TF watchdog.");
   this->shouldStop = true;
-  this->thisThread.join(); // segfaults without this line
+  this->paused = true;
+
+  if (this->started && this->thisThread.joinable())
+    this->thisThread.join(); // segfaults without this line
   ROS_INFO("TF watchdog stopped.");
 }
 
