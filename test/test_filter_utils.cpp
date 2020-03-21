@@ -16,7 +16,7 @@ class TestFilter : public robot_body_filter::FilterBase<std::string>
     EXPECT_EQ(true, this->getParamVerbose("debug/pcl/nonexistent", true));
     EXPECT_EQ(-1, this->getParamVerbose("test/negative", 1));
     EXPECT_EQ(1, this->getParamVerbose("nonexistent", 1));
-    EXPECT_EQ(0.03, this->getParamVerbose("sensor/min_distance", 0.01));
+    EXPECT_EQ(0.1, this->getParamVerbose("sensor/min_distance", 0.01));
     EXPECT_EQ(0.01, this->getParamVerbose("nonexistent", 0.01));
     EXPECT_EQ("odom", this->getParamVerbose("frames/fixed", std::string("fixed")));
     EXPECT_EQ("fixed", this->getParamVerbose("nonexistent", std::string("fixed")));
