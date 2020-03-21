@@ -47,7 +47,7 @@ add_library(${PROJECT_NAME}_utils
   src/utils/tf2_sensor_msgs.cpp
   src/utils/time_utils.cpp
 )
-target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES} ${PCL_LIBRARIES})
 
 add_library(${PROJECT_NAME}
   src/RobotBodyFilter.cpp
