@@ -141,8 +141,17 @@ shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body* body)
       break;
     }
     case shapes::MESH: {
-      auto mesh = dynamic_cast<const bodies::ConvexMesh*>(body);
-      result.reset(shapes::createMeshFromVertices(mesh->getScaledVertices()));
+      const auto mesh = dynamic_cast<const bodies::ConvexMesh*>(body);
+      const auto& scaledVertices = mesh->getScaledVertices();
+
+      // createMeshFromVertices requires an "expanded" list of triangles where each triangle is
+      // represented by its three vertex positions
+      EigenSTL::vector_Vector3d vertexList;
+      vertexList.reserve(3 * mesh->getTriangles().size());
+      for (const auto& triangle : mesh->getTriangles())
+        vertexList.push_back(scaledVertices[triangle]);
+
+      result.reset(shapes::createMeshFromVertices(vertexList));
       break;
     }
     default: {
@@ -157,7 +166,7 @@ void constructMarkerFromBody(const bodies::Body* body,
                              visualization_msgs::Marker& msg)
 {
     auto shape = bodies::constructShapeFromBody(body);
-    shapes::constructMarkerFromShape(shape.get(), msg, false);
+    shapes::constructMarkerFromShape(shape.get(), msg, true);
     msg.pose = tf2::toMsg(body->getPose());
 }
 
