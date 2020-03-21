@@ -143,7 +143,7 @@ EigenSTL::vector_Vector3d OBB::computeVertices() const
 
 bool OBB::contains(const OBB& obb) const
 {
-  for (const auto& v : computeVertices()) {
+  for (const auto& v : obb.computeVertices()) {
     if (!contains(v))
       return false;
   }
