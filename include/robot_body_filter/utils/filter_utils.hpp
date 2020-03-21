@@ -20,9 +20,13 @@ protected:
    *        specified default value, and print out a ROS info/warning message with
    *        the loaded values.
    * \tparam T Param type.
-   * \param name Name of the parameter.
+   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
+   *             a "recursive" search is tried using the parts of the name separated by slashes.
+   *             This is useful if the filter config isn't loaded via a filterchain config, but via
+   *             a dict loaded directly to ROS parameter server.
    * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the messages more informative.
+   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
    * \return The loaded param value.
    */
   template< typename T>
@@ -77,6 +81,18 @@ protected:
     return defaultValue;
   }
 
+  /** \brief Get the value of the given filter parameter, falling back to the
+   *        specified default value, and print out a ROS info/warning message with
+   *        the loaded values.
+   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
+   *             a "recursive" search is tried using the parts of the name separated by slashes.
+   *             This is useful if the filter config isn't loaded via a filterchain config, but via
+   *             a dict loaded directly to ROS parameter server.
+   * \param defaultValue The default value to use.
+   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
+   * \return The loaded param value.
+   */
   std::string getParamVerbose(const std::string &name, const char* defaultValue,
                               const std::string &unit = "")
   {
@@ -87,6 +103,19 @@ protected:
 
   // getParam specializations for unsigned values
 
+  /** \brief Get the value of the given filter parameter, falling back to the
+   *        specified default value, and print out a ROS info/warning message with
+   *        the loaded values.
+   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
+   *             a "recursive" search is tried using the parts of the name separated by slashes.
+   *             This is useful if the filter config isn't loaded via a filterchain config, but via
+   *             a dict loaded directly to ROS parameter server.
+   * \param defaultValue The default value to use.
+   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
+   * \return The loaded param value.
+   * \throw std::invalid_argument If the loaded value is negative.
+   */
   uint64_t getParamVerbose(const std::string &name, const uint64_t &defaultValue,
                            const std::string &unit = "")
   {
@@ -96,6 +125,19 @@ protected:
   // there actually is an unsigned int implementation of FilterBase::getParam,
   // but it doesn't tell you when the passed value is negative - instead it just
   // returns false
+  /** \brief Get the value of the given filter parameter, falling back to the
+   *        specified default value, and print out a ROS info/warning message with
+   *        the loaded values.
+   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
+   *             a "recursive" search is tried using the parts of the name separated by slashes.
+   *             This is useful if the filter config isn't loaded via a filterchain config, but via
+   *             a dict loaded directly to ROS parameter server.
+   * \param defaultValue The default value to use.
+   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
+   * \return The loaded param value.
+   * \throw std::invalid_argument If the loaded value is negative.
+   */
   unsigned int getParamVerbose(const std::string &name,
                                const unsigned int &defaultValue,
                                const std::string &unit = "")
@@ -105,6 +147,18 @@ protected:
 
   // ROS types specializations
 
+  /** \brief Get the value of the given filter parameter, falling back to the
+   *        specified default value, and print out a ROS info/warning message with
+   *        the loaded values.
+   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
+   *             a "recursive" search is tried using the parts of the name separated by slashes.
+   *             This is useful if the filter config isn't loaded via a filterchain config, but via
+   *             a dict loaded directly to ROS parameter server.
+   * \param defaultValue The default value to use.
+   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
+   * \return The loaded param value.
+   */
   ros::Duration getParamVerbose(const std::string &name,
                                 const ros::Duration &defaultValue,
                                 const std::string &unit = "")
@@ -113,6 +167,20 @@ protected:
       unit);
   }
 
+  /** \brief Get the value of the given filter parameter as a set of strings, falling back to the
+   *        specified default value, and print out a ROS info/warning message with
+   *        the loaded values.
+   * \tparam Foo Ignored. Just needed for compilation to succeed.
+   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
+   *             a "recursive" search is tried using the parts of the name separated by slashes.
+   *             This is useful if the filter config isn't loaded via a filterchain config, but via
+   *             a dict loaded directly to ROS parameter server.
+   * \param defaultValue The default value to use.
+   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
+   * \return The loaded param value.
+   * \throw std::invalid_argument If the loaded value is negative.
+   */
   template<typename Foo>
   std::set<std::string> getParamVerboseSet(
       const std::string &name,
