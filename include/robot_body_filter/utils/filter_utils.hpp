@@ -69,8 +69,7 @@ protected:
                                const unsigned int &defaultValue,
                                const std::string &unit = "")
   {
-    return this->getParamUnsigned<unsigned int, int, F>(name, defaultValue,
-      unit);
+    return this->getParamUnsigned<unsigned int, int>(name, defaultValue, unit);
   }
 
   // ROS types specializations
