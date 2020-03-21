@@ -1,4 +1,5 @@
 <launch>
+    <param name="/use_sim_time" value="false" />
     <rosparam command="load" file="$(dirname)/test_robot_body_filter.yaml" />
     <test test-name="robot_body_filter_test" pkg="robot_body_filter" type="test_robot_body_filter"/>
 </launch>
