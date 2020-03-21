@@ -73,7 +73,12 @@ inline std::string to_string(const std::vector<T> &value)
 {
   std::stringstream ss;
   ss << "[";
-  std::copy(value.begin(), value.end(), std::ostream_iterator<T>(ss, ", "));
+  for (size_t i = 0; i < value.size(); ++i)
+  {
+    ss << to_string(value[i]);
+    if (i + 1 < value.size())
+      ss << ", ";
+  }
   ss << "]";
   return ss.str();
 }
@@ -83,7 +88,14 @@ inline std::string to_string(const std::set<T> &value)
 {
   std::stringstream ss;
   ss << "[";
-  std::copy(value.begin(), value.end(), std::ostream_iterator<T>(ss, ", "));
+  size_t i = 0;
+  for (const auto& v : value)
+  {
+    ss << to_string(v);
+    if (i + 1 < value.size())
+      ss << ", ";
+    ++i;
+  }
   ss << "]";
   return ss.str();
 }
@@ -93,9 +105,13 @@ inline std::string to_string(const std::map<K, V> &value)
 {
   std::stringstream ss;
   ss << "{";
+  size_t i = 0;
   for (const auto &pair : value)
   {
-    ss << "\"" << to_string(pair.first) << "\": \"" << to_string(pair.second) << "\", ";
+    ss << "\"" << to_string(pair.first) << "\": \"" << to_string(pair.second) << "\"";
+    if (i + 1 < value.size())
+      ss << ", ";
+    ++i;
   }
   ss << "}";
   return ss.str();
