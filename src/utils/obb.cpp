@@ -121,7 +121,7 @@ bool OBB::overlaps(const bodies::OBB& other) const
 
 EigenSTL::vector_Vector3d OBB::computeVertices() const
 {
-  const auto e = getExtents() / 2;
+  const Eigen::Vector3d e = getExtents() / 2; // do not use auto type, Eigen would be inefficient
   EigenSTL::vector_Vector3d result = {
       { -e[0], -e[1], -e[2] },
       { -e[0], -e[1],  e[2] },
