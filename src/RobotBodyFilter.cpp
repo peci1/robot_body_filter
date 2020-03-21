@@ -342,7 +342,6 @@ bool RobotBodyFilter<T>::computeMask(
     CloudConstIter vp_y_it(projectedPointCloud, "vp_y");
     CloudConstIter vp_z_it(projectedPointCloud, "vp_z");
     CloudConstIter stamps_it(projectedPointCloud, "stamps");
-    CloudIndexConstIter index_it(projectedPointCloud, "index");
 
     pointMask.resize(num_points(projectedPointCloud));
 
@@ -381,7 +380,7 @@ bool RobotBodyFilter<T>::computeMask(
     RayCastingShapeMask::MaskValue mask;
 
     this->cacheLookupBetweenScansRatio = 0.0;
-    for (size_t i = 0; i < num_points(projectedPointCloud); ++i, ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it, ++index_it)
+    for (size_t i = 0; i < num_points(projectedPointCloud); ++i, ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it)
     {
       point.x() = *x_it;
       point.y() = *y_it;
