@@ -46,6 +46,8 @@
   <build_depend>tf2_eigen</build_depend>
   <build_depend>tf2_sensor_msgs</build_depend>
 
+  <test_depend>rostest</test_depend>
+
   <export>
     <filters plugin="${prefix}/laser_filters.xml"/>
   </export>

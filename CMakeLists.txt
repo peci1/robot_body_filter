@@ -70,6 +70,8 @@ install(FILES rviz/debug.rviz
     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/rviz)
 
 if (CATKIN_ENABLE_TESTING)
+  find_package(rostest REQUIRED)
+
   catkin_add_gtest(test_set_utils test/test_set_utils.cpp)
   target_link_libraries(test_set_utils ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
@@ -99,6 +101,9 @@ if (CATKIN_ENABLE_TESTING)
 
   catkin_add_gtest(test_obb test/test_obb.cpp)
   target_link_libraries(test_obb ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  add_rostest_gtest(test_filter_utils test/test_filter_utils.test test/test_filter_utils.cpp)
+  target_link_libraries(test_filter_utils ${PROJECT_NAME} ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_tf_frames_watchdog test/test_tf_frames_watchdog.cpp)
   target_link_libraries(test_tf_frames_watchdog ${PROJECT_NAME} ${catkin_LIBRARIES})

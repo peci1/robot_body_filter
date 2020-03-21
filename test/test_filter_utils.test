@@ -1,0 +1,4 @@
+<launch>
+    <rosparam command="load" file="$(dirname)/test_robot_body_filter.yaml" />
+    <test test-name="filter_utils_test" pkg="robot_body_filter" type="test_filter_utils"/>
+</launch>
