@@ -37,12 +37,43 @@ protected:
         prependIfNonEmpty(unit, " "));
       return value;
     }
-    else
+
+    // The parameter has slashes in its name, so try a "recursive" search
+    if (name.length() > 1 && name.find_first_of('/', 1) != std::string::npos)
     {
-      ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
-        << name << ", assigning default: " << to_string(defaultValue)
-        << prependIfNonEmpty(unit, " "));
+      auto slashPos = name.find_first_of('/', 1);
+      auto head = name.substr(0, slashPos);
+      auto tail = name.substr(slashPos + 1);
+      XmlRpc::XmlRpcValue val;
+
+      if (filters::FilterBase<F>::getParam(head, val))
+      {
+        while (val.getType() == XmlRpc::XmlRpcValue::TypeStruct)
+        {
+          if (val.hasMember(tail))
+          {
+            filters::FilterBase<F>::params_[name] = val[tail];
+            return this->getParamVerbose(name, defaultValue, unit);
+          } else {
+            slashPos = tail.find_first_of('/', 1);
+            if (slashPos == std::string::npos)
+              break;
+            head = tail.substr(0, slashPos);
+            tail = tail.substr(slashPos + 1);
+            if (!val.hasMember(head))
+              break;
+            XmlRpc::XmlRpcValue tmp = val[head]; // tmp copy is required, otherwise mem corruption
+            val = tmp;
+            if (!val.valid())
+              break;
+          }
+        }
+      }
     }
+
+    ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
+      << name << ", assigning default: " << to_string(defaultValue)
+      << prependIfNonEmpty(unit, " "));
     return defaultValue;
   }
 
