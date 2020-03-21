@@ -68,3 +68,38 @@ install(FILES laser_filters.xml
 
 install(FILES rviz/debug.rviz
     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/rviz)
+
+if (CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(test_set_utils test/test_set_utils.cpp)
+  target_link_libraries(test_set_utils ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_shapes test/test_shapes.cpp)
+  target_link_libraries(test_shapes ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_urdf_eigen test/test_urdf_eigen.cpp)
+  target_link_libraries(test_urdf_eigen ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_time_utils test/test_time_utils.cpp)
+  target_link_libraries(test_time_utils ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_tf2_eigen test/test_tf2_eigen.cpp)
+  target_link_libraries(test_tf2_eigen ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_string_utils test/test_string_utils.cpp)
+  target_link_libraries(test_string_utils ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_bodies test/test_bodies.cpp)
+  target_link_libraries(test_bodies ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_cloud test/test_cloud.cpp)
+  target_link_libraries(test_cloud ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_tf2_sensor_msgs test/test_tf2_sensor_msgs.cpp)
+  target_link_libraries(test_tf2_sensor_msgs ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_obb test/test_obb.cpp)
+  target_link_libraries(test_obb ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
+  catkin_add_gtest(test_tf_frames_watchdog test/test_tf_frames_watchdog.cpp)
+  target_link_libraries(test_tf_frames_watchdog ${PROJECT_NAME} ${catkin_LIBRARIES})
+endif()
