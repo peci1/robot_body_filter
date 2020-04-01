@@ -68,6 +68,9 @@ The basic workings of this filter are done via the [`filters::FilterBase` API](h
 
 ### Filter Parameters
 
+Have a look in the [examples](examples) folder to get inspiration for 
+configuration of your filter. 
+
 - `sensor/point_by_point` (`bool`, default: `false` for PointCloud2 version, 
    `true` for LaserScan)
     

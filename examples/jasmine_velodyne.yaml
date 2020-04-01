@@ -1,0 +1,124 @@
+# This is an example filter config for tracked vehicle Jasmine from TU Darmstadt's Team Hector
+# with a rotating lidar Velodyne VLP-16.
+# It configures 4 instances of RobotBodyFilter - 2 for containment filtering, 2 for shadow
+# filtering. The reason for having 4 different instances is the need to apply different values
+# of body_model/inflation/scale and body_model/inflation/padding. Each instance acts on different
+# sets of links specified in the `only_links` parameter.
+cloud_filter_chain:
+  # Only containment filtering
+  - name: robot_body_filter_containment
+    type: robot_body_filter/RobotBodyFilterPointCloud2
+    params:
+      debug/pcl/clip: false
+      debug/pcl/inside: false
+      debug/pcl/shadow: false
+      sensor/point_by_point: false
+      sensor/min_distance: 0.15
+      sensor/max_distance: 0
+      frames/sensor: spin_lidar_lidar_mount_link_fixed
+      frames/filtering: spin_lidar_lidar_mount_link_fixed
+      frames/output: spin_lidar_lidar_mount_link_fixed
+      frames/fixed: spin_lidar_lidar_mount_link_fixed
+      body_model/inflation/scale: 1.0
+      body_model/inflation/padding: 0.03
+      body_model/robot_description_param: /robot_description
+      filter/do_clipping: true
+      filter/do_contains_test: true
+      filter/do_shadow_test: false
+      only_links:
+        - chassis_link
+        - left_track_link
+        - right_track_link
+        - autonomy_box_link
+        - arm_pitch_link_0
+        - arm_pitch_link_1
+        - arm_pitch_link_2
+        - arm_roll_link
+        - arm_yaw_link
+        - sensor_head_yaw_link
+        - sensor_head_pitch_link
+        - arm_rgbd_cam_link
+        - arm_thermal_cam_frame
+  # Containment filtering for gripper with more padding (cables, higher uncertainty)
+  - name: robot_body_filter_containment_gripper
+    type: robot_body_filter/RobotBodyFilterPointCloud2
+    params:
+      debug/pcl/clip: false
+      debug/pcl/inside: true
+      debug/pcl/shadow: false
+      sensor/point_by_point: false
+      sensor/min_distance: 0.15
+      sensor/max_distance: 0
+      frames/sensor: spin_lidar_lidar_mount_link_fixed
+      frames/filtering: spin_lidar_lidar_mount_link_fixed
+      frames/output: spin_lidar_lidar_mount_link_fixed
+      frames/fixed: spin_lidar_lidar_mount_link_fixed
+      body_model/inflation/scale: 1.0
+      body_model/inflation/padding: 0.1
+      body_model/robot_description_param: /robot_description
+      filter/do_clipping: false
+      filter/do_contains_test: true
+      filter/do_shadow_test: false
+      only_links:
+        - gripper_palm_link
+        - gripper_finger_link_0
+        - gripper_finger_link_1
+  # Raycast filter for arm and sensor head
+  - name: robot_body_filter_shadow
+    type: robot_body_filter/RobotBodyFilterPointCloud2
+    params:
+      debug/pcl/clip: false
+      debug/pcl/inside: false
+      debug/pcl/shadow: true
+      sensor/point_by_point: false
+      sensor/min_distance: 0.15
+      sensor/max_distance: 0
+      frames/sensor: spin_lidar_lidar_mount_link_fixed
+      frames/filtering: spin_lidar_lidar_mount_link_fixed
+      frames/output: spin_lidar_lidar_mount_link_fixed
+      frames/fixed: spin_lidar_lidar_mount_link_fixed
+      body_model/inflation/scale: 1.0
+      body_model/inflation/padding: 0.01
+      body_model/robot_description_param: /robot_description
+      filter/do_clipping: false
+      filter/do_contains_test: false
+      filter/do_shadow_test: true
+      only_links:
+        - arm_pitch_link_0
+        - arm_pitch_link_1
+        - arm_pitch_link_2
+        - arm_roll_link
+        - arm_yaw_link
+        - gripper_palm_link
+        - sensor_head_yaw_link
+        - sensor_head_pitch_link
+  # Raycast filter for chassis and gripper fingers with more padding
+  - name: robot_body_filter_shadow_chassis
+    type: robot_body_filter/RobotBodyFilterPointCloud2
+    params:
+      debug/pcl/clip: false
+      debug/pcl/inside: false
+      debug/pcl/shadow: false
+      sensor/point_by_point: false
+      sensor/min_distance: 0.15
+      sensor/max_distance: 0
+      frames/sensor: spin_lidar_lidar_mount_link_fixed
+      frames/filtering: spin_lidar_lidar_mount_link_fixed
+      frames/output: spin_lidar_lidar_mount_link_fixed
+      frames/fixed: spin_lidar_lidar_mount_link_fixed
+      body_model/inflation/scale: 1.0
+      body_model/inflation/padding: 0.02
+      body_model/robot_description_param: /robot_description
+      filter/do_clipping: false
+      filter/do_contains_test: false
+      filter/do_shadow_test: true
+      only_links:
+        - chassis_link
+        - left_track_link
+        - right_track_link
+        - sensor_head_yaw_link
+        - sensor_head_pitch_link
+        - arm_rgbd_cam_link
+        - arm_thermal_cam_frame
+        - gripper_finger_link_0
+        - gripper_finger_link_1
