@@ -2,6 +2,51 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* When sensor frame is empty (autodetected), do not add it as initial monitored frame to watchdog.
+* Added configuration examples.
+* Make sure use_sim_time is set to false for tests.
+* Fixed computation of pointcloud without local bounding box.
+* Added tests for RobotBodyFilter.
+* No longer require the index pointcloud field in computeMask(), as it is not used anywhere.
+* Surprise! CropBox::setTransform() doesn't set transform of the cropbox, but instead a transform of the points. Fixed that.
+* Fixed copy-paste bug in bounding sphere publisher.
+* Fix incorrect usage of fixed frame at many places (substituted with filtering frame).
+* Make sure orientation.w = 1 is set in all published markers.
+* Correctly exclude the ignored bounding shapes from the published markers and shapes.
+* Make sure the published bounding shapes are computed as they appear at the time of the beginning of the scan.
+* Fix getShapeTransform() to correctly interpolate between before- and after-scan times. The logic was twisted, so with cacheLookupBetweenScansRation was zero, it returned the transform after scan.
+* Fix copy-paste bug in transform cache.
+* Make use of the newly optional scanFrame argument of computeMask()
+* Prevent division by zero in point-by-point scans with zero duration (which is weird, but well...)
+* Only compute sensor->filtering transform for all-at-once scans, because point-by-point scans have viewpoints instead.
+* Reworked how TFFramesWatchdog is initialized to allow easier reconfiguring of the filter.
+* Added RobotBodyFilter::failWithoutRobotDescription which aids in tests.
+* Clarified documentation of RobotBodyFilter regarding frames.
+* Add TFFramesWatchdog::isRunning().
+* Workaround PCL 1.8 ignoring CropBox::setKeepOrganized().
+* Added tests for filter utils.
+* Improved filter_utils documentation.
+* Improved getParamVerbose() with recursive resolution of slash-separated param names.
+* Make different performance test requirements for release and debug builds.
+* Added tests for RayCastingShapeMask and improved its documentation.
+* Added utility functions to compare transforms and generate random ones.
+* Implemented TF watchdog tests.
+* Prevented some more SIGABRTs from TFFramesWatchdog.
+* Added unit tests for utils.
+* Fixed a bug in OBB.contains(OBB) which compared against vertices of the wrong OBB.
+* Improved efficiency of Eigen expression by not using auto type.
+* Fix the reported transformation of default-constructed OBBs.
+* Fixed constructShapeFromBody() to correctly process meshes.
+* Fixed eigen and urdf includes.
+* Fixed printing of std containers in string_utils.
+* CREATE_FILTERED_CLOUD now prepends robot_body_filter stuff with a global namespace to be usable even from other namespaces.
+* Make sure sensor frame is monitored by the watchdog because we need to use it during the filtering. Fixes `#6 <https://github.com/peci1/robot_body_filter/issues/6>`_.
+* Added parameter transforms/require_all_reachable.
+* Added to_string(bool) specialization.
+* Contributors: Martin Pecka
+
 1.1.6 (2019-11-11)
 ------------------
 * Avoid subtracting from ROS time.
