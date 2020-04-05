@@ -223,8 +223,14 @@ bool RobotBodyFilter<T>::configure() {
   // the other case happens when configure() is called again from update() (e.g. when a new bag file
   // started playing)
   if (this->tfFramesWatchdog == nullptr) {
+    std::set<std::string> initialMonitoredFrames;
+    if (!this->sensorFrame.empty())
+    {
+      initialMonitoredFrames.insert(this->sensorFrame);
+    }
+
     this->tfFramesWatchdog = std::make_shared<TFFramesWatchdog>(this->filteringFrame,
-        std::set<std::string>({this->sensorFrame}), this->tfBuffer,
+        initialMonitoredFrames, this->tfBuffer,
         this->unreachableTransformTimeout, ros::Rate(ros::Duration(1.0)));
     this->tfFramesWatchdog->start();
   }
