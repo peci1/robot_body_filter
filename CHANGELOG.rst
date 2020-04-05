@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.7 (2020-04-05)
+------------------
 * When sensor frame is empty (autodetected), do not add it as initial monitored frame to watchdog.
 * Added configuration examples.
 * Make sure use_sim_time is set to false for tests.
