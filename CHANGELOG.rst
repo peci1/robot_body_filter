@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.1.8 (2020-04-06)
+------------------
 * Fixed typo.
 * Contributors: Martin Pecka
 
