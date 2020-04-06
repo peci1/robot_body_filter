@@ -1515,7 +1515,7 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
 
       cropBox.setMin(Eigen::Vector4f(box.min()[0], box.min()[1], box.min()[2], 0.0));
       cropBox.setMax(Eigen::Vector4f(box.max()[0], box.max()[1], box.max()[2], 0.0));
-      const Eigen::Transform localTfInv = localTf.inverse();
+      const Eigen::Isometry3d localTfInv = localTf.inverse();
       cropBox.setTranslation(localTfInv.translation().cast<float>());
       cropBox.setRotation(localTfInv.linear().eulerAngles(0, 1, 2).cast<float>());
 
