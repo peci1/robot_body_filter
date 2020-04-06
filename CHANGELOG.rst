@@ -2,6 +2,11 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Fixed typo.
+* Contributors: Martin Pecka
+
 1.1.7 (2020-04-05)
 ------------------
 * When sensor frame is empty (autodetected), do not add it as initial monitored frame to watchdog.
