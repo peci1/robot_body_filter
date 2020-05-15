@@ -11,9 +11,6 @@ namespace robot_body_filter
  *
  * Just a helper function to convert urdf::Geometry to the corresponding shapes::Shape.
  *
- * Limitation: non-uniformly scaled meshes are not supported (and are scaled uniformly by
- * the first scaling coefficient). Should be overcome once shapes::Shape supports non-uniform scaling.
- *
  * \param geometry The URDF geometry object to convert.
  */
 shapes::ShapeConstPtr constructShape(const urdf::Geometry& geometry);
