@@ -3,15 +3,43 @@
 
 #include <vector>
 #include <map>
+#include <unordered_set>
 
 #include <moveit/point_containment_filter/shape_mask.h>
 
 #include <robot_body_filter/utils/bodies.h>
 #include <robot_body_filter/utils/cloud.h>
 #include <sstream>  // has to be there, otherwise we encounter build problems
-#include <robot_body_filter/RayCastingShapeMask.h>
 #include <geometric_shapes/body_operations.h>
 #include <ros/console.h>
+
+namespace robot_body_filter
+{
+struct MultiShapeHandle
+{
+  point_containment_filter::ShapeHandle contains;
+  point_containment_filter::ShapeHandle shadow;
+
+  bool operator==(const MultiShapeHandle& other) const;
+  bool operator!=(const MultiShapeHandle& other) const;
+};
+}
+
+namespace std
+{
+template<>
+struct hash<::robot_body_filter::MultiShapeHandle>
+{
+  size_t operator()(const ::robot_body_filter::MultiShapeHandle &h) const
+  {
+    https://stackoverflow.com/a/1646913/1076564
+    size_t hash = 17;
+    hash = hash * 31 + std::hash<::point_containment_filter::ShapeHandle>()(h.contains);
+    hash = hash * 31 + std::hash<::point_containment_filter::ShapeHandle>()(h.shadow);
+    return hash;
+  }
+};
+}
 
 namespace robot_body_filter
 {
@@ -77,20 +105,41 @@ public:
    * \brief Add the given shape to the set of filtered bodies. The internally created body will be
    * transformed by the TransformCallback to which the handle of this shape will be passed.
    * \param shape The shape to be filtered.
-   * \param scale Scale of the shape.
-   * \param padding Padding of the shape.
+   * \param scale Scale of the shape to be used in both contains and shadow tests.
+   * \param padding Padding of the shape to be used in both contains and shadow tests.
    * \param updateInternalStructures Set to true if only adding a single shape. If adding a batch of
    *        shapes, set this to false and call updateInternalStructures() manually at the end of the
    *        batch.
    * \param name Optional name of the shape. Used when reporting problems with the shape transforms.
-   * \return A handle of the shape. It can be used for removing the shape, and will also be passed
-   *         as the first argument of TransformCallback when asking for the transform of this
-   *         shape's body.
+   * \return A handle of the shape. It can be used for removing the shape. The `contains` and
+   *         `shadow` member handles will be passed as the first argument of TransformCallback when
+   *         asking for the transform of this shape's body.
    * \sa updateInternalShapeLists()
    */
-  point_containment_filter::ShapeHandle addShape(
-      const shapes::ShapeConstPtr& shape, double scale = 1.0,
-      double padding = 0.0, bool updateInternalStructures = true,
+  MultiShapeHandle addShape(
+      const shapes::ShapeConstPtr& shape, double scale = 1.0, double padding = 0.0,
+      bool updateInternalStructures = true, const std::string& name = "");
+
+  /**
+   * \brief Add the given shape to the set of filtered bodies. The internally created body will be
+   * transformed by the TransformCallback to which the handle of this shape will be passed.
+   * \param shape The shape to be filtered.
+   * \param containsScale Scale of the shape to be used in contains tests.
+   * \param containsPadding Padding of the shape to be used in contains tests.
+   * \param shadowScale Scale of the shape to be used in shadow tests.
+   * \param shadowPadding Padding of the shape to be used in shadow tests.
+   * \param updateInternalStructures Set to true if only adding a single shape. If adding a batch of
+   *        shapes, set this to false and call updateInternalStructures() manually at the end of the
+   *        batch.
+   * \param name Optional name of the shape. Used when reporting problems with the shape transforms.
+   * \return A handle of the shape. It can be used for removing the shape. The `contains` and
+   *         `shadow` member handles will be passed as the first argument of TransformCallback when
+   *         asking for the transform of this shape's body.
+   * \sa updateInternalShapeLists()
+   */
+  MultiShapeHandle addShape(
+      const shapes::ShapeConstPtr& shape, double containsScale, double containsPadding,
+      double shadowScale, double shadowPadding, bool updateInternalStructures = true,
       const std::string& name = "");
 
   /**
@@ -101,8 +150,7 @@ public:
    *        end of the batch.
    * \sa updateInternalShapeLists()
    */
-  void removeShape(point_containment_filter::ShapeHandle handle,
-      bool updateInternalStructures = true);
+  void removeShape(const MultiShapeHandle& handle, bool updateInternalStructures = true);
 
   /**
    * \brief Set the callback which is called whenever a pose of a body needs to be updated.
@@ -116,15 +164,29 @@ public:
    * \brief Get the map of bounding spheres of all registered shapes.
    * \return The map of bounding spheres.
    *
+   * \note If scale or padding for contains test differ from scale or padding for the shadow test
+   *       for a shape, it will be represented by two bodies.
    * \note Is only updated during updateBodyPoses().
    */
   std::map<point_containment_filter::ShapeHandle, bodies::BoundingSphere>
   getBoundingSpheres() const;
 
   /**
+   * \brief Get the map of bounding spheres of all registered shapes that are used for testing
+   *        INSIDE points.
+   * \return The map of bounding spheres.
+   *
+   * \note Is only updated during updateBodyPoses().
+   */
+  std::map<point_containment_filter::ShapeHandle, bodies::BoundingSphere>
+  getBoundingSpheresForContainsTest() const;
+
+  /**
    * \brief Get the bounding sphere containing all registered shapes.
    * \return The bounding sphere of the mask.
    *
+   * \note If scale or padding for contains test differ from scale or padding for the shadow test,
+   *       the maximum of the two bounding spheres is returned.
    * \note Is only updated during updateBodyPoses().
    */
   bodies::BoundingSphere getBoundingSphere() const;
@@ -195,7 +257,7 @@ public:
    * \sa updateInternalShapeLists()
    */
   void setIgnoreInContainsTest(
-      std::set<point_containment_filter::ShapeHandle> ignoreInContainsTest,
+      std::unordered_set<MultiShapeHandle> ignoreInContainsTest,
       bool updateInternalStructures = true);
 
   /**
@@ -207,31 +269,31 @@ public:
    * \sa updateInternalShapeLists()
    */
   void setIgnoreInShadowTest(
-      std::set<point_containment_filter::ShapeHandle> ignoreInShadowTest,
+      std::unordered_set<MultiShapeHandle> ignoreInShadowTest,
       bool updateInternalStructures = true);
 
   /**
    * \brief Provides the map of shape handle to corresponding body (for all added shapes).
    * \return Map shape_handle->body* .
-   * \note The returned bodies should not be changed.
+   * \note Shapes with scale or padding for contains test different from the scale or padding for
+   *       shadow test, will be represented by two bodies here.
    */
-  std::map<point_containment_filter::ShapeHandle, bodies::Body*> getBodies() const;
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> getBodies() const;
 
   /**
-   * \brief Provides the map of shape handle to corresponding body (for all shapes except those
-   * specified in setIgnoreInContainsTest()).
+   * \brief Provides the map of shape handle to corresponding body for shapes that should be used in
+   *        contains tests.
+   * \return Map shape_handle->body* .
+   */
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> getBodiesForContainsTest() const;
+
+  /**
+   * \brief Provides the map of shape handle to corresponding body for shapes that should be used in
+   *        shadow testing.
    * \return Map shape_handle->body* .
    * \note The returned bodies should not be changed.
    */
-  std::map<point_containment_filter::ShapeHandle, bodies::Body*> getBodiesForContainsTest() const;
-
-  /**
-   * \brief Provides the map of shape handle to corresponding body (for all shapes except those
-   * specified in setIgnoreInShadowTest()).
-   * \return Map shape_handle->body* .
-   * \note The returned bodies should not be changed.
-   */
-  std::map<point_containment_filter::ShapeHandle, bodies::Body*> getBodiesForShadowTest() const;
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> getBodiesForShadowTest() const;
 
 protected:
 
@@ -252,9 +314,6 @@ protected:
    *                  into which transform_callback_ transforms the body parts.
    * \param [out] mask The mask value of the given point.
    * \param [in] sensorPos Position of the sensor in the pointcloud frame.
-   * \param [in] boundingSphereForContainsTest Sphere containing all the shapes
-   *                                           that should be taken into account
-   *                                           during the contains test.
    *
    * \note Contrasting to maskContainmentAndShadows(), this method doesn't
    *       update link poses and expects them to be correctly updated by a prior
@@ -263,8 +322,7 @@ protected:
   void classifyPointNoLock(
       const Eigen::Vector3d& data,
       MaskValue &mask,
-      const Eigen::Vector3d& sensorPos,
-      const bodies::BoundingSphere &boundingSphereForContainsTest);
+      const Eigen::Vector3d& sensorPos);
 
   /**
    * \brief Get the bounding sphere containing all registered shapes.
@@ -282,12 +340,6 @@ protected:
   double minSensorDist; //!< Minimum sensing distance of the sensor.
   double maxSensorDist; //!< Maximum sensing distance of the sensor.
 
-  /** \brief Shapes to be ignored when doing test for INSIDE in maskContainmentAndShadows. */
-  std::set<point_containment_filter::ShapeHandle> ignoreInContainsTest;
-  /** \brief Shapes to be ignored when doing test for SHADOW in maskContainmentAndShadows.
-   *  E.g. the sensor collision shape should be listed here. */
-  std::set<point_containment_filter::ShapeHandle> ignoreInShadowTest;
-
   bool doClipping = true; //!< Classify for CLIP during masking.
   bool doContainsTest = true; //!< Classify for INSIDE during masking.
   bool doShadowTest = true; //!< Classify for SHADOW during masking.
@@ -301,8 +353,21 @@ protected:
    * of this vector correspond to indices in bodies_.
    */
   std::vector<size_t> bspheresBodyIndices;
+
   /** \brief Bounding spheres to be used for classifying INSIDE points. */
   std::vector<bodies::BoundingSphere> bspheresForContainsTest;
+  /**
+   * \brief Contains indices of bodies (as listed in this->bodies_) which correspond to bounding
+   * spheres in this->bspheresForContainsTest. Indices in this vector correspond to indices in
+   * bspheresForContainsTest. Values of this vector correspond to indices in bodies_.
+   */
+  std::vector<size_t> bspheresForContainsTestBodyIndices;
+
+  /** \brief Shapes to be ignored when doing test for INSIDE in maskContainmentAndShadows. */
+  std::unordered_set<MultiShapeHandle> ignoreInContainsTest;
+  /** \brief Shapes to be ignored when doing test for SHADOW in maskContainmentAndShadows.
+   *  E.g. the sensor collision shape should be listed here. */
+  std::unordered_set<MultiShapeHandle> ignoreInShadowTest;
 };
 
 }

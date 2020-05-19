@@ -19,6 +19,9 @@ void computeBoundingBox(const bodies::Box* body, AxisAlignedBoundingBox& bbox);
 void computeBoundingBox(const bodies::Cylinder* body, AxisAlignedBoundingBox& bbox);
 void computeBoundingBox(const bodies::ConvexMesh* body, AxisAlignedBoundingBox& bbox);
 
+/** \brief Compute AABB for the body at different pose. Can't use setPose() because we want `body` to be const. */
+void computeBoundingBoxAt(const bodies::Body* body, AxisAlignedBoundingBox& bbox, const Eigen::Isometry3d& pose);
+
 void computeBoundingBox(const bodies::Body* body, OrientedBoundingBox& bbox);
 void computeBoundingBox(const bodies::Sphere* body, OrientedBoundingBox& bbox);
 void computeBoundingBox(const bodies::Box* body, OrientedBoundingBox& bbox);

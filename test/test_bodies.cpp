@@ -6,9 +6,84 @@
 
 using namespace bodies;
 
+#define EXPECT_VECTORS_EQUAL(v1, v2, error)                                                                            \
+  EXPECT_NEAR((v1)[0], (v2)[0], (error));                                                                              \
+  EXPECT_NEAR((v1)[1], (v2)[1], (error));                                                                              \
+  EXPECT_NEAR((v1)[2], (v2)[2], (error));
+
+class WrongBody : public ::bodies::Body
+{
+  public: WrongBody(const ::shapes::ShapeType type) : Body()
+  {
+    this->type_ = type;
+  }
+
+  std::vector<double> getDimensions() const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  bool containsPoint(const Eigen::Vector3d& p, bool verbose) const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  bool intersectsRay(const Eigen::Vector3d& origin, const Eigen::Vector3d& dir,
+    EigenSTL::vector_Vector3d* intersections, unsigned int count) const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  double computeVolume() const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  void computeBoundingSphere(BoundingSphere& sphere) const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  void computeBoundingCylinder(BoundingCylinder& cylinder) const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  BodyPtr cloneAt(const Eigen::Isometry3d& pose, double padding, double scaling) const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+
+protected:
+  void updateInternalData() override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+  void useDimensions(const shapes::Shape* shape) override
+  {
+    throw std::runtime_error("Should not be called");
+  }
+};
+
+TEST(Bodies, ComputeBoundingBoxWrongBody)
+{
+  AxisAlignedBoundingBox bbox;
+  OrientedBoundingBox obb;
+
+  const auto unknown = WrongBody(::shapes::ShapeType::UNKNOWN_SHAPE);
+  EXPECT_THROW(computeBoundingBox(&unknown, bbox), std::runtime_error);
+  EXPECT_THROW(computeBoundingBox(&unknown, obb), std::runtime_error);
+
+  const auto cone = WrongBody(::shapes::ShapeType::CONE);
+  EXPECT_THROW(computeBoundingBox(&cone, bbox), std::runtime_error);
+  EXPECT_THROW(computeBoundingBox(&cone, obb), std::runtime_error);
+
+  const auto octree = WrongBody(::shapes::ShapeType::OCTREE);
+  EXPECT_THROW(computeBoundingBox(&octree, bbox), std::runtime_error);
+  EXPECT_THROW(computeBoundingBox(&octree, obb), std::runtime_error);
+
+  const auto plane = WrongBody(::shapes::ShapeType::PLANE);
+  EXPECT_THROW(computeBoundingBox(&plane, bbox), std::runtime_error);
+  EXPECT_THROW(computeBoundingBox(&plane, obb), std::runtime_error);
+}
+
 TEST(Bodies, ComputeBoundingBoxSphere)
 {
-  AxisAlignedBoundingBox bbox1, bbox2;
+  AxisAlignedBoundingBox bbox1, bbox2, bbox3;
   OrientedBoundingBox obb1, obb2;
 
   const Eigen::Isometry3d pose = Eigen::Translation3d(1.0, 2.0, 3.0) *
@@ -17,6 +92,9 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   const shapes::Shape* shape = new shapes::Sphere(2.0);
   const auto sphere = new Sphere(shape);
   const auto body = dynamic_cast<Body*>(sphere);
+
+  computeBoundingBoxAt(sphere, bbox3, pose);
+
   body->setPose(pose);
 
   computeBoundingBox(sphere, bbox1);
@@ -27,6 +105,8 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
+  EXPECT_EQ(bbox1.min(), bbox3.min());
+  EXPECT_EQ(bbox1.max(), bbox3.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
@@ -42,11 +122,29 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   EXPECT_DOUBLE_EQ(1.0, obb1.getPose().translation().x());
   EXPECT_DOUBLE_EQ(2.0, obb1.getPose().translation().y());
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
+
+  // we intentionally reuse the non-empty bboxes to check they are zeroed-out
+  computeBoundingBox(static_cast<const bodies::Sphere*>(nullptr), bbox1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
+  computeBoundingBoxAt(static_cast<const bodies::Sphere*>(nullptr), bbox3, pose);
+  computeBoundingBox(static_cast<const bodies::Sphere*>(nullptr), obb1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
+
+  EXPECT_TRUE(bbox1.isEmpty());
+  EXPECT_TRUE(bbox2.isEmpty());
+  EXPECT_TRUE(bbox3.isEmpty());
+  expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+  expectTransformsDoubleEq(obb2.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb2.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+
+  delete sphere;
+  delete shape;
 }
 
 TEST(Bodies, ComputeBoundingBoxBox)
 {
-  AxisAlignedBoundingBox bbox1, bbox2;
+  AxisAlignedBoundingBox bbox1, bbox2, bbox3;
   OrientedBoundingBox obb1, obb2;
 
   const Eigen::Isometry3d pose = Eigen::Translation3d(1.0, 2.0, 3.0) *
@@ -55,6 +153,9 @@ TEST(Bodies, ComputeBoundingBoxBox)
   const shapes::Shape* shape = new shapes::Box(1.0, 2.0, 3.0);
   const auto box = new Box(shape);
   const auto body = dynamic_cast<Body*>(box);
+
+  computeBoundingBoxAt(box, bbox3, pose);
+
   body->setPose(pose);
 
   computeBoundingBox(box, bbox1);
@@ -65,6 +166,8 @@ TEST(Bodies, ComputeBoundingBoxBox)
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
+  EXPECT_EQ(bbox1.min(), bbox3.min());
+  EXPECT_EQ(bbox1.max(), bbox3.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
@@ -81,11 +184,29 @@ TEST(Bodies, ComputeBoundingBoxBox)
   EXPECT_DOUBLE_EQ(1.0, obb1.getPose().translation().x());
   EXPECT_DOUBLE_EQ(2.0, obb1.getPose().translation().y());
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
+
+  // we intentionally reuse the non-empty bboxes to check they are zeroed-out
+  computeBoundingBox(static_cast<const bodies::Box*>(nullptr), bbox1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
+  computeBoundingBoxAt(static_cast<const bodies::Box*>(nullptr), bbox3, pose);
+  computeBoundingBox(static_cast<const bodies::Box*>(nullptr), obb1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
+
+  EXPECT_TRUE(bbox1.isEmpty());
+  EXPECT_TRUE(bbox2.isEmpty());
+  EXPECT_TRUE(bbox3.isEmpty());
+  expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+  expectTransformsDoubleEq(obb2.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb2.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+
+  delete box;
+  delete shape;
 }
 
 TEST(Bodies, ComputeBoundingBoxCylinder)
 {
-  AxisAlignedBoundingBox bbox1, bbox2;
+  AxisAlignedBoundingBox bbox1, bbox2, bbox3;
   OrientedBoundingBox obb1, obb2;
 
   const Eigen::Isometry3d pose = Eigen::Translation3d(1.0, 2.0, 3.0) *
@@ -94,6 +215,9 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   const shapes::Shape* shape = new shapes::Cylinder(2.0, 3.0);
   const auto cylinder = new Cylinder(shape);
   const auto body = dynamic_cast<Body*>(cylinder);
+
+  computeBoundingBoxAt(cylinder, bbox3, pose);
+
   body->setPose(pose);
 
   computeBoundingBox(cylinder, bbox1);
@@ -104,6 +228,8 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
+  EXPECT_EQ(bbox1.min(), bbox3.min());
+  EXPECT_EQ(bbox1.max(), bbox3.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
@@ -121,11 +247,29 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   EXPECT_DOUBLE_EQ(1.0, obb1.getPose().translation().x());
   EXPECT_DOUBLE_EQ(2.0, obb1.getPose().translation().y());
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
+
+  // we intentionally reuse the non-empty bboxes to check they are zeroed-out
+  computeBoundingBox(static_cast<const bodies::Cylinder*>(nullptr), bbox1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
+  computeBoundingBoxAt(static_cast<const bodies::Cylinder*>(nullptr), bbox3, pose);
+  computeBoundingBox(static_cast<const bodies::Cylinder*>(nullptr), obb1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
+
+  EXPECT_TRUE(bbox1.isEmpty());
+  EXPECT_TRUE(bbox2.isEmpty());
+  EXPECT_TRUE(bbox3.isEmpty());
+  expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+  expectTransformsDoubleEq(obb2.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb2.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+
+  delete cylinder;
+  delete shape;
 }
 
 TEST(Bodies, ComputeBoundingBoxConvexMesh)
 {
-  AxisAlignedBoundingBox bbox1, bbox2;
+  AxisAlignedBoundingBox bbox1, bbox2, bbox3;
   OrientedBoundingBox obb1, obb2;
 
   const Eigen::Isometry3d pose = Eigen::Translation3d(1.0, 2.0, 3.0) *
@@ -136,6 +280,9 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
       "package://robot_body_filter/test/box.dae");
   const auto mesh = new ConvexMesh(shape);
   const auto body = dynamic_cast<Body*>(mesh);
+
+  computeBoundingBoxAt(mesh, bbox3, pose);
+
   body->setPose(pose);
 
   computeBoundingBox(mesh, bbox1);
@@ -146,6 +293,8 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
   EXPECT_EQ(bbox1.max(), bbox2.max());
+  EXPECT_EQ(bbox1.min(), bbox3.min());
+  EXPECT_EQ(bbox1.max(), bbox3.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
@@ -183,6 +332,24 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
   EXPECT_DOUBLE_EQ(1.0, obb1.getPose().translation().x());
   EXPECT_DOUBLE_EQ(2.0, obb1.getPose().translation().y());
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
+
+  // we intentionally reuse the non-empty bboxes to check they are zeroed-out
+  computeBoundingBox(static_cast<const bodies::ConvexMesh*>(nullptr), bbox1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
+  computeBoundingBoxAt(static_cast<const bodies::ConvexMesh*>(nullptr), bbox3, pose);
+  computeBoundingBox(static_cast<const bodies::ConvexMesh*>(nullptr), obb1);
+  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
+
+  EXPECT_TRUE(bbox1.isEmpty());
+  EXPECT_TRUE(bbox2.isEmpty());
+  EXPECT_TRUE(bbox3.isEmpty());
+  expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+  expectTransformsDoubleEq(obb2.getPose(), Eigen::Isometry3d::Identity());
+  EXPECT_VECTORS_EQUAL(obb2.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
+
+  delete mesh;
+  delete shape;
 }
 
 TEST(Bodies, MergeAABBs)
@@ -226,6 +393,23 @@ TEST(Bodies, MergeOBBs)
   EXPECT_DOUBLE_EQ(0.0, mergedBbox.getPose().translation().x());
   EXPECT_DOUBLE_EQ(0.0, mergedBbox.getPose().translation().y());
   EXPECT_DOUBLE_EQ(0.0, mergedBbox.getPose().translation().z());
+}
+
+TEST(Bodies, ConstructShapeFromBodyWrong)
+{
+  EXPECT_EQ(shapes::ShapePtr(), constructShapeFromBody(nullptr));
+
+  const auto unknown = WrongBody(::shapes::ShapeType::UNKNOWN_SHAPE);
+  EXPECT_EQ(shapes::ShapePtr(), constructShapeFromBody(&unknown));
+
+  const auto cone = WrongBody(::shapes::ShapeType::CONE);
+  EXPECT_EQ(shapes::ShapePtr(), constructShapeFromBody(&cone));
+
+  const auto octree = WrongBody(::shapes::ShapeType::OCTREE);
+  EXPECT_EQ(shapes::ShapePtr(), constructShapeFromBody(&octree));
+
+  const auto plane = WrongBody(::shapes::ShapeType::PLANE);
+  EXPECT_EQ(shapes::ShapePtr(), constructShapeFromBody(&plane));
 }
 
 TEST(Bodies, ConstructShapeFromBodySphere)
@@ -436,11 +620,6 @@ TEST(Bodies, ConstructMarkerFromBodyMesh)
 // The following tests are from https://github.com/ros-planning/geometric_shapes/pull/109,
 // they're just edited so that they use the implementation from bodies::intersectsRay
 
-#define EXPECT_VECTORS_EQUAL(v1, v2, error)                                                                            \
-  EXPECT_NEAR((v1)[0], (v2)[0], (error));                                                                              \
-  EXPECT_NEAR((v1)[1], (v2)[1], (error));                                                                              \
-  EXPECT_NEAR((v1)[2], (v2)[2], (error));
-
 #define CHECK_NO_INTERSECTION(body, origin, direction)                                                                 \
   {                                                                                                                    \
     EigenSTL::vector_Vector3d intersections;                                                                           \
@@ -499,6 +678,8 @@ TEST(SphereRay, OriginInside)
 {
   shapes::Sphere shape(1.0);
   bodies::Sphere sphere(&shape);
+
+  EXPECT_FALSE(intersectsRay(nullptr, {0, 0, 0}, {1, 0, 0}));
 
   // clang-format off
   CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 1,  0,  0), ( 1,  0,  0), 1e-6)

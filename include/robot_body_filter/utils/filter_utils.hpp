@@ -3,8 +3,10 @@
 
 #include <rosconsole/macros_generated.h>
 #include <filters/filter_base.h>
+#include <map>
 
 #include "robot_body_filter/utils/string_utils.hpp"
+#include "robot_body_filter/utils/xmlrpc_traits.h"
 
 namespace robot_body_filter
 {
@@ -14,6 +16,9 @@ class FilterBase : public filters::FilterBase<F>
 {
 
 protected:
+
+  /** \brief Type of function that converts anything to a string. */
+  template <typename T> using ToStringFn = std::string (*)(const T&);
 
   /**
    * \brief Get the value of the given filter parameter, falling back to the
@@ -27,18 +32,27 @@ protected:
    * \param defaultValue The default value to use.
    * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
    *             messages more informative.
+   * \param defaultUsed Whether the default value was used.
+   * \param valueToStringFn Function that converts valid/default values to string (for console
+   *             logging). Set to nullptr to disable logging.
    * \return The loaded param value.
    */
   template< typename T>
   T getParamVerbose(const std::string &name, const T &defaultValue = T(),
-             const std::string &unit = "")
+             const std::string &unit = "", bool* defaultUsed = nullptr,
+             ToStringFn<T> valueToStringFn = &to_string)
   {
     T value;
     if (filters::FilterBase<F>::getParam(name, value))
     {
-      ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
-        ", value: " << to_string(value) <<
-        prependIfNonEmpty(unit, " "));
+      if (valueToStringFn != nullptr)
+      {
+        ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
+                                        ", value: " << valueToStringFn(value) <<
+                                        prependIfNonEmpty(unit, " "));
+      }
+      if (defaultUsed != nullptr)
+        *defaultUsed = false;
       return value;
     }
 
@@ -57,7 +71,7 @@ protected:
           if (val.hasMember(tail))
           {
             filters::FilterBase<F>::params_[name] = val[tail];
-            return this->getParamVerbose(name, defaultValue, unit);
+            return this->getParamVerbose(name, defaultValue, unit, defaultUsed, valueToStringFn);
           } else {
             slashPos = tail.find_first_of('/', 1);
             if (slashPos == std::string::npos)
@@ -75,9 +89,15 @@ protected:
       }
     }
 
-    ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
-      << name << ", assigning default: " << to_string(defaultValue)
-      << prependIfNonEmpty(unit, " "));
+    if (valueToStringFn != nullptr)
+    {
+      ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
+                                      << name << ", assigning default: "
+                                      << valueToStringFn(defaultValue)
+                                      << prependIfNonEmpty(unit, " "));
+    }
+    if (defaultUsed != nullptr)
+      *defaultUsed = true;
     return defaultValue;
   }
 
@@ -94,9 +114,10 @@ protected:
    * \return The loaded param value.
    */
   std::string getParamVerbose(const std::string &name, const char* defaultValue,
-                              const std::string &unit = "")
+                              const std::string &unit = "", bool* defaultUsed = nullptr,
+                              ToStringFn<std::string> valueToStringFn = &to_string)
   {
-    return this->getParamVerbose(name, std::string(defaultValue), unit);
+    return this->getParamVerbose(name, std::string(defaultValue), unit, defaultUsed, valueToStringFn);
   }
 
 
@@ -117,9 +138,11 @@ protected:
    * \throw std::invalid_argument If the loaded value is negative.
    */
   uint64_t getParamVerbose(const std::string &name, const uint64_t &defaultValue,
-                           const std::string &unit = "")
+                           const std::string &unit = "", bool* defaultUsed = nullptr,
+                           ToStringFn<int> valueToStringFn = &to_string)
   {
-    return this->getParamUnsigned<uint64_t, int>(name, defaultValue, unit);
+    return this->getParamUnsigned<uint64_t, int>(name, defaultValue, unit, defaultUsed,
+        valueToStringFn);
   }
 
   // there actually is an unsigned int implementation of FilterBase::getParam,
@@ -140,9 +163,12 @@ protected:
    */
   unsigned int getParamVerbose(const std::string &name,
                                const unsigned int &defaultValue,
-                               const std::string &unit = "")
+                               const std::string &unit = "",
+                               bool* defaultUsed = nullptr,
+                               ToStringFn<int> valueToStringFn = &to_string)
   {
-    return this->getParamUnsigned<unsigned int, int>(name, defaultValue, unit);
+    return this->getParamUnsigned<unsigned int, int>(name, defaultValue, unit, defaultUsed,
+        valueToStringFn);
   }
 
   // ROS types specializations
@@ -161,16 +187,18 @@ protected:
    */
   ros::Duration getParamVerbose(const std::string &name,
                                 const ros::Duration &defaultValue,
-                                const std::string &unit = "")
+                                const std::string &unit = "",
+                                bool* defaultUsed = nullptr,
+                                ToStringFn<double> valueToStringFn = &to_string)
   {
-    return this->getParamCast<ros::Duration, double>(name, defaultValue.toSec(),
-      unit);
+    return this->getParamCast<ros::Duration, double>(name, defaultValue.toSec(), unit, defaultUsed,
+        valueToStringFn);
   }
 
   /** \brief Get the value of the given filter parameter as a set of strings, falling back to the
    *        specified default value, and print out a ROS info/warning message with
    *        the loaded values.
-   * \tparam Foo Ignored. Just needed for compilation to succeed.
+   * \tparam T Type of the values in the set. Only std::string and double are supported.
    * \param name Name of the parameter. If the name contains slashes and the full name is not found,
    *             a "recursive" search is tried using the parts of the name separated by slashes.
    *             This is useful if the filter config isn't loaded via a filterchain config, but via
@@ -179,31 +207,114 @@ protected:
    * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
    *             messages more informative.
    * \return The loaded param value.
-   * \throw std::invalid_argument If the loaded value is negative.
    */
-  template<typename Foo>
-  std::set<std::string> getParamVerboseSet(
+  template<typename T>
+  std::set<T> getParamVerboseSet(
       const std::string &name,
-      const std::set<std::string> &defaultValue = std::set<std::string>(),
-      const std::string &unit = "")
+      const std::set<T> &defaultValue = std::set<T>(),
+      const std::string &unit = "",
+      bool* defaultUsed = nullptr,
+      ToStringFn<std::vector<T>> valueToStringFn = &to_string)
   {
-    std::vector<std::string> vector(defaultValue.begin(), defaultValue.end());
-    vector = this->getParamVerbose(name, vector, unit);
-    return std::set<std::string>(vector.begin(), vector.end());
+    std::vector<T> vector(defaultValue.begin(), defaultValue.end());
+    vector = this->getParamVerbose(name, vector, unit, defaultUsed, valueToStringFn);
+    return std::set<T>(vector.begin(), vector.end());
+  }
+
+  template<typename T, typename MapType=std::map<std::string, T>>
+  MapType getParamVerboseMap(
+      const std::string &name,
+      const std::map<std::string, T> &defaultValue = std::map<std::string, T>(),
+      const std::string &unit = "",
+      bool* defaultUsed = nullptr,
+      ToStringFn<MapType> valueToStringFn = &to_string)
+  {
+    // convert default value to XmlRpc so that we can utilize FilterBase::getParam(XmlRpcValue).
+    XmlRpc::XmlRpcValue defaultValueXmlRpc;
+    defaultValueXmlRpc.begin(); // calls assertStruct() which mutates this value into a struct
+    for (const auto& val : defaultValue)
+      defaultValueXmlRpc[val.first] = val.second;
+
+    // get the param value as a XmlRpcValue
+    bool innerDefaultUsed;
+    auto valueXmlRpc = this->getParamVerbose(name, defaultValueXmlRpc, unit, &innerDefaultUsed,
+                                             (ToStringFn<XmlRpc::XmlRpcValue>)nullptr);
+
+    // convert to map
+    MapType value;
+    bool hasWrongTypeItems = false;
+    for (auto& pairXmlRpc : valueXmlRpc)
+    {
+      if (pairXmlRpc.second.getType() == XmlRpcTraits<T>::xmlRpcType)
+      {
+        value[pairXmlRpc.first] = pairXmlRpc.second.operator T&();
+      }
+      else if (XmlRpcTraits<T>::xmlRpcType == XmlRpc::XmlRpcValue::TypeDouble && pairXmlRpc.second.getType() == XmlRpc::XmlRpcValue::TypeInt)
+      {
+        // special handling of the case when doubles are expected but an int is provided
+        value[pairXmlRpc.first] = static_cast<T>(pairXmlRpc.second.operator int&());
+      }
+      else
+      {
+        ROS_WARN_STREAM(this->getName() << ": Invalid value for dict parameter " << name
+          << " key " << pairXmlRpc.first << ". Expected XmlRpc type " << XmlRpcTraits<T>::stringType
+          << ", got type: " << to_string(pairXmlRpc.second.getType()) << ". Skipping value.");
+        hasWrongTypeItems = true;
+      }
+    }
+
+    if (value.empty() && hasWrongTypeItems)
+    {
+      value = defaultValue;
+      if (defaultUsed != nullptr)
+        *defaultUsed = true;
+      if (valueToStringFn != nullptr)
+      {
+        ROS_ERROR_STREAM(this->getName() << ": Dict parameter " << name
+                                         << " got only invalid types of values, assigning default: "
+                                         << valueToStringFn(defaultValue)
+                                         << prependIfNonEmpty(unit, " "));
+      }
+    } else {
+      if (defaultUsed != nullptr)
+        *defaultUsed = innerDefaultUsed;
+      if (valueToStringFn != nullptr)
+      {
+        if (innerDefaultUsed)
+        {
+          ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
+                                          << name << ", assigning default: "
+                                          << valueToStringFn(defaultValue)
+                                          << prependIfNonEmpty(unit, " "));
+        }
+        else
+        {
+          ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
+                                          ", value: " << valueToStringFn(value) <<
+                                          prependIfNonEmpty(unit, " "));
+        }
+      }
+    }
+
+    return value;
   }
 
 private:
 
   template<typename Result, typename Param>
   Result getParamUnsigned(const std::string &name, const Result &defaultValue,
-                          const std::string &unit = "")
+                          const std::string &unit = "", bool* defaultUsed = nullptr,
+                          ToStringFn<Param> valueToStringFn = &to_string)
   {
-    const Param signedValue = this->getParamVerbose(name,
-      static_cast<Param>(defaultValue), unit);
+    const Param signedValue = this->getParamVerbose(name, static_cast<Param>(defaultValue), unit,
+        defaultUsed, valueToStringFn);
     if (signedValue < 0)
     {
-      ROS_ERROR_STREAM(this->getName() << ": Value " << signedValue <<
-        " of unsigned parameter " << name << " is negative.");
+      if (valueToStringFn != nullptr)
+      {
+        ROS_ERROR_STREAM(this->getName() << ": Value " << valueToStringFn(signedValue) <<
+                                         " of unsigned parameter " << name << " is negative.");
+      }
       throw std::invalid_argument(name);
     }
     return static_cast<Result>(signedValue);
@@ -212,9 +323,11 @@ private:
   // generic casting getParam()
   template<typename Result, typename Param>
   Result getParamCast(const std::string &name, const Param &defaultValue,
-                      const std::string &unit = "")
+                      const std::string &unit = "", bool* defaultUsed = nullptr,
+                      ToStringFn<Param> valueToStringFn = &to_string)
   {
-    const Param paramValue = this->getParamVerbose(name, defaultValue, unit);
+    const Param paramValue = this->getParamVerbose(name, defaultValue, unit, defaultUsed,
+        valueToStringFn);
     return Result(paramValue);
   }
 

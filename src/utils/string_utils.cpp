@@ -44,4 +44,42 @@ std::string appendIfNonEmpty(const std::string &str, const std::string &suffix)
   return str.empty() ? str : str + suffix;
 }
 
+bool startsWith(const std::string &str, const std::string &prefix)
+{
+  if (prefix.empty())
+    return true; // special case
+  if (str.length() < prefix.length())
+    return false;
+
+  return std::mismatch(prefix.cbegin(), prefix.cend(), str.cbegin()).first == prefix.cend();
+}
+
+bool endsWith(const std::string &str, const std::string &suffix)
+{
+  if (suffix.empty())
+    return true; // special case
+  if (str.length() < suffix.length())
+    return false;
+
+  return std::mismatch(suffix.crbegin(), suffix.crend(), str.crbegin()).first == suffix.crend();
+}
+
+std::string removePrefix(const std::string &str, const std::string &prefix, bool *hadPrefix)
+{
+  const auto hasPrefix = startsWith(str, prefix);
+  if (hadPrefix != nullptr)
+    *hadPrefix = hasPrefix;
+
+  return hasPrefix ? str.substr(prefix.length()) : str;
+}
+
+std::string removeSuffix(const std::string &str, const std::string &suffix, bool *hadSuffix)
+{
+  const auto hasSuffix = endsWith(str, suffix);
+  if (hadSuffix != nullptr)
+    *hadSuffix = hasSuffix;
+
+  return hasSuffix ? str.substr(0, str.length() - suffix.length()) : str;
+}
+
 };

@@ -47,6 +47,55 @@ void computeBoundingBox(const bodies::Body *body, AxisAlignedBoundingBox &bbox)
   }
 }
 
+void computeBoundingBoxAt(const bodies::Body *body,
+                        AxisAlignedBoundingBox &bbox,
+                        const Eigen::Isometry3d &pose)
+{
+  bbox.setEmpty();
+
+  if (body == nullptr)
+    return;
+
+  switch (body->getType()) {
+    case shapes::SPHERE:
+      {
+        bodies::Sphere copy(*dynamic_cast<const bodies::Sphere*>(body));
+        copy.setPose(pose);
+        computeBoundingBox(&copy, bbox);
+      }
+      break;
+    case shapes::CYLINDER:
+      {
+        bodies::Cylinder copy(*dynamic_cast<const bodies::Cylinder*>(body));
+        copy.setPose(pose);
+        computeBoundingBox(&copy, bbox);
+      }
+      break;
+    case shapes::BOX:
+      {
+        bodies::Box copy(*dynamic_cast<const bodies::Box*>(body));
+        copy.setPose(pose);
+        computeBoundingBox(&copy, bbox);
+      }
+      break;
+    case shapes::MESH:
+      {
+        // TODO this makes dynamic allocations for the ConvexMesh object, though mesh data are
+        // shallow-copied, so performance shouldn't be that bad.
+        // ConvexMesh doesn't allow copy-construction as the other bodies because it contains
+        // a unique_ptr.
+        const auto copy = body->cloneAt(pose);
+        computeBoundingBox(copy.get(), bbox);
+      }
+      break;
+    case shapes::PLANE:
+    case shapes::CONE:
+    case shapes::UNKNOWN_SHAPE:
+    case shapes::OCTREE:
+      throw std::runtime_error("Unsupported geometric body type.");
+  }
+}
+
 void computeBoundingBox(const bodies::Box *body, AxisAlignedBoundingBox &bbox)
 {
   bbox.setEmpty();
@@ -121,6 +170,9 @@ shapes::ShapeConstPtr constructShapeFromBody(const bodies::Body* body)
 {
   shapes::ShapePtr result;
 
+  if (body == nullptr)
+    return result;
+
   switch (body->getType()) {
     case shapes::SPHERE: {
       bodies::BoundingSphere sphere;
@@ -173,7 +225,10 @@ void constructMarkerFromBody(const bodies::Body* body,
 void computeBoundingBox(const bodies::Body *body,
                                 OrientedBoundingBox &bbox) {
   if (body == nullptr)
+  {
+    bbox = OBB();
     return;
+  }
 
   switch (body->getType()) {
 
@@ -200,6 +255,12 @@ void computeBoundingBox(const bodies::Body *body,
 
 void computeBoundingBox(const bodies::Sphere *body,
                                 OrientedBoundingBox &bbox) {
+  if (body == nullptr)
+  {
+    bbox = OBB();
+    return;
+  }
+
   // it's a sphere, so we do not rotate the bounding box
   Eigen::Isometry3d transform = Eigen::Isometry3d::Identity();
   transform.translation() = body->getPose().translation();
@@ -209,16 +270,34 @@ void computeBoundingBox(const bodies::Sphere *body,
 
 void computeBoundingBox(const bodies::Box *body,
                                 OrientedBoundingBox &bbox) {
+  if (body == nullptr)
+  {
+    bbox = OBB();
+    return;
+  }
+
   bbox.setPoseAndExtents(body->getPose(), 2 * Eigen::Vector3d(body->length2_, body->width2_, body->height2_));
 }
 
 void computeBoundingBox(const bodies::Cylinder *body,
                                 OrientedBoundingBox &bbox) {
+  if (body == nullptr)
+  {
+    bbox = OBB();
+    return;
+  }
+
   bbox.setPoseAndExtents(body->getPose(), 2 * Eigen::Vector3d(body->radiusU_, body->radiusU_, body->length2_));
 }
 
 void computeBoundingBox(const bodies::ConvexMesh *body,
                                 OrientedBoundingBox &bbox) {
+  if (body == nullptr)
+  {
+    bbox = OBB();
+    return;
+  }
+
   computeBoundingBox(&body->bounding_box_, bbox);
 }
 
@@ -226,6 +305,9 @@ bool intersectsRayBox(const bodies::Box *box, const Eigen::Vector3d &origin,
                    const Eigen::Vector3d &dir,
                    EigenSTL::vector_Vector3d *intersections,
                    unsigned int count) {
+  if (box == nullptr)
+    return false;
+
   const Eigen::Vector3d tmp(box->length2_, box->width2_, box->height2_);
   const Eigen::Vector3d corner1 = box->center_ - tmp;
   const Eigen::Vector3d corner2 = box->center_ + tmp;
