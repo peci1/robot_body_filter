@@ -1,12 +1,3 @@
-/* HACK HACK HACK */
-/* We want to subclass ShapeMask and use its members. */
-// Upstream solution proposed in https://github.com/ros-planning/moveit/pull/1457
-#include <sstream>  // has to be there, otherwise we encounter build problems
-#define private protected
-#include <moveit/point_containment_filter/shape_mask.h>
-#undef private
-/* HACK END HACK */
-
 #include <robot_body_filter/RayCastingShapeMask.h>
 
 #include <geometric_shapes/body_operations.h>
