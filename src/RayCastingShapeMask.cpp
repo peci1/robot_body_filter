@@ -228,7 +228,7 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
     for (const auto &seeShape : this->data->bodiesForShadowTest) {
       // get the 1st intersection of ray pt->sensor
       intersections.clear(); // intersectsRay doesn't clear the vector...
-      if (bodies::intersectsRay(seeShape.body, data, dir, &intersections, 1)) {
+      if (seeShape.body->intersectsRay(data, dir, &intersections, 1)) {
         // is the intersection between point and sensor?
         if (dir.dot(sensorPos - intersections[0]) >= 0.0) {
           mask = MaskValue::SHADOW;
