@@ -44,6 +44,22 @@ std::string prependIfNonEmpty(const std::string &str, const std::string &prefix)
  */
 std::string appendIfNonEmpty(const std::string &str, const std::string &suffix);
 
+/**
+ * \brief Check whether `prefix` is a prefix of `str`.
+ * \param str The string to be searched in.
+ * \param prefix The string to be found in `str`.
+ * \return Whether `prefix` is a prefix of `str`.
+ */
+bool startsWith(const std::string& str, const std::string& prefix);
+
+/**
+ * \brief Check whether `suffix` is a suffix of `str`.
+ * \param str The string to be searched in.
+ * \param suffix The string to be found in `str`.
+ * \return Whether `suffix` is a suffix of `str`.
+ */
+bool endsWith(const std::string& str, const std::string& suffix);
+
 template<typename T>
 inline std::string to_string(const T &value)
 {

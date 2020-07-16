@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.2)
 project(robot_body_filter)
 
 set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -44,22 +44,26 @@ add_library(${PROJECT_NAME}_utils
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
   src/utils/tf2_eigen.cpp
-  src/utils/tf2_sensor_msgs.cpp
   src/utils/time_utils.cpp
 )
 target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES} ${PCL_LIBRARIES})
+
+add_library(tf2_sensor_msgs_rbf src/utils/tf2_sensor_msgs.cpp)
+target_link_libraries(tf2_sensor_msgs_rbf PRIVATE ${PROJECT_NAME}_utils PUBLIC ${catkin_LIBRARIES})
+add_dependencies(tf2_sensor_msgs_rbf ${catkin_EXPORTED_TARGETS})
+target_compile_options(tf2_sensor_msgs_rbf PRIVATE -march=native)
 
 add_library(${PROJECT_NAME}
   src/RobotBodyFilter.cpp
   src/TFFramesWatchdog.cpp
   src/RayCastingShapeMask.cpp)
-target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_utils tf2_sensor_msgs_rbf ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
-install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_utils
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_utils tf2_sensor_msgs_rbf
    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
@@ -98,7 +102,7 @@ if (CATKIN_ENABLE_TESTING)
   target_link_libraries(test_cloud ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_tf2_sensor_msgs test/test_tf2_sensor_msgs.cpp)
-  target_link_libraries(test_tf2_sensor_msgs ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+  target_link_libraries(test_tf2_sensor_msgs tf2_sensor_msgs_rbf ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_obb test/test_obb.cpp)
   target_link_libraries(test_obb ${PROJECT_NAME}_utils ${catkin_LIBRARIES})

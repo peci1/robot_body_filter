@@ -100,9 +100,10 @@ TEST(TF2SensorMsgs, CreateFilteredCloudUnorganized)
   EXPECT_NEAR(*it_out_y, *it_out_vp_y, 1e-6);
   EXPECT_NEAR(*it_out_z, *it_out_vp_z, 1e-6);
 
-  EXPECT_NEAR(*it_out_x, *it_out_normal_x, 1e-6);
-  EXPECT_NEAR(*it_out_y, *it_out_normal_y, 1e-6);
-  EXPECT_NEAR(*it_out_z, *it_out_normal_z, 1e-6);
+  // should be rotated as vector, not as a point
+  EXPECT_NEAR(-3, *it_out_normal_x, 1e-6);
+  EXPECT_NEAR(2, *it_out_normal_y, 1e-6);
+  EXPECT_NEAR(1, *it_out_normal_z, 1e-6);
 
   EXPECT_EQ(0, *it_out_r);
   EXPECT_EQ(128, *it_out_g);
