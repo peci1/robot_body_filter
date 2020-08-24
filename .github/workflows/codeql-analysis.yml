@@ -37,16 +37,16 @@ jobs:
         languages: cpp
 
     - run: | 
-        apt-get update
-        echo 'Etc/UTC' > /etc/timezone && ln -s /usr/share/zoneinfo/Etc/UTC /etc/localtime && apt-get install -q -y --no-install-recommends tzdata
-        apt-get install -q -y --no-install-recommends dirmngr gnupg2
-        apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
-        echo "deb http://packages.ros.org/ros/ubuntu bionic main" > /etc/apt/sources.list.d/ros1-latest.list
-        apt-get update
-        apt-get install -y --no-install-recommends ros-melodic-ros-base build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
-        rosdep init && rosdep update --rosdistro melodic
+        sudo apt-get update
+        echo 'Etc/UTC' | sudo tee /etc/timezone && sudo ln -s /usr/share/zoneinfo/Etc/UTC /etc/localtime && sudo apt-get install -y --no-install-recommends tzdata
+        sudo apt-get install -y --no-install-recommends dirmngr gnupg2
+        sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+        echo "deb http://packages.ros.org/ros/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/ros1-latest.list
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends ros-melodic-ros-base build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
+        sudo rosdep init && sudo rosdep update --rosdistro melodic
         cd /home/runner/target_ws
-        rosdep install -q --from-paths src --ignore-src -y
+        sudo rosdep install -q --from-paths src --ignore-src -y
         catkin init
         catkin build
 
