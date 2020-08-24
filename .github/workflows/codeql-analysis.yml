@@ -13,6 +13,9 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-18.04
+    env:
+      GITHUB_WORKSPACE: /home/runner/target_ws/src
+      ROS_DISTRO: melodic
 
     steps:
     - name: Checkout repository
@@ -33,12 +36,19 @@ jobs:
       with:
         languages: cpp
 
-    - uses: 'ros-industrial/industrial_ci@master'
-      env:
-        ROS_DISTRO: melodic
-        ROS_REPO: main
-        NOT_TEST_BUILD: true
-        NOT_TEST_DOWNSTREAM: true
+    - run: | 
+        apt-get update
+        echo 'Etc/UTC' > /etc/timezone && ln -s /usr/share/zoneinfo/Etc/UTC /etc/localtime && apt-get install -q -y --no-install-recommends tzdata
+        apt-get install -q -y --no-install-recommends dirmngr gnupg2
+        apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+        echo "deb http://packages.ros.org/ros/ubuntu bionic main" > /etc/apt/sources.list.d/ros1-latest.list
+        apt-get update
+        apt-get install -y --no-install-recommends ros-melodic-ros-base build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
+        rosdep init && rosdep update --rosdistro melodic
+        cd /home/runner/target_ws
+        rosdep install -q --from-paths src --ignore-src -y
+        catkin init
+        catkin build
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
