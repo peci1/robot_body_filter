@@ -13,9 +13,7 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-18.04
-    env:
-      ROS_DISTRO: melodic
-
+    
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -48,6 +46,8 @@ jobs:
         sudo rosdep init && sudo rosdep update --rosdistro melodic
         
     - name: Build package
+      env:
+        ROS_DISTRO: melodic
       run: |
         cd $GITHUB_WORKSPACE
         sudo rosdep install -q --from-paths src --ignore-src -y
