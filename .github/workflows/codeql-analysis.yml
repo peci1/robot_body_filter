@@ -21,6 +21,7 @@ jobs:
         # We must fetch at least the immediate parents so that if this is
         # a pull request then we can checkout the head.
         fetch-depth: 2
+        path: src/robot_body_filter
 
     # If this run was triggered by a pull request event, then checkout
     # the head of the pull request instead of the merge commit.
@@ -41,16 +42,8 @@ jobs:
         sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
         echo "deb http://packages.ros.org/ros/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/ros1-latest.list
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends ros-melodic-ros-base build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
+        sudo apt-get install -y --no-install-recommends ros-melodic-ros-core build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
         sudo rosdep init && sudo rosdep update --rosdistro melodic
-    
-    - name: Prepare workspace
-      run: |
-        cd $GITHUB_WORKSPACE
-        pkg=$(basename "$(pwd)")
-        cd ..
-        mkdir src
-        mv "$pkg" src/
     
     - name: Install package dependencies
       run: |
