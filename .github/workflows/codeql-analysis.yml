@@ -47,7 +47,7 @@ jobs:
     - name: Prepare workspace
       run: |
         cd $GITHUB_WORKSPACE
-        pkg=$(dirname "$(pwd)")
+        pkg=$(basename "$(pwd)")
         cd ..
         mkdir src
         mv "$pkg" src/
