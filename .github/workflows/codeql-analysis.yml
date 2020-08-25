@@ -21,7 +21,6 @@ jobs:
         # We must fetch at least the immediate parents so that if this is
         # a pull request then we can checkout the head.
         fetch-depth: 2
-        path: src/
 
     # If this run was triggered by a pull request event, then checkout
     # the head of the pull request instead of the merge commit.
@@ -44,13 +43,25 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends ros-melodic-ros-base build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
         sudo rosdep init && sudo rosdep update --rosdistro melodic
+    
+    - name: Prepare workspace
+      run: |
+        cd $GITHUB_WORKSPACE
+        pkg=$(dirname "$(pwd)")
+        cd ..
+        mkdir src
+        mv "$pkg" src/
+    
+    - name: Install package dependencies
+      run: |
+        sudo rosdep install -q --from-paths src --ignore-src -y --rosdistro melodic
         
     - name: Build package
       run: |
-        cd $GITHUB_WORKSPACE
-        sudo rosdep install -q --from-paths src --ignore-src -y --rosdistro melodic
+        source /opt/ros/melodic/setup.bash
         catkin init
-        ROS_DISTRO=melodic catkin build
+        catkin config --install
+        catkin build --summarize --no-status
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
