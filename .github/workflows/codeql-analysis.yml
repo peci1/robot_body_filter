@@ -46,13 +46,11 @@ jobs:
         sudo rosdep init && sudo rosdep update --rosdistro melodic
         
     - name: Build package
-      env:
-        ROS_DISTRO: melodic
       run: |
         cd $GITHUB_WORKSPACE
-        sudo rosdep install -q --from-paths src --ignore-src -y
+        sudo rosdep install -q --from-paths src --ignore-src -y --rosdistro melodic
         catkin init
-        catkin build
+        ROS_DISTRO=melodic catkin build
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
