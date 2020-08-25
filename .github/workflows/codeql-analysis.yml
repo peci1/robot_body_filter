@@ -52,7 +52,7 @@ jobs:
       run: |
         source /opt/ros/melodic/setup.bash
         catkin init
-        catkin config -s .. -b ../../build -d ../../devel -i ../../install -l ../../log --install
+        catkin config -s .. -b ../../build -d ../../devel -i ../../install --install
         catkin build --summarize --no-status
 
     - name: Perform CodeQL Analysis
