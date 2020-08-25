@@ -14,7 +14,6 @@ jobs:
     name: Analyze
     runs-on: ubuntu-18.04
     env:
-      GITHUB_WORKSPACE: /home/runner/target_ws/src
       ROS_DISTRO: melodic
 
     steps:
@@ -24,6 +23,7 @@ jobs:
         # We must fetch at least the immediate parents so that if this is
         # a pull request then we can checkout the head.
         fetch-depth: 2
+        path: src/
 
     # If this run was triggered by a pull request event, then checkout
     # the head of the pull request instead of the merge commit.
@@ -36,7 +36,8 @@ jobs:
       with:
         languages: cpp
 
-    - run: | 
+    - name: Prepare ROS
+      run: | 
         sudo apt-get update
         echo 'Etc/UTC' | sudo tee /etc/timezone && sudo ln -s /usr/share/zoneinfo/Etc/UTC /etc/localtime && sudo apt-get install -y --no-install-recommends tzdata
         sudo apt-get install -y --no-install-recommends dirmngr gnupg2
@@ -45,7 +46,10 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends ros-melodic-ros-base build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
         sudo rosdep init && sudo rosdep update --rosdistro melodic
-        cd /home/runner/target_ws
+        
+    - name: Build package
+      run: |
+        cd $GITHUB_WORKSPACE
         sudo rosdep install -q --from-paths src --ignore-src -y
         catkin init
         catkin build
