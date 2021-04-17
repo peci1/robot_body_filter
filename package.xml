@@ -1,4 +1,4 @@
-<package format="2">
+<package format="3">
   <name>robot_body_filter</name>
   <version>1.1.8</version>
 
@@ -36,8 +36,10 @@
   <build_export_depend>message_runtime</build_export_depend>
   <exec_depend>message_runtime</exec_depend>
 
-  <build_depend>libfcl-dev</build_depend>
-  <exec_depend>libfcl-dev</exec_depend>
+  <build_depend condition="$ROS_DISTRO != noetic">libfcl-dev</build_depend>
+  <exec_depend condition="$ROS_DISTRO != noetic">libfcl-dev</exec_depend>
+  <build_depend condition="$ROS_DISTRO == noetic">fcl</build_depend>
+  <exec_depend condition="$ROS_DISTRO == noetic">fcl</exec_depend>
 
   <build_depend>pcl_conversions</build_depend>
   <exec_depend>pcl_conversions</exec_depend>
