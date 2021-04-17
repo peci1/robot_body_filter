@@ -36,6 +36,7 @@ OBB::OBB(const OBB& other) : OBB()
 OBB& OBB::operator=(const OBB& other)
 {
   *obb_ = *other.obb_;
+  return *this;
 }
 
 OBB::OBB( const Eigen::Isometry3d& pose, const Eigen::Vector3d& extents) : OBB()

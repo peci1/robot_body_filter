@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(robot_body_filter)
 
 set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -36,17 +36,21 @@ catkin_package(
 include_directories(SYSTEM ${LIBFCL_INCLUDE_DIRS})
 include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 
-add_library(${PROJECT_NAME}_utils
+set(UTILS_SRCS
   src/utils/bodies.cpp
   src/utils/cloud.cpp
-  src/utils/crop_box.cpp
   src/utils/obb.cpp
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
   src/utils/tf2_eigen.cpp
   src/utils/tf2_sensor_msgs.cpp
-  src/utils/time_utils.cpp
-)
+  src/utils/time_utils.cpp)
+
+if (PCL_VERSION VERSION_LESS "1.10")
+  set(UTILS_SRCS ${UTILS_SRCS} src/utils/crop_box.cpp)
+endif()
+
+add_library(${PROJECT_NAME}_utils ${UTILS_SRCS})
 target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES} ${PCL_LIBRARIES})
 
 add_library(${PROJECT_NAME}

@@ -1624,6 +1624,7 @@ bool RobotBodyFilter<T>::triggerModelReload(std_srvs::TriggerRequest &,
   this->configured_ = true;
 
   ROS_INFO("RobotBodyFilter: Robot model reloaded, resuming filter operation.");
+  return true;
 }
 
 template<typename T>
