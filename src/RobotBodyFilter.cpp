@@ -816,7 +816,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
       const auto &transform = linkTransformEigen * collisionOffsetTransform;
 
       this->transformCache[collisionBody.cacheKey] =
-          std::make_shared<Eigen::Isometry3d>(transform);
+          std::allocate_shared<Eigen::Isometry3d>(Eigen::aligned_allocator<Eigen::Isometry3d>(), transform);
     }
 
     if (afterScanTime.sec != 0)
@@ -833,7 +833,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
       const auto &transform = linkTransformEigen * collisionOffsetTransform;
 
       this->transformCacheAfterScan[collisionBody.cacheKey] =
-          std::make_shared<Eigen::Isometry3d>(transform);
+        std::allocate_shared<Eigen::Isometry3d>(Eigen::aligned_allocator<Eigen::Isometry3d>(), transform);
     }
   }
 }
