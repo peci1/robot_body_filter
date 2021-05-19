@@ -85,8 +85,8 @@ if (CATKIN_ENABLE_TESTING)
   catkin_add_gtest(test_set_utils test/test_set_utils.cpp)
   target_link_libraries(test_set_utils ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
-  catkin_add_gtest(test_shapes test/test_shapes.cpp)
-  target_link_libraries(test_shapes ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+  catkin_add_gtest(test_shapes_rbf test/test_shapes.cpp)
+  target_link_libraries(test_shapes_rbf ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_urdf_eigen test/test_urdf_eigen.cpp)
   target_link_libraries(test_urdf_eigen ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
