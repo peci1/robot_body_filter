@@ -38,7 +38,7 @@ class TestFilter : public robot_body_filter::FilterBase<std::string>
         this->getParamVerboseSet<std::string>("ignored_links/bounding_sphere", {}, "", &defaultUsed)); EXPECT_FALSE(defaultUsed);
     EXPECT_EQ(std::set<double>({0, 1}),
         this->getParamVerboseSet<double>("nonexistent_set", {0, 1}, "", &defaultUsed)); EXPECT_TRUE(defaultUsed);
-    EXPECT_EQ((std::map<std::string, double>({{"antenna::contains", 1.2}, {"*::big_collision_box::contains", 2.0}, {"*::big_collision_box::shadow", 3.0}})),
+    EXPECT_EQ((std::map<std::string, double>({{"antenna::contains", 1.2}, {"antenna::bounding_sphere", 1.2}, {"antenna::bounding_box", 1.2}, {"*::big_collision_box::contains", 2.0}, {"*::big_collision_box::bounding_sphere", 2.0}, {"*::big_collision_box::bounding_box", 2.0}, {"*::big_collision_box::shadow", 3.0}})),
         this->getParamVerboseMap<double>("body_model/inflation/per_link/scale", {}, "", &defaultUsed)); EXPECT_FALSE(defaultUsed);
     EXPECT_EQ((std::map<std::string, double>({{"laser::shadow", 0.015}, {"base_link", 0.05}})),
         this->getParamVerboseMap<double>("body_model/inflation/per_link/padding", {}, "m", &defaultUsed)); EXPECT_FALSE(defaultUsed);

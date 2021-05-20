@@ -126,8 +126,6 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   computeBoundingBox(static_cast<const bodies::Sphere*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
 
-  EXPECT_TRUE(bbox1.isEmpty());
-  EXPECT_TRUE(bbox2.isEmpty());
   EXPECT_TRUE(bbox3.isEmpty());
   expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
   EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
@@ -180,8 +178,6 @@ TEST(Bodies, ComputeBoundingBoxBox)
   computeBoundingBox(static_cast<const bodies::Box*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
 
-  EXPECT_TRUE(bbox1.isEmpty());
-  EXPECT_TRUE(bbox2.isEmpty());
   EXPECT_TRUE(bbox3.isEmpty());
   expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
   EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
@@ -235,8 +231,6 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   computeBoundingBox(static_cast<const bodies::Cylinder*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
 
-  EXPECT_TRUE(bbox1.isEmpty());
-  EXPECT_TRUE(bbox2.isEmpty());
   EXPECT_TRUE(bbox3.isEmpty());
   expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
   EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)
@@ -311,8 +305,6 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
   computeBoundingBox(static_cast<const bodies::ConvexMesh*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
 
-  EXPECT_TRUE(bbox1.isEmpty());
-  EXPECT_TRUE(bbox2.isEmpty());
   EXPECT_TRUE(bbox3.isEmpty());
   expectTransformsDoubleEq(obb1.getPose(), Eigen::Isometry3d::Identity());
   EXPECT_VECTORS_EQUAL(obb1.getExtents(), Eigen::Vector3d::Zero(), 1e-12)

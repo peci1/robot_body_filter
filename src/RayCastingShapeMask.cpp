@@ -21,9 +21,11 @@ struct RayCastingShapeMask::RayCastingShapeMaskPIMPL
 {
   std::set<SeeShape, SortBodies> bodiesForContainsTest;
   std::set<SeeShape, SortBodies> bodiesForShadowTest;
+  std::set<SeeShape, SortBodies> bodiesForBsphere;
+  std::set<SeeShape, SortBodies> bodiesForBbox;
   std::map<point_containment_filter::ShapeHandle, std::string> shapeNames;
 
-  typedef std::tuple<MultiShapeHandle, SeeShape, SeeShape> MultiBodyTuple;
+  typedef std::tuple<MultiShapeHandle, SeeShape, SeeShape, SeeShape, SeeShape> MultiBodyTuple;
   std::list<MultiBodyTuple> multiBodies;
 
   std::map<point_containment_filter::ShapeHandle, MultiShapeHandle>
@@ -312,13 +314,14 @@ MultiShapeHandle RayCastingShapeMask::addShape(
     const shapes::ShapeConstPtr &shape, const double scale, const double padding,
     const bool updateInternalStructures, const std::string& name)
 {
-  return this->addShape(shape, scale, padding, scale, padding, updateInternalStructures, name);
+  return this->addShape(shape, scale, padding, scale, padding,
+                        scale, padding, scale, padding, updateInternalStructures, name);
 }
 
 MultiShapeHandle RayCastingShapeMask::addShape(
     const shapes::ShapeConstPtr &shape, const double containsScale, const double containsPadding,
-    const double shadowScale, const double shadowPadding,
-    const bool updateInternalStructures, const std::string& name)
+    const double shadowScale, const double shadowPadding, const double bsphereScale, const double bspherePadding,
+    const double bboxScale, const double bboxPadding, const bool updateInternalStructures, const std::string& name)
 {
   MultiShapeHandle result;
 
@@ -333,12 +336,32 @@ MultiShapeHandle RayCastingShapeMask::addShape(
     this->data->shapeNames[result.shadow] = name;
   }
 
+  result.bsphere = result.contains;
+  if ((std::abs(containsScale - bsphereScale) > 1e-6 ||
+      std::abs(containsPadding - bspherePadding) > 1e-6))
+  {
+    result.bsphere = ShapeMask::addShape(shape, bsphereScale, bspherePadding);
+    this->data->shapeNames[result.bsphere] = name;
+  }
+
+  result.bbox = result.contains;
+  if ((std::abs(containsScale - bboxScale) > 1e-6 ||
+      std::abs(containsPadding - bboxPadding) > 1e-6))
+  {
+    result.bbox = ShapeMask::addShape(shape, bboxScale, bboxPadding);
+    this->data->shapeNames[result.bbox] = name;
+  }
+
   auto containsSeeShape = *this->used_handles_.at(result.contains);
   auto shadowSeeShape = *this->used_handles_.at(result.shadow);
-  this->data->multiBodies.push_back(std::make_tuple(result, containsSeeShape, shadowSeeShape));
+  auto bsphereSeeShape = *this->used_handles_.at(result.bsphere);
+  auto bboxSeeShape = *this->used_handles_.at(result.bbox);
+  this->data->multiBodies.emplace_back(result, containsSeeShape, shadowSeeShape, bsphereSeeShape, bboxSeeShape);
 
   this->data->shapesToMultiShapes[result.contains] = result;
   this->data->shapesToMultiShapes[result.shadow] = result;
+  this->data->shapesToMultiShapes[result.bsphere] = result;
+  this->data->shapesToMultiShapes[result.bbox] = result;
 
   if (updateInternalStructures)
     this->updateInternalShapeLists();
@@ -363,6 +386,20 @@ void RayCastingShapeMask::removeShape(const MultiShapeHandle& handle,
     this->data->shapesToMultiShapes.erase(handle.shadow);
   }
 
+  if (handle.contains != handle.bsphere)
+  {
+    ShapeMask::removeShape(handle.bsphere);
+    this->data->shapeNames.erase(handle.bsphere);
+    this->data->shapesToMultiShapes.erase(handle.bsphere);
+  }
+
+  if (handle.contains != handle.bbox)
+  {
+    ShapeMask::removeShape(handle.bbox);
+    this->data->shapeNames.erase(handle.bbox);
+    this->data->shapesToMultiShapes.erase(handle.bbox);
+  }
+
   if (updateInternalStructures)
     this->updateInternalShapeLists();
 }
@@ -379,16 +416,24 @@ void RayCastingShapeMask::updateInternalShapeLists()
 
   this->data->bodiesForContainsTest.clear();
   this->data->bodiesForShadowTest.clear();
+  this->data->bodiesForBsphere.clear();
+  this->data->bodiesForBbox.clear();
 
   for (const auto& multiBody : this->data->multiBodies) {
     const auto handle = std::get<0>(multiBody);
     const auto containsSeeShape = std::get<1>(multiBody);
     const auto shadowSeeShape = std::get<2>(multiBody);
+    const auto bsphereSeeShape = std::get<3>(multiBody);
+    const auto bboxSeeShape = std::get<4>(multiBody);
 
     if (this->ignoreInContainsTest.find(handle) == this->ignoreInContainsTest.end())
       this->data->bodiesForContainsTest.insert(containsSeeShape);
     if (this->ignoreInShadowTest.find(handle) == this->ignoreInShadowTest.end())
       this->data->bodiesForShadowTest.insert(shadowSeeShape);
+    if (this->ignoreInBsphere.find(handle) == this->ignoreInBsphere.end())
+      this->data->bodiesForBsphere.insert(bsphereSeeShape);
+    if (this->ignoreInBbox.find(handle) == this->ignoreInBbox.end())
+      this->data->bodiesForBbox.insert(bboxSeeShape);
   }
 }
 
@@ -428,9 +473,34 @@ RayCastingShapeMask::getBodiesForShadowTest() const
   return result;
 }
 
+std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
+RayCastingShapeMask::getBodiesForBoundingSphere() const
+{
+  boost::mutex::scoped_lock _(this->shapes_lock_);
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
+
+  for (const auto& seeShape: this->data->bodiesForBsphere)
+    result[seeShape.handle] = seeShape.body;
+
+  return result;
+}
+
+std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
+RayCastingShapeMask::getBodiesForBoundingBox() const
+{
+  boost::mutex::scoped_lock _(this->shapes_lock_);
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
+
+  for (const auto& seeShape: this->data->bodiesForBbox)
+    result[seeShape.handle] = seeShape.body;
+
+  return result;
+}
+
 bool MultiShapeHandle::operator==(const MultiShapeHandle& other) const
 {
-  return this->contains == other.contains && this->shadow == other.shadow;
+  return this->contains == other.contains && this->shadow == other.shadow &&
+         this->bsphere == other.bsphere && this->bbox == other.bbox;
 }
 
 bool MultiShapeHandle::operator!=(const MultiShapeHandle& other) const

@@ -98,7 +98,7 @@ TEST(StringUtils, ToString)
   EXPECT_EQ("array", to_string(XmlRpc::XmlRpcValue::TypeArray));
   EXPECT_EQ("invalid", to_string(XmlRpc::XmlRpcValue::TypeInvalid));
   XmlRpc::XmlRpcValue::setDoubleFormat("%.2f");
-  EXPECT_EQ("2", to_string(XmlRpc::XmlRpcValue(2.0))); // https://github.com/ros/ros_comm/issues/1958
+  EXPECT_EQ("2.00", to_string(XmlRpc::XmlRpcValue(2.0)));
   EXPECT_EQ("2", to_string(XmlRpc::XmlRpcValue(2)));
   EXPECT_EQ("0", to_string(XmlRpc::XmlRpcValue(false)));
   EXPECT_EQ("1", to_string(XmlRpc::XmlRpcValue(true)));
@@ -115,7 +115,7 @@ TEST(StringUtils, ToString)
   }
   {
     int offset = 0;
-    EXPECT_EQ("2", to_string(XmlRpc::XmlRpcValue("<value><double>2.0</double></value>", &offset)));
+    EXPECT_EQ("2.00", to_string(XmlRpc::XmlRpcValue("<value><double>2.0</double></value>", &offset)));
   }
   {
     char bytes[] = "123";

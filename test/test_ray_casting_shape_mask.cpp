@@ -110,7 +110,7 @@ TEST(RayCastingShapeMask, Basic)
   EXPECT_EQ(1, mask.getBodiesForContainsTest().size());
   EXPECT_EQ(1, mask.getBodiesForShadowTest().size());
 
-  handle = mask.addShape(shape, 1.0, 0.0, 2.0, 1.0, true, "doubleBox");
+  handle = mask.addShape(shape, 1.0, 0.0, 2.0, 1.0, 1.0, 0.0, 1.0, 0.0, true, "doubleBox");
   EXPECT_EQ(3, mask.bodies_.size());
   EXPECT_EQ(2, mask.getBodiesForContainsTest().size());
   EXPECT_EQ(2, mask.getBodiesForShadowTest().size());
@@ -149,7 +149,7 @@ TEST(RayCastingShapeMask, Bspheres)
   shapes::ShapeConstPtr shape2(new shapes::Sphere(2.0));
   const auto multiHandle2 = mask.addShape(shape2, 2.0, 0.5, false, "sphere");
   const auto handle2 = multiHandle2.contains;
-  const auto multiHandle3 = mask.addShape(shape1, 1.0, 0.0, 2.0, 1.0, true, "doubleBox");
+  const auto multiHandle3 = mask.addShape(shape1, 1.0, 0.0, 2.0, 1.0, 1.0, 0.0, 1.0, 0.0, true, "doubleBox");
   EXPECT_NE(multiHandle3.contains, multiHandle3.shadow);
   const auto handle3Contains = multiHandle3.contains;
   const auto handle3Shadow = multiHandle3.shadow;
@@ -333,7 +333,7 @@ TEST(RayCastingShapeMask, UpdateBodyPoses)
   const auto multiHandle1 = mask.addShape(shape1, 1.0, 0.0, false, "box");
   const auto handle1 = multiHandle1.contains;
   shapes::ShapeConstPtr shape2(new shapes::Sphere(2.0));
-  const auto multiHandle2 = mask.addShape(shape2, 2.0, 0.5, 1.0, 0.0, true, "doubleSphere");
+  const auto multiHandle2 = mask.addShape(shape2, 2.0, 0.5, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, true, "doubleSphere");
   const auto handle2Contains = multiHandle2.contains;
   const auto handle2Shadow = multiHandle2.shadow;
 
@@ -398,7 +398,7 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   TestMask mask(fooCb, 0.1, 10.0, false, false, false);
 
   shapes::ShapeConstPtr shape1(new shapes::Box(1.8, 1.8, 1.8));
-  const auto multiHandle1 = mask.addShape(shape1, 1.0, 0.02, 1.1, 0.01, false, "box");
+  const auto multiHandle1 = mask.addShape(shape1, 1.0, 0.02, 1.1, 0.01, 1.0, 0.02, 1.0, 0.02, false, "box");
   const auto handle1 = multiHandle1.contains;
   shapes::ShapeConstPtr shape2(new shapes::Sphere(1.375));
   const auto multiHandle2 = mask.addShape(shape2, 1.0, 0.0, false, "sphere");
@@ -702,7 +702,7 @@ TEST(RayCastingShapeMask, Mask)
   TestMask mask(fooCb, 0.1, 10.0, true, true, true);
 
   shapes::ShapeConstPtr shape1(new shapes::Box(1.8, 1.8, 1.8));
-  const auto multiHandle1 = mask.addShape(shape1, 1.0, 0.02, 1.1, 0.01, false, "box");
+  const auto multiHandle1 = mask.addShape(shape1, 1.0, 0.02, 1.1, 0.01, 1.0, 0.02, 1.0, 0.02, false, "box");
   const auto handle1 = multiHandle1.contains;
   shapes::ShapeConstPtr shape2(new shapes::Sphere(1.375));
   const auto multiHandle2 = mask.addShape(shape2, 1.0, 0.0, false, "sphere");

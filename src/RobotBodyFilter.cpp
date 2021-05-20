@@ -98,6 +98,8 @@ bool RobotBodyFilter<T>::configure() {
   this->publishDebugPclShadow = this->getParamVerbose("debug/pcl/shadow", false);
   this->publishDebugContainsMarker = this->getParamVerbose("debug/marker/contains", false);
   this->publishDebugShadowMarker = this->getParamVerbose("debug/marker/shadow", false);
+  this->publishDebugBsphereMarker = this->getParamVerbose("debug/marker/bounding_sphere", false);
+  this->publishDebugBboxMarker = this->getParamVerbose("debug/marker/bounding_box", false);
 
   const auto inflationPadding = this->getParamVerbose("body_model/inflation/padding", 0.0, "m");
   const auto inflationScale = this->getParamVerbose("body_model/inflation/scale", 1.0);
@@ -105,6 +107,10 @@ bool RobotBodyFilter<T>::configure() {
   this->defaultContainsInflation.scale = this->getParamVerbose("body_model/inflation/contains_test/scale", inflationScale);
   this->defaultShadowInflation.padding = this->getParamVerbose("body_model/inflation/shadow_test/padding", inflationPadding, "m");
   this->defaultShadowInflation.scale = this->getParamVerbose("body_model/inflation/shadow_test/scale", inflationScale);
+  this->defaultBsphereInflation.padding = this->getParamVerbose("body_model/inflation/bounding_sphere/padding", inflationPadding, "m");
+  this->defaultBsphereInflation.scale = this->getParamVerbose("body_model/inflation/bounding_sphere/scale", inflationScale);
+  this->defaultBboxInflation.padding = this->getParamVerbose("body_model/inflation/bounding_box/padding", inflationPadding, "m");
+  this->defaultBboxInflation.scale = this->getParamVerbose("body_model/inflation/bounding_box/scale", inflationScale);
 
   // read per-link padding
   const auto perLinkInflationPadding = this->getParamVerboseMap("body_model/inflation/per_link/padding", std::map<std::string, double>(), "m");
@@ -112,14 +118,27 @@ bool RobotBodyFilter<T>::configure() {
   {
     bool containsOnly;
     bool shadowOnly;
-    const auto linkName = removeSuffix(removeSuffix(inflationPair.first, SHADOW_SUFFIX, &shadowOnly), CONTAINS_SUFFIX, &containsOnly);
+    bool bsphereOnly;
+    bool bboxOnly;
 
-    if (!shadowOnly)
+    auto linkName = inflationPair.first;
+    linkName = removeSuffix(linkName, CONTAINS_SUFFIX, &containsOnly);
+    linkName = removeSuffix(linkName, SHADOW_SUFFIX, &shadowOnly);
+    linkName = removeSuffix(linkName, BSPHERE_SUFFIX, &bsphereOnly);
+    linkName = removeSuffix(linkName, BBOX_SUFFIX, &bboxOnly);
+
+    if (!shadowOnly && !bsphereOnly && !bboxOnly)
       this->perLinkContainsInflation[linkName] =
           ScaleAndPadding(this->defaultContainsInflation.scale, inflationPair.second);
-    if (!containsOnly)
+    if (!containsOnly && !bsphereOnly && !bboxOnly)
       this->perLinkShadowInflation[linkName] =
           ScaleAndPadding(this->defaultShadowInflation.scale, inflationPair.second);
+    if (!containsOnly && !shadowOnly && !bboxOnly)
+      this->perLinkBsphereInflation[linkName] =
+          ScaleAndPadding(this->defaultBsphereInflation.scale, inflationPair.second);
+    if (!containsOnly && !shadowOnly && !bsphereOnly)
+      this->perLinkBboxInflation[linkName] =
+          ScaleAndPadding(this->defaultBboxInflation.scale, inflationPair.second);
   }
 
   // read per-link scale
@@ -128,9 +147,16 @@ bool RobotBodyFilter<T>::configure() {
   {
     bool containsOnly;
     bool shadowOnly;
-    const auto linkName = removeSuffix(removeSuffix(inflationPair.first, SHADOW_SUFFIX, &shadowOnly), CONTAINS_SUFFIX, &containsOnly);
+    bool bsphereOnly;
+    bool bboxOnly;
 
-    if (!shadowOnly)
+    auto linkName = inflationPair.first;
+    linkName = removeSuffix(linkName, CONTAINS_SUFFIX, &containsOnly);
+    linkName = removeSuffix(linkName, SHADOW_SUFFIX, &shadowOnly);
+    linkName = removeSuffix(linkName, BSPHERE_SUFFIX, &bsphereOnly);
+    linkName = removeSuffix(linkName, BBOX_SUFFIX, &bboxOnly);
+
+    if (!shadowOnly && !bsphereOnly && !bboxOnly)
     {
       if (this->perLinkContainsInflation.find(linkName) == this->perLinkContainsInflation.end())
         this->perLinkContainsInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultContainsInflation.padding);
@@ -138,12 +164,28 @@ bool RobotBodyFilter<T>::configure() {
         this->perLinkContainsInflation[linkName].scale = inflationPair.second;
     }
 
-    if (!containsOnly)
+    if (!containsOnly && !bsphereOnly && !bboxOnly)
     {
       if (this->perLinkShadowInflation.find(linkName) == this->perLinkShadowInflation.end())
         this->perLinkShadowInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultShadowInflation.padding);
       else
         this->perLinkShadowInflation[linkName].scale = inflationPair.second;
+    }
+
+    if (!containsOnly && !shadowOnly && !bboxOnly)
+    {
+      if (this->perLinkBsphereInflation.find(linkName) == this->perLinkBsphereInflation.end())
+        this->perLinkBsphereInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultBsphereInflation.padding);
+      else
+        this->perLinkBsphereInflation[linkName].scale = inflationPair.second;
+    }
+
+    if (!containsOnly && !shadowOnly && !bsphereOnly)
+    {
+      if (this->perLinkBboxInflation.find(linkName) == this->perLinkBboxInflation.end())
+        this->perLinkBboxInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultBboxInflation.padding);
+      else
+        this->perLinkBboxInflation[linkName].scale = inflationPair.second;
     }
   }
 
@@ -238,6 +280,16 @@ bool RobotBodyFilter<T>::configure() {
   if (this->publishDebugShadowMarker)
   {
     this->debugShadowMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>("robot_model_for_shadow_test", 100);
+  }
+
+  if (this->publishDebugBsphereMarker)
+  {
+    this->debugBsphereMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>("robot_model_for_bounding_sphere", 100);
+  }
+
+  if (this->publishDebugBboxMarker)
+  {
+    this->debugBboxMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>("robot_model_for_bounding_box", 100);
   }
 
   if (this->computeDebugBoundingBox) {
@@ -969,28 +1021,22 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
         // add the collision shape to shapeMask; the inflation parameters come into play here
         const auto containsTestInflation = this->getLinkInflationForContainsTest(collisionNames);
         const auto shadowTestInflation = this->getLinkInflationForShadowTest(collisionNames);
+        const auto bsphereInflation = this->getLinkInflationForBoundingSphere(collisionNames);
+        const auto bboxInflation = this->getLinkInflationForBoundingBox(collisionNames);
         const auto shapeHandle = this->shapeMask->addShape(collisionShape,
             containsTestInflation.scale, containsTestInflation.padding, shadowTestInflation.scale,
-            shadowTestInflation.padding, false, shapeName);
+            shadowTestInflation.padding, bsphereInflation.scale, bsphereInflation.padding,
+            bboxInflation.scale, bboxInflation.padding, false, shapeName);
         this->shapesToLinks[shapeHandle.contains] = this->shapesToLinks[shapeHandle.shadow] =
-            CollisionBodyWithLink(collision, link, collisionIndex, shapeHandle);
+            this->shapesToLinks[shapeHandle.bsphere] = this->shapesToLinks[shapeHandle.bbox] =
+                CollisionBodyWithLink(collision, link, collisionIndex, shapeHandle);
 
         if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInBoundingSphere)) {
-          this->shapesIgnoredInBoundingSphere.insert(shapeHandle.contains);
-          this->shapesIgnoredInBoundingSphere.insert(shapeHandle.shadow);
-        } else if (!isSetIntersectionEmpty(collisionNamesContains, this->linksIgnoredInBoundingSphere)) {
-          this->shapesIgnoredInBoundingSphere.insert(shapeHandle.contains);
-        } else if (!isSetIntersectionEmpty(collisionNamesShadow, this->linksIgnoredInBoundingSphere)) {
-          this->shapesIgnoredInBoundingSphere.insert(shapeHandle.shadow);
+          this->shapesIgnoredInBoundingSphere.insert(shapeHandle.bsphere);
         }
 
         if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInBoundingBox)) {
-          this->shapesIgnoredInBoundingBox.insert(shapeHandle.contains);
-          this->shapesIgnoredInBoundingBox.insert(shapeHandle.shadow);
-        } else if (!isSetIntersectionEmpty(collisionNamesContains, this->linksIgnoredInBoundingBox)) {
-          this->shapesIgnoredInBoundingBox.insert(shapeHandle.contains);
-        } else if (!isSetIntersectionEmpty(collisionNamesShadow, this->linksIgnoredInBoundingBox)) {
-          this->shapesIgnoredInBoundingBox.insert(shapeHandle.shadow);
+          this->shapesIgnoredInBoundingBox.insert(shapeHandle.bbox);
         }
 
         if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInContainsTest)) {
@@ -1076,6 +1122,28 @@ void RobotBodyFilter<T>::publishDebugMarkers(const ros::Time& scanTime) const {
                                color, markerArray);
     this->debugShadowMarkerPublisher.publish(markerArray);
   }
+
+  if (this->publishDebugBsphereMarker) {
+    visualization_msgs::MarkerArray markerArray;
+    std_msgs::ColorRGBA color;
+    color.g = 1.0;
+    color.b = 1.0;
+    color.a = 0.5;
+    createBodyVisualizationMsg(this->shapeMask->getBodiesForBoundingSphere(), scanTime,
+                               color, markerArray);
+    this->debugBsphereMarkerPublisher.publish(markerArray);
+  }
+
+  if (this->publishDebugBboxMarker) {
+    visualization_msgs::MarkerArray markerArray;
+    std_msgs::ColorRGBA color;
+    color.r = 1.0;
+    color.b = 1.0;
+    color.a = 0.5;
+    createBodyVisualizationMsg(this->shapeMask->getBodiesForBoundingBox(), scanTime,
+                               color, markerArray);
+    this->debugBboxMarkerPublisher.publish(markerArray);
+  }
 }
 
 template <typename T>
@@ -1129,13 +1197,16 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
   std::vector<bodies::BoundingSphere> spheres;
   {
     visualization_msgs::MarkerArray boundingSphereDebugMsg;
-    for (const auto &shapeHandleAndSphere : this->shapeMask->getBoundingSpheresForContainsTest())
+    for (const auto &shapeHandleAndBody : this->shapeMask->getBodiesForBoundingSphere())
     {
-      const auto &shapeHandle = shapeHandleAndSphere.first;
-      const auto &sphere = shapeHandleAndSphere.second;
+      const auto &shapeHandle = shapeHandleAndBody.first;
+      const auto &body = shapeHandleAndBody.second;
 
       if (this->shapesIgnoredInBoundingSphere.find(shapeHandle) != this->shapesIgnoredInBoundingSphere.end())
         continue;
+
+      bodies::BoundingSphere sphere;
+      body->computeBoundingSphere(sphere);
 
       spheres.push_back(sphere);
 
@@ -1237,15 +1308,16 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForContainsTest())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForBoundingBox())
     {
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
-      bodies::AxisAlignedBoundingBox box;
-      body->computeBoundingBox(box);
 
       if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
         continue;
+
+      bodies::AxisAlignedBoundingBox box;
+      body->computeBoundingBox(box);
 
       boxes.push_back(box);
 
@@ -1361,16 +1433,16 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForContainsTest())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForBoundingBox())
     {
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
 
-      bodies::OrientedBoundingBox box;
-      bodies::computeBoundingBox(body, box);
-
       if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
         continue;
+
+      bodies::OrientedBoundingBox box;
+      bodies::computeBoundingBox(body, box);
 
       boxes.push_back(box);
 
@@ -1501,7 +1573,7 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForContainsTest())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForBoundingBox())
     {
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
@@ -1733,6 +1805,36 @@ ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForShadowTest(
 {
   return this->getLinkInflation(linkNames, this->defaultShadowInflation,
       this->perLinkShadowInflation);
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingSphere(
+    const string &linkName) const
+{
+  return this->getLinkInflationForBoundingSphere({linkName});
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingSphere(
+    const std::vector<std::string>& linkNames) const
+{
+  return this->getLinkInflation(linkNames, this->defaultBsphereInflation,
+      this->perLinkBsphereInflation);
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingBox(
+    const string &linkName) const
+{
+  return this->getLinkInflationForBoundingBox({linkName});
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingBox(
+    const std::vector<std::string>& linkNames) const
+{
+  return this->getLinkInflation(linkNames, this->defaultBboxInflation,
+      this->perLinkBboxInflation);
 }
 
 template<typename T>

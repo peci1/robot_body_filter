@@ -18,6 +18,8 @@ struct MultiShapeHandle
 {
   point_containment_filter::ShapeHandle contains;
   point_containment_filter::ShapeHandle shadow;
+  point_containment_filter::ShapeHandle bsphere;
+  point_containment_filter::ShapeHandle bbox;
 
   bool operator==(const MultiShapeHandle& other) const;
   bool operator!=(const MultiShapeHandle& other) const;
@@ -35,6 +37,8 @@ struct hash<::robot_body_filter::MultiShapeHandle>
     size_t hash = 17;
     hash = hash * 31 + std::hash<::point_containment_filter::ShapeHandle>()(h.contains);
     hash = hash * 31 + std::hash<::point_containment_filter::ShapeHandle>()(h.shadow);
+    hash = hash * 31 + std::hash<::point_containment_filter::ShapeHandle>()(h.bsphere);
+    hash = hash * 31 + std::hash<::point_containment_filter::ShapeHandle>()(h.bbox);
     return hash;
   }
 };
@@ -127,6 +131,10 @@ public:
    * \param containsPadding Padding of the shape to be used in contains tests.
    * \param shadowScale Scale of the shape to be used in shadow tests.
    * \param shadowPadding Padding of the shape to be used in shadow tests.
+   * \param bsphereScale Scale of the shape to be used in bounding sphere computation.
+   * \param bspherePadding Padding of the shape to be used in bounding sphere computation.
+   * \param bboxScale Scale of the shape to be used in bounding box computation.
+   * \param bboxPadding Padding of the shape to be used in bounding box computation.
    * \param updateInternalStructures Set to true if only adding a single shape. If adding a batch of
    *        shapes, set this to false and call updateInternalStructures() manually at the end of the
    *        batch.
@@ -138,7 +146,8 @@ public:
    */
   MultiShapeHandle addShape(
       const shapes::ShapeConstPtr& shape, double containsScale, double containsPadding,
-      double shadowScale, double shadowPadding, bool updateInternalStructures = true,
+      double shadowScale, double shadowPadding, double bsphereScale, double bspherePadding,
+      double bboxScale, double bboxPadding, bool updateInternalStructures = true,
       const std::string& name = "");
 
   /**
@@ -294,6 +303,22 @@ public:
    */
   std::map<point_containment_filter::ShapeHandle, const bodies::Body*> getBodiesForShadowTest() const;
 
+  /**
+   * \brief Provides the map of shape handle to corresponding body for shapes that should be used in
+   *        bounding sphere computation.
+   * \return Map shape_handle->body* .
+   * \note The returned bodies should not be changed.
+   */
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> getBodiesForBoundingSphere() const;
+
+  /**
+   * \brief Provides the map of shape handle to corresponding body for shapes that should be used in
+   *        bounding box computation.
+   * \return Map shape_handle->body* .
+   * \note The returned bodies should not be changed.
+   */
+  std::map<point_containment_filter::ShapeHandle, const bodies::Body*> getBodiesForBoundingBox() const;
+
 protected:
 
   /**
@@ -367,6 +392,10 @@ protected:
   /** \brief Shapes to be ignored when doing test for SHADOW in maskContainmentAndShadows.
    *  E.g. the sensor collision shape should be listed here. */
   std::unordered_set<MultiShapeHandle> ignoreInShadowTest;
+  /** \brief Shapes to be ignored when computing the robot's bounding sphere. */
+  std::unordered_set<MultiShapeHandle> ignoreInBsphere;
+  /** \brief Shapes to be ignored when computing the robot's bounding box. */
+  std::unordered_set<MultiShapeHandle> ignoreInBbox;
 };
 
 }
