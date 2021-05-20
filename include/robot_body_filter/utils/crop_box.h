@@ -6,6 +6,8 @@
 namespace robot_body_filter
 {
 
+#if PCL_VERSION_COMPARE(<, 1, 10, 0)
+
 /**
  * \brief Filter a box out of a pointcloud.
  * \note This is a workaround for bug https://github.com/PointCloudLibrary/pcl/issues/3471 .
@@ -15,6 +17,12 @@ class CropBoxPointCloud2 : public pcl::CropBox<pcl::PCLPointCloud2>
 {
   void applyFilter(pcl::PCLPointCloud2 &output) override;
 };
+
+#else
+
+typedef pcl::CropBox<pcl::PCLPointCloud2> CropBoxPointCloud2;
+
+#endif
 
 }
 

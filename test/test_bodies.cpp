@@ -43,6 +43,10 @@ class WrongBody : public ::bodies::Body
   {
     throw std::runtime_error("Should not be called");
   }
+  void computeBoundingBox(AABB& box) const override
+  {
+    throw std::runtime_error("Should not be called");
+  }
   BodyPtr cloneAt(const Eigen::Isometry3d& pose, double padding, double scaling) const override
   {
     throw std::runtime_error("Should not be called");
@@ -65,19 +69,19 @@ TEST(Bodies, ComputeBoundingBoxWrongBody)
   OrientedBoundingBox obb;
 
   const auto unknown = WrongBody(::shapes::ShapeType::UNKNOWN_SHAPE);
-  EXPECT_THROW(computeBoundingBox(&unknown, bbox), std::runtime_error);
+  EXPECT_THROW(unknown.computeBoundingBox(bbox), std::runtime_error);
   EXPECT_THROW(computeBoundingBox(&unknown, obb), std::runtime_error);
 
   const auto cone = WrongBody(::shapes::ShapeType::CONE);
-  EXPECT_THROW(computeBoundingBox(&cone, bbox), std::runtime_error);
+  EXPECT_THROW(cone.computeBoundingBox(bbox), std::runtime_error);
   EXPECT_THROW(computeBoundingBox(&cone, obb), std::runtime_error);
 
   const auto octree = WrongBody(::shapes::ShapeType::OCTREE);
-  EXPECT_THROW(computeBoundingBox(&octree, bbox), std::runtime_error);
+  EXPECT_THROW(octree.computeBoundingBox(bbox), std::runtime_error);
   EXPECT_THROW(computeBoundingBox(&octree, obb), std::runtime_error);
 
   const auto plane = WrongBody(::shapes::ShapeType::PLANE);
-  EXPECT_THROW(computeBoundingBox(&plane, bbox), std::runtime_error);
+  EXPECT_THROW(plane.computeBoundingBox(bbox), std::runtime_error);
   EXPECT_THROW(computeBoundingBox(&plane, obb), std::runtime_error);
 }
 
@@ -97,8 +101,8 @@ TEST(Bodies, ComputeBoundingBoxSphere)
 
   body->setPose(pose);
 
-  computeBoundingBox(sphere, bbox1);
-  computeBoundingBox(body, bbox2);
+  sphere->computeBoundingBox(bbox1);
+  body->computeBoundingBox(bbox2);
   computeBoundingBox(sphere, obb1);
   computeBoundingBox(body, obb2);
 
@@ -110,12 +114,6 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
-  EXPECT_DOUBLE_EQ(-1.0, bbox1.min().x());
-  EXPECT_DOUBLE_EQ(0.0, bbox1.min().y());
-  EXPECT_DOUBLE_EQ(1.0, bbox1.min().z());
-  EXPECT_DOUBLE_EQ(3.0, bbox1.max().x());
-  EXPECT_DOUBLE_EQ(4.0, bbox1.max().y());
-  EXPECT_DOUBLE_EQ(5.0, bbox1.max().z());
   EXPECT_DOUBLE_EQ(4.0, obb1.getExtents().x());
   EXPECT_DOUBLE_EQ(4.0, obb1.getExtents().y());
   EXPECT_DOUBLE_EQ(4.0, obb1.getExtents().z());
@@ -124,8 +122,6 @@ TEST(Bodies, ComputeBoundingBoxSphere)
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
 
   // we intentionally reuse the non-empty bboxes to check they are zeroed-out
-  computeBoundingBox(static_cast<const bodies::Sphere*>(nullptr), bbox1);
-  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
   computeBoundingBoxAt(static_cast<const bodies::Sphere*>(nullptr), bbox3, pose);
   computeBoundingBox(static_cast<const bodies::Sphere*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
@@ -158,8 +154,8 @@ TEST(Bodies, ComputeBoundingBoxBox)
 
   body->setPose(pose);
 
-  computeBoundingBox(box, bbox1);
-  computeBoundingBox(body, bbox2);
+  box->computeBoundingBox(bbox1);
+  body->computeBoundingBox(bbox2);
   computeBoundingBox(box, obb1);
   computeBoundingBox(body, obb2);
 
@@ -171,12 +167,6 @@ TEST(Bodies, ComputeBoundingBoxBox)
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
-  EXPECT_DOUBLE_EQ(-0.5, bbox1.min().x());
-  EXPECT_DOUBLE_EQ(1.0, bbox1.min().y());
-  EXPECT_DOUBLE_EQ(2.5, bbox1.min().z());
-  EXPECT_DOUBLE_EQ(2.5, bbox1.max().x());
-  EXPECT_DOUBLE_EQ(3.0, bbox1.max().y());
-  EXPECT_DOUBLE_EQ(3.5, bbox1.max().z());
   // for box primitives, we require that the OBB is equal to the box itself
   EXPECT_DOUBLE_EQ(1.0, obb1.getExtents().x());
   EXPECT_DOUBLE_EQ(2.0, obb1.getExtents().y());
@@ -186,8 +176,6 @@ TEST(Bodies, ComputeBoundingBoxBox)
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
 
   // we intentionally reuse the non-empty bboxes to check they are zeroed-out
-  computeBoundingBox(static_cast<const bodies::Box*>(nullptr), bbox1);
-  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
   computeBoundingBoxAt(static_cast<const bodies::Box*>(nullptr), bbox3, pose);
   computeBoundingBox(static_cast<const bodies::Box*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
@@ -220,8 +208,8 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
 
   body->setPose(pose);
 
-  computeBoundingBox(cylinder, bbox1);
-  computeBoundingBox(body, bbox2);
+  cylinder->computeBoundingBox(bbox1);
+  body->computeBoundingBox(bbox2);
   computeBoundingBox(cylinder, obb1);
   computeBoundingBox(body, obb2);
 
@@ -233,12 +221,6 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
 
-  EXPECT_DOUBLE_EQ(-0.5, bbox1.min().x());
-  EXPECT_DOUBLE_EQ(0.0, bbox1.min().y());
-  EXPECT_DOUBLE_EQ(1.0, bbox1.min().z());
-  EXPECT_DOUBLE_EQ(2.5, bbox1.max().x());
-  EXPECT_DOUBLE_EQ(4.0, bbox1.max().y());
-  EXPECT_DOUBLE_EQ(5.0, bbox1.max().z());
   // for cylinder primitives, we require that the OBB's z-axis is aligned with the cylinder's
   // rotational axis
   EXPECT_DOUBLE_EQ(4.0, obb1.getExtents().x());
@@ -249,8 +231,6 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
 
   // we intentionally reuse the non-empty bboxes to check they are zeroed-out
-  computeBoundingBox(static_cast<const bodies::Cylinder*>(nullptr), bbox1);
-  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
   computeBoundingBoxAt(static_cast<const bodies::Cylinder*>(nullptr), bbox3, pose);
   computeBoundingBox(static_cast<const bodies::Cylinder*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
@@ -285,8 +265,8 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
 
   body->setPose(pose);
 
-  computeBoundingBox(mesh, bbox1);
-  computeBoundingBox(body, bbox2);
+  mesh->computeBoundingBox(bbox1);
+  body->computeBoundingBox(bbox2);
   computeBoundingBox(mesh, obb1);
   computeBoundingBox(body, obb2);
 
@@ -297,13 +277,6 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
   EXPECT_EQ(bbox1.max(), bbox3.max());
   EXPECT_EQ(obb1.getExtents(), obb2.getExtents());
   expectTransformsDoubleEq(obb1.getPose(), obb2.getPose());
-
-  EXPECT_DOUBLE_EQ(-0.5, bbox1.min().x());
-  EXPECT_DOUBLE_EQ(1.0, bbox1.min().y());
-  EXPECT_DOUBLE_EQ(2.5, bbox1.min().z());
-  EXPECT_DOUBLE_EQ(2.5, bbox1.max().x());
-  EXPECT_DOUBLE_EQ(3.0, bbox1.max().y());
-  EXPECT_DOUBLE_EQ(3.5, bbox1.max().z());
 
   // there's not a single unique box that would be considered the correct OBB for a generic mesh
   // so we need to treat any rotation of the box correct
@@ -334,8 +307,6 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
   EXPECT_DOUBLE_EQ(3.0, obb1.getPose().translation().z());
 
   // we intentionally reuse the non-empty bboxes to check they are zeroed-out
-  computeBoundingBox(static_cast<const bodies::ConvexMesh*>(nullptr), bbox1);
-  computeBoundingBox(static_cast<const bodies::Body*>(nullptr), bbox2);
   computeBoundingBoxAt(static_cast<const bodies::ConvexMesh*>(nullptr), bbox3, pose);
   computeBoundingBox(static_cast<const bodies::ConvexMesh*>(nullptr), obb1);
   computeBoundingBox(static_cast<const bodies::Body*>(nullptr), obb2);
@@ -350,27 +321,6 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
 
   delete mesh;
   delete shape;
-}
-
-TEST(Bodies, MergeAABBs)
-{
-  AxisAlignedBoundingBox bbox1, bbox2, mergedBbox;
-
-  bbox1.min() = {0.0, 0.0, 0.0};
-  bbox1.max() = {2.0, 3.0, 4.0};
-
-  bbox2.min() = {-2.0, -3.0, -4.0};
-  bbox2.max() = {0.0, 0.0, 0.0};
-
-  mergeAxisAlignedBoundingBoxes({bbox1, bbox2}, mergedBbox);
-
-  ASSERT_EQ(3, mergedBbox.dim());
-  EXPECT_DOUBLE_EQ(-2.0, mergedBbox.min().x());
-  EXPECT_DOUBLE_EQ(-3.0, mergedBbox.min().y());
-  EXPECT_DOUBLE_EQ(-4.0, mergedBbox.min().z());
-  EXPECT_DOUBLE_EQ(2.0, mergedBbox.max().x());
-  EXPECT_DOUBLE_EQ(3.0, mergedBbox.max().y());
-  EXPECT_DOUBLE_EQ(4.0, mergedBbox.max().z());
 }
 
 TEST(Bodies, MergeOBBs)
@@ -617,40 +567,10 @@ TEST(Bodies, ConstructMarkerFromBodyMesh)
   expectVector3dSetsEqual(shapeVertices, markerVertices);
 }
 
-// The following tests are from https://github.com/ros-planning/geometric_shapes/pull/109,
-// they're just edited so that they use the implementation from bodies::intersectsRay
-
-#define CHECK_NO_INTERSECTION(body, origin, direction)                                                                 \
-  {                                                                                                                    \
-    EigenSTL::vector_Vector3d intersections;                                                                           \
-    Eigen::Vector3d o origin;                                                                                          \
-    Eigen::Vector3d d direction;                                                                                       \
-    const auto result = intersectsRay(&(body), o, d, &intersections, 2);                                               \
-    EXPECT_FALSE(result);                                                                                              \
-    EXPECT_EQ(0, intersections.size());                                                                                \
-  }
-
-#define CHECK_INTERSECTS(body, origin, direction, numIntersections)                                                    \
-  {                                                                                                                    \
-    EigenSTL::vector_Vector3d intersections;                                                                           \
-    Eigen::Vector3d o origin;                                                                                          \
-    Eigen::Vector3d d direction;                                                                                       \
-    const auto result = intersectsRay(&(body), o, d, &intersections, 2);                                               \
-    EXPECT_TRUE(result);                                                                                               \
-    ASSERT_EQ((numIntersections), intersections.size());                                                               \
-  }
-
-#define CHECK_INTERSECTS_ONCE(body, origin, direction, intersection, error)                                            \
-  {                                                                                                                    \
-    EigenSTL::vector_Vector3d intersections;                                                                           \
-    Eigen::Vector3d o origin;                                                                                          \
-    Eigen::Vector3d d direction;                                                                                       \
-    Eigen::Vector3d i intersection;                                                                                    \
-    const auto result = intersectsRay(&(body), o, d, &intersections, 2);                                               \
-    EXPECT_TRUE(result);                                                                                               \
-    ASSERT_EQ(1, intersections.size());                                                                                \
-    EXPECT_VECTORS_EQUAL(intersections.at(0), i, (error));                                                             \
-  }
+#define EXPECT_VECTORS_EQUAL(v1, v2, error)                                                                            \
+  EXPECT_NEAR((v1)[0], (v2)[0], (error));                                                                              \
+  EXPECT_NEAR((v1)[1], (v2)[1], (error));                                                                              \
+  EXPECT_NEAR((v1)[2], (v2)[2], (error));
 
 #define CHECK_INTERSECTS_TWICE(body, origin, direction, intersc1, intersc2, error)                                     \
   {                                                                                                                    \
@@ -659,7 +579,7 @@ TEST(Bodies, ConstructMarkerFromBodyMesh)
     Eigen::Vector3d d direction;                                                                                       \
     Eigen::Vector3d i1 intersc1;                                                                                       \
     Eigen::Vector3d i2 intersc2;                                                                                       \
-    const auto result = intersectsRay(&(body), o, d, &intersections, 2);                                               \
+    const auto result = (body).intersectsRay(o, d, &intersections, 2);                                                \
     EXPECT_TRUE(result);                                                                                               \
     ASSERT_EQ(2, intersections.size());                                                                                \
     if (fabs(static_cast<double>((intersections.at(0) - i1).norm())) < (error))                                        \
@@ -674,275 +594,8 @@ TEST(Bodies, ConstructMarkerFromBodyMesh)
     }                                                                                                                  \
   }
 
-TEST(SphereRay, OriginInside)
-{
-  shapes::Sphere shape(1.0);
-  bodies::Sphere sphere(&shape);
-
-  EXPECT_FALSE(intersectsRay(nullptr, {0, 0, 0}, {1, 0, 0}));
-
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 1,  0,  0), ( 1,  0,  0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), (-1,  0,  0), (-1,  0,  0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  1,  0), ( 0,  1,  0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, -1,  0), ( 0, -1,  0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  0,  1), ( 0,  0,  1), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  0, -1), ( 0,  0, -1), 1e-6)
-  // clang-format on
-
-  // scaling
-
-  sphere.setScale(1.1);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 1,  0,  0), ( 1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), (-1,  0,  0), (-1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  1,  0), ( 0,    1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, -1,  0), ( 0,   -1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  0,  1), ( 0,      0,  1.1), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  0, -1), ( 0,      0, -1.1), 1e-6)
-  // clang-format on
-
-  // move origin within the sphere
-
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0.5, 0  , 0  ), ( 1,  0,  0), ( 1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0.5, 0  , 0  ), (-1,  0,  0), (-1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0.5, 0  ), ( 0,  1,  0), ( 0,    1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0.5, 0  ), ( 0, -1,  0), ( 0,   -1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0  , 0.5), ( 0,  0,  1), ( 0,      0,  1.1), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0  , 0.5), ( 0,  0, -1), ( 0,      0, -1.1), 1e-6)
-  // clang-format on
-
-  // move sphere
-
-  Eigen::Isometry3d pose = Eigen::Translation3d(0.5, 0, 0) * Eigen::Quaterniond::Identity();
-  sphere.setPose(pose);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 1, 0, 0), ( 1.6, 0, 0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), (-1, 0, 0), (-0.6, 0, 0), 1e-6)
-  // clang-format on
-
-  pose = Eigen::Translation3d(0, 0.5, 0) * Eigen::Quaterniond::Identity();
-  sphere.setPose(pose);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  1, 0), (0,  1.6, 0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, -1, 0), (0, -0.6, 0), 1e-6)
-  // clang-format on
-
-  pose = Eigen::Translation3d(0, 0, 0.5) * Eigen::Quaterniond::Identity();
-  sphere.setPose(pose);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, 0,  1), (0, 0,  1.6), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, 0, -1), (0, 0, -0.6), 1e-6)
-  // clang-format on
-
-  // 3D diagonal
-
-  sphere.setPose(Eigen::Isometry3d::Identity());
-  sphere.setScale(1.0);
-  sphere.setPadding(0.1);
-
-  const auto sq3 = sqrt(pow(1 + 0.1, 2) / 3);
-  const auto dir3 = Eigen::Vector3d::Ones().normalized();
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), ( dir3), ( sq3,  sq3,  sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,  0.5), ( dir3), ( sq3,  sq3,  sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5, -0.5), ( dir3), ( sq3,  sq3,  sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (-dir3), (-sq3, -sq3, -sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,  0.5), (-dir3), (-sq3, -sq3, -sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5, -0.5), (-dir3), (-sq3, -sq3, -sq3), 1e-4)
-  // clang-format on
-
-  // 2D diagonal
-
-  const auto sq2 = sqrt(pow(1 + 0.1, 2) / 2);
-  const auto dir2 = 1/sqrt(2);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), ( dir2,  dir2,     0), ( sq2,  sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (-dir2, -dir2,     0), (-sq2, -sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,    0), ( dir2,  dir2,     0), ( sq2,  sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,    0), (-dir2, -dir2,     0), (-sq2, -sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5,    0), ( dir2,  dir2,     0), ( sq2,  sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5,    0), (-dir2, -dir2,     0), (-sq2, -sq2,    0), 1e-4)
-
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (    0,  dir2,  dir2), (   0,  sq2,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (    0, -dir2, -dir2), (   0, -sq2, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,  0.5,  0.5), (    0,  dir2,  dir2), (   0,  sq2,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,  0.5,  0.5), (    0, -dir2, -dir2), (   0, -sq2, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0, -0.5, -0.5), (    0,  dir2,  dir2), (   0,  sq2,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0, -0.5, -0.5), (    0, -dir2, -dir2), (   0, -sq2, -sq2), 1e-4)
-
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), ( dir2,     0,  dir2), ( sq2,    0,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (-dir2,     0, -dir2), (-sq2,    0, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,    0,  0.5), ( dir2,     0,  dir2), ( sq2,    0,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,    0,  0.5), (-dir2,     0, -dir2), (-sq2,    0, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5,    0, -0.5), ( dir2,     0,  dir2), ( sq2,    0,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5,    0, -0.5), (-dir2,     0, -dir2), (-sq2,    0, -sq2), 1e-4)
-  // clang-format on
-}
-
-TEST(SphereRay, OriginOutsideIntersects)
-{
-  shapes::Sphere shape(1.0);
-  bodies::Sphere sphere(&shape);
-
-  // clang-format off
-  CHECK_INTERSECTS_TWICE(sphere, (-2, 0, 0), ( 1,  0,  0), ( 1,  0,  0), (-1,  0, 0), 1e-6)
-  CHECK_INTERSECTS_TWICE(sphere, ( 2, 0, 0), (-1,  0,  0), (-1,  0,  0), ( 1,  0, 0), 1e-6)
-  CHECK_INTERSECTS_TWICE(sphere, (0, -2, 0), ( 0,  1,  0), ( 0,  1,  0), ( 0, -1, 0), 1e-6)
-  CHECK_INTERSECTS_TWICE(sphere, (0,  2, 0), ( 0, -1,  0), ( 0, -1,  0), ( 0,  1, 0), 1e-6)
-  CHECK_INTERSECTS_TWICE(sphere, (0, 0, -2), ( 0,  0,  1), ( 0,  0,  1), ( 0,  0, -1), 1e-6)
-  CHECK_INTERSECTS_TWICE(sphere, (0, 0,  2), ( 0,  0, -1), ( 0,  0, -1), ( 0,  0,  1), 1e-6)
-  // clang-format on
-
-  // scaling
-
-  sphere.setScale(1.1);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 1,  0,  0), ( 1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), (-1,  0,  0), (-1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  1,  0), ( 0,    1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, -1,  0), ( 0,   -1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  0,  1), ( 0,      0,  1.1), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  0, -1), ( 0,      0, -1.1), 1e-6)
-  // clang-format on
-
-  // move origin within the sphere
-
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0.5, 0  , 0  ), ( 1,  0,  0), ( 1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0.5, 0  , 0  ), (-1,  0,  0), (-1.1,    0,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0.5, 0  ), ( 0,  1,  0), ( 0,    1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0.5, 0  ), ( 0, -1,  0), ( 0,   -1.1,    0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0  , 0.5), ( 0,  0,  1), ( 0,      0,  1.1), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0  , 0  , 0.5), ( 0,  0, -1), ( 0,      0, -1.1), 1e-6)
-  // clang-format on
-
-  // move sphere
-
-  Eigen::Isometry3d pose = Eigen::Translation3d(0.5, 0, 0) * Eigen::Quaterniond::Identity();
-  sphere.setPose(pose);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 1, 0, 0), ( 1.6, 0, 0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), (-1, 0, 0), (-0.6, 0, 0), 1e-6)
-  // clang-format on
-
-  pose = Eigen::Translation3d(0, 0.5, 0) * Eigen::Quaterniond::Identity();
-  sphere.setPose(pose);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0,  1, 0), (0,  1.6, 0), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, -1, 0), (0, -0.6, 0), 1e-6)
-  // clang-format on
-
-  pose = Eigen::Translation3d(0, 0, 0.5) * Eigen::Quaterniond::Identity();
-  sphere.setPose(pose);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, 0,  1), (0, 0,  1.6), 1e-6)
-  CHECK_INTERSECTS_ONCE(sphere, (0, 0, 0), ( 0, 0, -1), (0, 0, -0.6), 1e-6)
-  // clang-format on
-
-  // 3D diagonal
-
-  sphere.setPose(Eigen::Isometry3d::Identity());
-  sphere.setScale(1.0);
-  sphere.setPadding(0.1);
-
-  const auto sq3 = sqrt(pow(1 + 0.1, 2) / 3);
-  const auto dir3 = Eigen::Vector3d::Ones().normalized();
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), ( dir3), ( sq3,  sq3,  sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,  0.5), ( dir3), ( sq3,  sq3,  sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5, -0.5), ( dir3), ( sq3,  sq3,  sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (-dir3), (-sq3, -sq3, -sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,  0.5), (-dir3), (-sq3, -sq3, -sq3), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5, -0.5), (-dir3), (-sq3, -sq3, -sq3), 1e-4)
-  // clang-format on
-
-  // 2D diagonal
-
-  const auto sq2 = sqrt(pow(1 + 0.1, 2) / 2);
-  const auto dir2 = 1/sqrt(2);
-  // clang-format off
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), ( dir2,  dir2,     0), ( sq2,  sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (-dir2, -dir2,     0), (-sq2, -sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,    0), ( dir2,  dir2,     0), ( sq2,  sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,  0.5,    0), (-dir2, -dir2,     0), (-sq2, -sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5,    0), ( dir2,  dir2,     0), ( sq2,  sq2,    0), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5, -0.5,    0), (-dir2, -dir2,     0), (-sq2, -sq2,    0), 1e-4)
-
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (    0,  dir2,  dir2), (   0,  sq2,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (    0, -dir2, -dir2), (   0, -sq2, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,  0.5,  0.5), (    0,  dir2,  dir2), (   0,  sq2,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,  0.5,  0.5), (    0, -dir2, -dir2), (   0, -sq2, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0, -0.5, -0.5), (    0,  dir2,  dir2), (   0,  sq2,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0, -0.5, -0.5), (    0, -dir2, -dir2), (   0, -sq2, -sq2), 1e-4)
-
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), ( dir2,     0,  dir2), ( sq2,    0,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (   0,    0,    0), (-dir2,     0, -dir2), (-sq2,    0, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,    0,  0.5), ( dir2,     0,  dir2), ( sq2,    0,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, ( 0.5,    0,  0.5), (-dir2,     0, -dir2), (-sq2,    0, -sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5,    0, -0.5), ( dir2,     0,  dir2), ( sq2,    0,  sq2), 1e-4)
-  CHECK_INTERSECTS_ONCE(sphere, (-0.5,    0, -0.5), (-dir2,     0, -dir2), (-sq2,    0, -sq2), 1e-4)
-  // clang-format on
-}
-
-TEST(SphereRayIntersection, SimpleRay1)
-{
-  shapes::Sphere shape(1.0);
-  bodies::Sphere sphere(&shape);
-  sphere.setScale(1.05);
-
-  CHECK_INTERSECTS_TWICE(sphere, (5, 0, 0), (-1, 0, 0), (1.05, 0, 0), (-1.05, 0, 0), 1e-6)
-}
-
-TEST(SphereRayIntersection, SimpleRay2)
-{
-  shapes::Sphere shape(1.0);
-  bodies::Sphere sphere(&shape);
-  sphere.setScale(1.05);
-
-  CHECK_NO_INTERSECTION(sphere, (5, 0, 0), (1, 0, 0))
-}
-
-TEST(BoxRayIntersection, SimpleRay1)
-{
-  shapes::Box shape(1.0, 1.0, 3.0);
-  bodies::Box box(&shape);
-  box.setScale(0.95);
-
-  CHECK_INTERSECTS_TWICE(box, (10, 0.449, 0), (-1, 0, 0), (0.475, 0.449, 0), (-0.475, 0.449, 0), 1e-4)
-}
-
-TEST(BoxRayIntersection, SimpleRay2)
-{
-  shapes::Box shape(0.9, 0.01, 1.2);
-  bodies::Box box(&shape);
-
-  Eigen::Isometry3d pose(Eigen::AngleAxisd(0, Eigen::Vector3d::UnitX()));
-  pose.translation() = Eigen::Vector3d(0, 0.005, 0.6);
-  box.setPose(pose);
-
-  const Eigen::Vector3d ray_d(0, -5.195, -0.77);
-
-  CHECK_INTERSECTS(box, (0, 5, 1.6), (ray_d.normalized()), 2)
-}
-
-TEST(BoxRayIntersection, SimpleRay3)
-{
-  shapes::Box shape(0.02, 0.4, 1.2);
-  bodies::Box box(&shape);
-
-  Eigen::Isometry3d pose(Eigen::AngleAxisd(0, Eigen::Vector3d::UnitX()));
-  pose.translation() = Eigen::Vector3d(0.45, -0.195, 0.6);
-  box.setPose(pose);
-
-  const Eigen::Vector3d ray_d(0, 1.8, -0.669);
-
-  CHECK_NO_INTERSECTION(box, (0, -2, 1.11), (ray_d.normalized()))
-}
-
 // This tests if https://github.com/ros-planning/geometric_shapes/pull/109 is fixed
-TEST(BoxRayIntersection, FailsInUpstream)
+TEST(BoxRayIntersection, FailedInUpstream)
 {
   shapes::Box shape(1.0, 1.0, 1.0);
   bodies::Box box(&shape);

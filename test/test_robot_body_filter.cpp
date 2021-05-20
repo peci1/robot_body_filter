@@ -405,7 +405,7 @@ TEST(RobotBodyFilter, ParseRobot)
   nh.setParam("test_robot_description", "<robot name='test'></robot>");
   std_srvs::TriggerRequest req;
   std_srvs::TriggerResponse resp;
-  filter->triggerModelReload(req, resp);
+  EXPECT_TRUE(filter->triggerModelReload(req, resp));
 
   EXPECT_EQ(0, filter->shapesToLinks.size());
   EXPECT_FALSE(filter->tfFramesWatchdog->isMonitored("laser"));

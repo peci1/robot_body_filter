@@ -520,7 +520,8 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   mask.classifyPointNoLock(pointSensor, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val); // no ray, so no shadow
   mask.classifyPointNoLock(pointSensor2, val, sensorPos);
-  EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
+  // the sensor is not considered to shadow points inside itself
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
   mask.classifyPointNoLock(pointClipMin, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.classifyPointNoLock(pointClipMax, val, sensorPos);

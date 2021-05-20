@@ -1,31 +1,49 @@
 #include <robot_body_filter/utils/obb.h>
 
+#include <fcl/config.h>
+
+#if FCL_MINOR_VERSION == 5
 #include <fcl/BV/OBB.h>
+typedef fcl::Vec3f FCL_Vec3;
+typedef fcl::OBB FCL_OBB;
+#else
+#include <fcl/math/bv/OBB.h>
+typedef fcl::Vector3d FCL_Vec3;
+typedef fcl::OBB<double> FCL_OBB;
+#endif
 
 namespace bodies
 {
 
-fcl::Vec3f toFcl(const Eigen::Vector3d& eigenVec)
+#if FCL_MINOR_VERSION == 5
+inline FCL_Vec3 toFcl(const Eigen::Vector3d& eigenVec)
 {
-  fcl::Vec3f result;
+  FCL_Vec3 result;
   Eigen::Map<Eigen::MatrixXd>(result.data.vs, 3, 1) = eigenVec;
   return result;
 }
+#else
+#define toFcl
+#endif
 
-Eigen::Vector3d fromFcl(const fcl::Vec3f& fclVec)
+#if FCL_MINOR_VERSION == 5
+Eigen::Vector3d fromFcl(const FCL_Vec3& fclVec)
 {
   return Eigen::Map<const Eigen::MatrixXd>(fclVec.data.vs, 3, 1);
 }
+#else
+#define fromFcl
+#endif
 
-class OBBPrivate : public fcl::OBB
+class OBBPrivate : public FCL_OBB
 {
 public:
-  using fcl::OBB::OBB;
+  using FCL_OBB::OBB;
 };
 
 OBB::OBB()
 {
-  this->obb_.reset(new OBBPrivate);
+  this->obb_ = std::make_unique<OBBPrivate>();
 }
 
 OBB::OBB(const OBB& other) : OBB()
@@ -36,6 +54,7 @@ OBB::OBB(const OBB& other) : OBB()
 OBB& OBB::operator=(const OBB& other)
 {
   *obb_ = *other.obb_;
+  return *this;
 }
 
 OBB::OBB( const Eigen::Isometry3d& pose, const Eigen::Vector3d& extents) : OBB()
@@ -47,9 +66,13 @@ void OBB::setPoseAndExtents(const Eigen::Isometry3d& pose, const Eigen::Vector3d
 {
   const auto rotation = pose.linear();
 
+#if FCL_MINOR_VERSION == 5
   obb_->axis[0] = toFcl(rotation.col(0));
   obb_->axis[1] = toFcl(rotation.col(1));
   obb_->axis[2] = toFcl(rotation.col(2));
+#else
+  obb_->axis = rotation;
+#endif
 
   obb_->To = toFcl(pose.translation());
 
@@ -74,12 +97,19 @@ void OBB::getPose(Eigen::Isometry3d& pose) const
   pose.translation() = fromFcl(obb_->To);
   // If all axes are zero, we report the rotation as identity
   // This happens if OBB is default-constructed
+#if FCL_MINOR_VERSION == 5
   if (!obb_->axis[0].isZero() && !obb_->axis[3].isZero() && !obb_->axis[2].isZero())
   {
     pose.linear().col(0) = fromFcl(obb_->axis[0]);
     pose.linear().col(1) = fromFcl(obb_->axis[1]);
     pose.linear().col(2) = fromFcl(obb_->axis[2]);
   }
+#else
+  if (!obb_->axis.isApprox(fcl::Matrix3d::Zero()))
+  {
+    pose.linear() = obb_->axis;
+  }
+#endif
 }
 
 Eigen::Isometry3d OBB::getPose() const

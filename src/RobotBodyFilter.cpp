@@ -607,7 +607,8 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
     ROS_DEBUG("RobotBodyFilter: Scan transformation run time is %.5f secs.", double(clock()-stopwatchOverall) / CLOCKS_PER_SEC);
 
     vector<RayCastingShapeMask::MaskValue> pointMask;
-    const auto success = this->computeMask(projectedPointCloud, pointMask);
+    const auto success = this->computeMask(projectedPointCloud, pointMask, scanFrame);
+
     if (!success)
       return false;
 
@@ -862,7 +863,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
       const auto &transform = linkTransformEigen * collisionOffsetTransform;
 
       this->transformCache[collisionBody.cacheKey] =
-          std::make_shared<Eigen::Isometry3d>(transform);
+          std::allocate_shared<Eigen::Isometry3d>(Eigen::aligned_allocator<Eigen::Isometry3d>(), transform);
     }
 
     if (afterScanTime.sec != 0)
@@ -879,7 +880,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
       const auto &transform = linkTransformEigen * collisionOffsetTransform;
 
       this->transformCacheAfterScan[collisionBody.cacheKey] =
-          std::make_shared<Eigen::Isometry3d>(transform);
+        std::allocate_shared<Eigen::Isometry3d>(Eigen::aligned_allocator<Eigen::Isometry3d>(), transform);
     }
   }
 }
@@ -1241,7 +1242,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
       bodies::AxisAlignedBoundingBox box;
-      bodies::computeBoundingBox(body, box);
+      body->computeBoundingBox(box);
 
       if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
         continue;
@@ -1277,7 +1278,7 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
   if (this->computeBoundingBox)
   {
     bodies::AxisAlignedBoundingBox box;
-    bodies::mergeAxisAlignedBoundingBoxes(boxes, box);
+    bodies::mergeBoundingBoxes(boxes, box);
     const auto boxFloat = box.cast<float>();
 
     geometry_msgs::PolygonStamped boundingBoxMsg;
@@ -1541,7 +1542,7 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
   if (this->computeLocalBoundingBox)
   {
     bodies::AxisAlignedBoundingBox box;
-    bodies::mergeAxisAlignedBoundingBoxes(boxes, box);
+    bodies::mergeBoundingBoxes(boxes, box);
 
     geometry_msgs::PolygonStamped boundingBoxMsg;
 
@@ -1695,6 +1696,7 @@ bool RobotBodyFilter<T>::triggerModelReload(std_srvs::TriggerRequest &,
   this->configured_ = true;
 
   ROS_INFO("RobotBodyFilter: Robot model reloaded, resuming filter operation.");
+  return true;
 }
 
 template<typename T>

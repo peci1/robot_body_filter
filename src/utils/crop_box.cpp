@@ -21,7 +21,7 @@ void robot_body_filter::CropBoxPointCloud2::applyFilter(pcl::PCLPointCloud2 &out
     output = *input_;
 
     // Get x, y, z fields. We should not just assume that they are the first fields of each point
-    std::vector<pcl::uint32_t> offsets;
+    std::vector<decltype(pcl::PCLPointField::offset)> offsets;
     for (const pcl::PCLPointField& field : input_->fields)
     {
       if (field.name == "x" || field.name == "y" || field.name == "z")

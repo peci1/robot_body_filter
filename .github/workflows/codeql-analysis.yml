@@ -1,0 +1,59 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [master, ]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master]
+  #schedule:
+  #  - cron: '0 16 * * 0'
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-18.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+        fetch-depth: 2
+
+    # If this run was triggered by a pull request event, then checkout
+    # the head of the pull request instead of the merge commit.
+    - run: git checkout HEAD^2
+      if: ${{ github.event_name == 'pull_request' }}
+
+    # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      with:
+        languages: cpp
+
+    - name: Prepare ROS
+      run: | 
+        sudo apt-get update
+        echo 'Etc/UTC' | sudo tee /etc/timezone && sudo ln -s /usr/share/zoneinfo/Etc/UTC /etc/localtime && sudo apt-get install -y --no-install-recommends tzdata
+        sudo apt-get install -y --no-install-recommends dirmngr gnupg2
+        sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+        echo "deb http://packages.ros.org/ros/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/ros1-latest.list
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends ros-melodic-ros-core build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
+        sudo rosdep init && sudo rosdep update --rosdistro melodic
+    
+    - name: Install package dependencies
+      run: |
+        sudo rosdep install -q --from-paths . --ignore-src -y --rosdistro melodic
+        
+    - name: Build package
+      run: |
+        source /opt/ros/melodic/setup.bash
+        catkin init
+        catkin config -s .. -b ../../build -d ../../devel -i ../../install --install
+        catkin build --summarize --no-status
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1
