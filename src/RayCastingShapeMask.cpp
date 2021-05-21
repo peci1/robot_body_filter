@@ -123,6 +123,8 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
   point_containment_filter::ShapeHandle containsHandle;
   bodies::Body* containsBody;
   bodies::Body* shadowBody;
+  bodies::Body* bsphereBody;
+  bodies::Body* bboxBody;
   std::set<const bodies::Body*> validBodies;
 
   for (const auto& multiBody : this->data->multiBodies)
@@ -130,6 +132,8 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
     containsHandle = std::get<0>(multiBody).contains;
     containsBody = std::get<1>(multiBody).body;
     shadowBody = std::get<2>(multiBody).body;
+    bsphereBody = std::get<3>(multiBody).body;
+    bboxBody = std::get<4>(multiBody).body;
 
     if (this->transform_callback_(containsHandle, transform))
     {
@@ -140,6 +144,18 @@ void RayCastingShapeMask::updateBodyPosesNoLock()
       {
         shadowBody->setPose(transform);
         validBodies.insert(shadowBody);
+      }
+
+      if (bsphereBody != containsBody && bsphereBody != shadowBody)
+      {
+        bsphereBody->setPose(transform);
+        validBodies.insert(bsphereBody);
+      }
+
+      if (bboxBody != containsBody && bboxBody != shadowBody && bboxBody != bsphereBody)
+      {
+        bboxBody->setPose(transform);
+        validBodies.insert(bboxBody);
       }
     }
     else
