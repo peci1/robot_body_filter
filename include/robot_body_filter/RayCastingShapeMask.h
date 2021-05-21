@@ -100,7 +100,7 @@ public:
       const TransformCallback& transformCallback,
       double minSensorDist = 0.0, double maxSensorDist = 1e10,
       bool doClipping = true, bool doContainsTest = true,
-      bool doShadowTest = true);
+      bool doShadowTest = true, double maxShadowDist = -1.0);
 
   virtual ~RayCastingShapeMask();
 
@@ -363,6 +363,7 @@ protected:
 
   double minSensorDist; //!< Minimum sensing distance of the sensor.
   double maxSensorDist; //!< Maximum sensing distance of the sensor.
+  double maxShadowDist; //!< Maximum distance of a point classified as SHADOW (further are OUTSIDE).
 
   bool doClipping = true; //!< Classify for CLIP during masking.
   bool doContainsTest = true; //!< Classify for INSIDE during masking.

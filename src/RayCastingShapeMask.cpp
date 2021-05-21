@@ -38,13 +38,15 @@ struct RayCastingShapeMask::RayCastingShapeMaskPIMPL
 RayCastingShapeMask::RayCastingShapeMask(
     const TransformCallback& transformCallback,
     const double minSensorDist, const double maxSensorDist,
-    const bool doClipping, const bool doContainsTest, const bool doShadowTest)
+    const bool doClipping, const bool doContainsTest, const bool doShadowTest,
+    const double maxShadowDist)
     : ShapeMask(transformCallback),
       minSensorDist(minSensorDist),
       maxSensorDist(maxSensorDist),
       doClipping(doClipping),
       doContainsTest(doContainsTest),
-      doShadowTest(doShadowTest)
+      doShadowTest(doShadowTest),
+      maxShadowDist(maxShadowDist)
 {
   this->data = std::make_unique<RayCastingShapeMaskPIMPL>();
 }
@@ -274,7 +276,7 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
     }
   }
 
-  if (this->doShadowTest) {
+  if (this->doShadowTest && (this->maxShadowDist <= 0.0 || distance <= this->maxShadowDist)) {
     // point is not inside the robot, check if it is a shadow point
     dir /= distance;
     EigenSTL::vector_Vector3d intersections;

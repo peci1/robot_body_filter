@@ -73,6 +73,7 @@ bool RobotBodyFilter<T>::configure() {
   const bool doClipping = this->getParamVerbose("filter/do_clipping", true);
   const bool doContainsTest = this->getParamVerbose("filter/do_contains_test", true);
   const bool doShadowTest = this->getParamVerbose("filter/do_shadow_test", true);
+  const double maxShadowDistance = this->getParamVerbose("filter/max_shadow_distance", this->maxDistance, "m");
   this->reachableTransformTimeout = this->getParamVerbose("transforms/timeout/reachable", ros::Duration(0.1), "s");
   this->unreachableTransformTimeout = this->getParamVerbose("transforms/timeout/unreachable", ros::Duration(0.2), "s");
   this->requireAllFramesReachable = this->getParamVerbose("transforms/require_all_reachable", false);
@@ -316,7 +317,7 @@ bool RobotBodyFilter<T>::configure() {
   auto getShapeTransformCallback = std::bind(&RobotBodyFilter::getShapeTransform, this, std::placeholders::_1, std::placeholders::_2);
   shapeMask = std::make_unique<RayCastingShapeMask>(getShapeTransformCallback,
       this->minDistance, this->maxDistance,
-      doClipping, doContainsTest, doShadowTest);
+      doClipping, doContainsTest, doShadowTest, maxShadowDistance);
 
   // the other case happens when configure() is called again from update() (e.g. when a new bag file
   // started playing)
