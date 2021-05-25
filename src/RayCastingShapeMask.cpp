@@ -252,6 +252,12 @@ void RayCastingShapeMask::maskContainmentAndShadows(const Eigen::Vector3f& data,
     RayCastingShapeMask::MaskValue& mask, const Eigen::Vector3d& sensorPos,
     const bool updateBodyPoses)
 {
+  if (data.hasNaN())
+  {
+    mask = MaskValue::OUTSIDE;
+    return;
+  }
+
   boost::mutex::scoped_lock _(this->shapes_lock_);
 
   if (updateBodyPoses)
@@ -264,6 +270,10 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
     RayCastingShapeMask::MaskValue &mask, const Eigen::Vector3d& sensorPos)
 {
   mask = MaskValue::OUTSIDE;
+
+  if (data.hasNaN()) {
+    return;
+  }
 
   // direction from measured point to sensor
   Eigen::Vector3d dir(sensorPos - data);

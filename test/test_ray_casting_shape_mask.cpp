@@ -1,12 +1,5 @@
 #include "gtest/gtest.h"
 
-/* We want to subclass ShapeMask and use its members. */
-// Upstream solution proposed in https://github.com/ros-planning/moveit/pull/1457
-#include <sstream>  // has to be there, otherwise we encounter build problems
-#define private protected
-#include <moveit/point_containment_filter/shape_mask.h>
-#undef private
-
 #include <robot_body_filter/RayCastingShapeMask.h>
 #include <robot_body_filter/utils/shapes.h>
 #include <urdf_model/model.h>
@@ -56,7 +49,6 @@ TEST(RayCastingShapeMask, Basic)
   EXPECT_TRUE(mask.bodies_.empty());
   EXPECT_TRUE(mask.getBodiesForContainsTest().empty());
   EXPECT_TRUE(mask.getBodiesForShadowTest().empty());
-  EXPECT_TRUE(mask.used_handles_.empty());
   EXPECT_TRUE(mask.bspheres_.empty());
   EXPECT_TRUE(mask.ignoreInContainsTest.empty());
   EXPECT_TRUE(mask.ignoreInShadowTest.empty());
@@ -66,7 +58,6 @@ TEST(RayCastingShapeMask, Basic)
   EXPECT_EQ(1, mask.bodies_.size());
   EXPECT_EQ(1, mask.getBodiesForContainsTest().size());
   EXPECT_EQ(1, mask.getBodiesForShadowTest().size());
-  EXPECT_EQ(1, mask.used_handles_.size());
   // bspheres are only updated by calling updateBodyPoses()
   EXPECT_EQ(0, mask.bspheres_.size());
   EXPECT_EQ(0, mask.bspheresBodyIndices.size());
@@ -94,7 +85,6 @@ TEST(RayCastingShapeMask, Basic)
   EXPECT_TRUE(mask.bodies_.empty());
   EXPECT_TRUE(mask.getBodiesForContainsTest().empty());
   EXPECT_TRUE(mask.getBodiesForShadowTest().empty());
-  EXPECT_TRUE(mask.used_handles_.empty());
   EXPECT_TRUE(mask.ignoreInContainsTest.empty());
   EXPECT_TRUE(mask.ignoreInShadowTest.empty());
 
@@ -436,6 +426,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   Eigen::Vector3d pointShadowSphere(-0.560762, 0, 1.83871);
   Eigen::Vector3d pointShadowBoth(-sensorPos);
   Eigen::Vector3d pointOutside(-3, 0, 0);
+  Eigen::Vector3d pointOneNan(-3, 0, std::numeric_limits<double>::quiet_NaN());
+  Eigen::Vector3d pointAllNan(std::numeric_limits<double>::quiet_NaN(),
+                              std::numeric_limits<double>::quiet_NaN(),
+                              std::numeric_limits<double>::quiet_NaN());
 
   // doClipping, doContainsTest and doShadowTest are all false, so only OUTSIDE is possible
   mask.classifyPointNoLock(pointSensor, val, sensorPos);
@@ -459,6 +453,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   mask.classifyPointNoLock(pointShadowBoth, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.doClipping = true;
@@ -486,6 +484,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.doClipping = false;
   mask.doContainsTest = true;
@@ -511,6 +513,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   mask.classifyPointNoLock(pointShadowBoth, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   // shadow filtering with sensor body not excluded - everything is shadowed by the sensor body
@@ -540,6 +546,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.setIgnoreInShadowTest({multiHandleSensor});
   mask.doClipping = false;
@@ -567,6 +577,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.doClipping = true;
   mask.doContainsTest = true;
@@ -592,6 +606,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   mask.classifyPointNoLock(pointShadowBoth, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.doClipping = true;
@@ -619,6 +637,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.doClipping = false;
   mask.doContainsTest = true;
@@ -644,6 +666,10 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   mask.classifyPointNoLock(pointShadowBoth, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   mask.doClipping = true;
@@ -671,19 +697,20 @@ TEST(RayCastingShapeMask, ClassifyPoint)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.classifyPointNoLock(pointOutside, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.classifyPointNoLock(pointAllNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
   
   random_numbers::RandomNumberGenerator rng;
   Eigen::Vector3d pointInside;
   for (size_t i = 0; i < 100; ++i)
   {
-    // workaround for https://github.com/ros-planning/geometric_shapes/pull/133
-    if (const_cast<bodies::Body*>(mask.getBodies().at(handle1))->samplePointInside(
-        rng, 10, pointInside)) {
+    if (mask.getBodies().at(handle1)->samplePointInside(rng, 10, pointInside)) {
       mask.classifyPointNoLock(pointInside, val, sensorPos);
       EXPECT_EQ(RayCastingShapeMask::MaskValue::INSIDE, val);
     }
-    if (const_cast<bodies::Body*>(mask.getBodies().at(handle2))->samplePointInside(
-        rng, 10, pointInside)) {
+    if (mask.getBodies().at(handle2)->samplePointInside(rng, 10, pointInside)) {
       mask.classifyPointNoLock(pointInside, val, sensorPos);
       EXPECT_EQ(RayCastingShapeMask::MaskValue::INSIDE, val);
     }
@@ -740,6 +767,10 @@ TEST(RayCastingShapeMask, Mask)
   Eigen::Vector3f pointShadowSphere(-0.560762, 0, 1.83871);
   Eigen::Vector3f pointShadowBoth(-sensorPos.x(), 0, 0);
   Eigen::Vector3f pointOutside(-3, 0, 0);
+  Eigen::Vector3f pointOneNan(-3, 0, std::numeric_limits<float>::quiet_NaN());
+  Eigen::Vector3f pointAllNan(std::numeric_limits<float>::quiet_NaN(),
+                              std::numeric_limits<float>::quiet_NaN(),
+                              std::numeric_limits<float>::quiet_NaN());
 
   mask.maskContainmentAndShadows(pointSensor, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, val);
@@ -763,11 +794,15 @@ TEST(RayCastingShapeMask, Mask)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, val);
   mask.maskContainmentAndShadows(pointOutside, val, sensorPos);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.maskContainmentAndShadows(pointOneNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
+  mask.maskContainmentAndShadows(pointAllNan, val, sensorPos);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, val);
 
   Cloud cloud;
   CloudModifier mod(cloud);
   mod.setPointCloud2FieldsByString(1, "xyz");
-  mod.resize(11);
+  mod.resize(13);
   CloudIter it_x(cloud, "x");
   CloudIter it_y(cloud, "y");
   CloudIter it_z(cloud, "z");
@@ -784,12 +819,14 @@ TEST(RayCastingShapeMask, Mask)
   p = pointShadowSphere; *it_x = p.x(); *it_y = p.y(); *it_z = p.z(); ++it_x; ++it_y; ++it_z;
   p = pointShadowBoth; *it_x = p.x(); *it_y = p.y(); *it_z = p.z(); ++it_x; ++it_y; ++it_z;
   p = pointOutside; *it_x = p.x(); *it_y = p.y(); *it_z = p.z(); ++it_x; ++it_y; ++it_z;
+  p = pointOneNan; *it_x = p.x(); *it_y = p.y(); *it_z = p.z(); ++it_x; ++it_y; ++it_z;
+  p = pointAllNan; *it_x = p.x(); *it_y = p.y(); *it_z = p.z(); ++it_x; ++it_y; ++it_z;
 
   std::vector<RayCastingShapeMask::MaskValue> vals;
   vals.push_back(RayCastingShapeMask::MaskValue::INSIDE); // be adverse and pass garbage
   mask.maskContainmentAndShadows(cloud, vals, sensorPos);
 
-  ASSERT_EQ(11, vals.size());
+  ASSERT_EQ(13, vals.size());
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, vals[0]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, vals[1]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, vals[2]);
@@ -801,6 +838,8 @@ TEST(RayCastingShapeMask, Mask)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, vals[8]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, vals[9]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, vals[10]);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, vals[11]);
+  EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, vals[12]);
 }
 
 TEST(RayCastingShapeMask, MaskPerformancePoints)
@@ -859,13 +898,12 @@ TEST(RayCastingShapeMask, MaskPerformancePoints)
   auto body2 = mask.getBodies()[handle2];
   for (size_t i = 0; i < numPoints / 2; ++i)
   {
-    // workaround for https://github.com/ros-planning/geometric_shapes/pull/133
-    while (!const_cast<bodies::Body*>(body1)->samplePointInside(rng, 10, p)) {}
+    while (!body1->samplePointInside(rng, 10, p)) {}
     p = 2 * p;
     *it_x = p.x(); *it_y = p.y(); *it_z = p.z();
     ++it_x; ++it_y; ++it_z;
 
-    while (!const_cast<bodies::Body*>(body2)->samplePointInside(rng, 10, p)) {}
+    while (!body2->samplePointInside(rng, 10, p)) {}
     p = 2 * p;
     *it_x = p.x(); *it_y = p.y(); *it_z = p.z();
     ++it_x; ++it_y; ++it_z;

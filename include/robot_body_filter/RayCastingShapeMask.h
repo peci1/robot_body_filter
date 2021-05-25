@@ -82,7 +82,7 @@ public:
 
   enum class MaskValue : std::uint8_t {
     INSIDE = 0, //!< The point is inside robot body.
-    OUTSIDE = 1, //!< The point is outside robot body and is not a shadow.
+    OUTSIDE = 1, //!< The point is outside robot body and is not a shadow (invalid points with NaNs also fall here).
     CLIP = 2, //!< The point is outside measurement range.
     SHADOW = 3, //!< Line segment sensor-point intersects the robot body and the point is not INSIDE.
   };
@@ -222,7 +222,8 @@ public:
   /** \brief Decide whether the points in data are either INSIDE the robot,
    * OUTSIDE of it, SHADOWed by the robot body, or CLIPped by min/max sensor
    * measurement distance. INSIDE points can also be viewed as being SHADOW
-   * points, but in this algorithm, INSIDE has precedence.
+   * points, but in this algorithm, INSIDE has precedence. Invalid points
+   * (containing NaNs) are reported as OUTSIDE.
    *
    * \param [in] data The input pointcloud. It has to be in the same frame into
    *                  which transform_callback_ transforms the body parts. The
@@ -241,7 +242,8 @@ public:
   /** \brief Decide whether the point is either INSIDE the robot,
    * OUTSIDE of it, SHADOWed by the robot body, or CLIPped by min/max sensor
    * measurement distance. INSIDE points can also be viewed as being SHADOW
-   * points, but in this algorithm, INSIDE has precedence.
+   * points, but in this algorithm, INSIDE has precedence. Invalid points
+   * (containing NaNs) are reported as OUTSIDE.
    *
    * \param [in] data The input point. It has to be in the same frame
    *                  into which transform_callback_ transforms the body parts.
@@ -332,7 +334,8 @@ protected:
   /** \brief Decide whether the point is either INSIDE the robot,
    * OUTSIDE of it, SHADOWed by the robot body, or CLIPped by min/max sensor
    * measurement distance. INSIDE points can also be viewed as being SHADOW
-   * points, but in this algorithm, INSIDE has precedence.
+   * points, but in this algorithm, INSIDE has precedence. Invalid points
+   * (containing NaNs) are reported as OUTSIDE.
    *
    * \param [in] data The input point. It has to be in the same frame
    *                  into which transform_callback_ transforms the body parts.
