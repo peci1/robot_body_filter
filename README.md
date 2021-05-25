@@ -62,6 +62,12 @@ link that can never be seen by the sensor, put it in the list of ignored links.
 The less links are processed, the better performance. If you're only interested
 in removing a few links, consider using the `only_links` parameter.
 
+To speed up shadow filtering, you can set `filter/max_shadow_distance`, which
+limits the number of points considered for shadow tests just to points close to
+the sensor. Setting this to e.g. three times the diameter of the robot should
+remove all of the shadow points caused by refraction by a part of the robot body.
+But you have to test this with real data.
+
 Performance also strongly depends on representation of the robot model.
 The filter reads `<collision>` tags from the robot URDF. You can use boxes,
 spheres and cylinders (which are fast to process), or you can use **convex**
@@ -152,25 +158,24 @@ filtered pointclouds are output in the filtering frame.
 #### Bounding shapes
 
 As a byproduct, the filter can also compute various bounding shapes of the robot
-model. There are actually two robot models - one for contains test and one
-for shadow test (these models can differ by inflation and considered links).
-All bounding shapes are computed from the model used for contains test (even if
-`filter/do_contains_test` is off). All bounding shapes are published in the
-filtering frame. For point-by-point scans, the bounding shapes correspond to the
+model. There are actually four robot models - one for contains test, one
+for shadow test, one for bounding sphere computation and one for bounding box
+(these models can differ by inflation and considered links).
+All bounding shapes are published in the filtering frame. For point-by-point scans,
+the bounding shapes correspond to the
 time instant specified in the header of the processed scan. The computation of
 bounding shapes is off by default, but enabling it is cheap (performance-wise).
-Each bounding shape can also specifically ignore some links or collisions from
-its computation.
 
 The **bounding sphere** is easy - the smallest sphere that contains the whole
-collision model for contains test (with the specified exclusions removed).
+collision model for bounding sphere computation (with the specified exclusions removed).
 
 The **bounding box** is the smallest axis-aligned bounding box aligned to the
-filtering frame.
+filtering frame. It is built from the model for bounding box computation.
 
 The **local bounding box** is the smallest axis-aligned bounding box aligned to
 the frame specified in `local_bounding_box/frame_id`. It is especially useful
-with mobile robots when the desired frame is `base_link`.
+with mobile robots when the desired frame is `base_link`. It is built from the model
+for bounding box computation.
 
 The **oriented bounding box** should be the smallest box containing the
 collision model. However, its computation is very bad conditioned, so the
@@ -178,12 +183,13 @@ results can be very unsatisfactory. Currently, the oriented bounding box of each
 of the basic collision shapes is "tight", but merging the boxes is not optimal.
 A good algorithm would probably require costly and advanced iterative methods.
 The current implementation uses FCL in the background and merges the boxes using
-`fcl::OBB::operator+=()` without any further optimizations.
+`fcl::OBB::operator+=()` without any further optimizations. It is built from the
+model for bounding box computation.
 
 The filter also supports publishing auxiliary pointclouds which "cut out" each
 of these bounding shapes. These are the input data converted to pointcloud in
 filtering frame from which all points belonging to the bounding shape are
-removed. Please not that the "base" used for cutting out is the input
+removed. Please note that the "base" used for cutting out is the input
 pointcloud, not the filtered one.
 
 #### First setup/debugging
@@ -200,9 +206,11 @@ Also, have a look in the [examples] folder to get some inspiration.
 
 This is a standard `filters::FilterBase<T>`-based filter which implements the
 `configure()` and `update(const T&, T&)` methods. This means it can be loaded
-e.g. as a part of a filter chain via the `laser_filters` package. This means
-the input and output data are not supplied in the form of topics, but they are
-instead passed to the `update()` method via the C++ API.
+e.g. as a part of a filter chain via the
+[`laser_filters`](https://github.com/ros-perception/laser_filters) package or
+the relatively new [`sensor_filters`](https://github.com/ctu-vras/sensor_filters).
+This means the input and output data are not supplied in the form of topics,
+but they are instead passed to the `update()` method via the C++ API.
 
 This filter is a bit unusual - it subscribes and publishes several topics.
 Normally, filters only operate via the `update()` method and are not expected
@@ -340,6 +348,12 @@ configuration of your filter.
 
     If `true`, the filter will mark points shadowed by robot body 
     as `SHADOW`. If `false`, such points will be marked `OUTSIDE`.
+- `filter/max_shadow_distance` (`float`, default is the value of `sensor/max_distance`)
+
+    If greater than zero, specifies the maximum distance of a point from the sensor
+    frame within which the point can be considered for shadow testing. All further
+    points are classified as `OUTSIDE`. Setting this parameter to a low value may 
+    greatly improve performance of the shadow filtering.
 - `body_model/inflation/scale` (`float`, default `1.0`)
 
     A scale that is applied to the collision model for the purposes of
@@ -360,6 +374,18 @@ configuration of your filter.
 - `body_model/inflation/shadow_test/padding` (`float`, default `body_model/inflation/padding`)
 
     Padding to be added to the collision model used for shadow tests.
+- `body_model/inflation/bounding_sphere/scale` (`float`, default `body_model/inflation/scale`)
+
+    A scale that is applied to the collision model used for bounding sphere computation.
+- `body_model/inflation/bounding_sphere/padding` (`float`, default `body_model/inflation/padding`)
+
+    Padding to be added to the collision model used for bounding sphere computation.
+- `body_model/inflation/bounding_box/scale` (`float`, default `body_model/inflation/scale`)
+
+    A scale that is applied to the collision model used for bounding box computation.
+- `body_model/inflation/bounding_box/padding` (`float`, default `body_model/inflation/padding`)
+
+    Padding to be added to the collision model used for bounding box computation.
 - `body_model/inflation/per_link/scale` (`dict[str:float]`, default `{}`)
 
     A scale that is applied to the specified links for the purposes of
@@ -369,8 +395,9 @@ configuration of your filter.
     Names can be either names of links (`link`), names of collisions (
     `*::my_collision`), a combination of link name and zero-based collision
     index (`link::1`), or link name and collision name, e.g.
-    `link::my_collision`. Any such name can have suffix `::contains` or 
-    `::shadow`, which will only change the scale for contains or shadow tests.
+    `link::my_collision`. Any such name can have suffix `::contains`, 
+    `::shadow`, `::bounding_sphere` or `::bounding_box`, which will only change
+    the scale for contains or shadow tests or for bounding sphere or box computation.
     If a collision is matched by multiple entries, they have priority
     corresponding to the order they were introduced here (the entries do not
     "add up", but replace each other).
@@ -383,8 +410,9 @@ configuration of your filter.
     padding. Names can be either names of links (`link`), names of collisions (
     `*::my_collision`), a combination of link name and zero-based collision
     index (`link::1`), or link name and collision name, e.g.
-    `link::my_collision`. Any such name can have suffix `::contains` or 
-    `::shadow`, which will only change the padding for contains or shadow tests.
+    `link::my_collision`. Any such name can have suffix `::contains`,
+    `::shadow`, `::bounding_sphere` or `::bounding_box`, which will only change
+    the padding for contains or shadow tests or for bounding sphere or box computation.
     If a collision is matched by multiple entries, they have priority
     corresponding to the order they were introduced here (the entries do not
     "add up", but replace each other).
@@ -427,6 +455,14 @@ configuration of your filter.
     body. Same naming rules as above. It is essential that this list contains 
     the sensor link - otherwise all points would be shadowed by the sensor 
     itself. 
+- `ignored_links/bounding_sphere` (`list[string]`, default `[]`)
+
+    List of links to be ignored when computing the bounding sphere.
+    Same naming rules as above.
+- `ignored_links/bounding_box` (`list[string]`, default `[]`)
+
+    List of links to be ignored when computing the bounding box.
+    Same naming rules as above.
 - `ignored_links/everywhere` (`list[string]`, default `[]`)
 
     List of links to be completely ignored. Same naming rules as above.
@@ -533,6 +569,14 @@ These options are there to help correctly set up and debug the filter operation 
 
     Marker array containing the exact robot model used for shadow tests.
     Turned on by `debug/marker/shadow` parameter.
+- `robot_model_for_bounding_sphere` (`visualization_msgs/MarkerArray`)
+
+    Marker array containing the exact robot model used for computation of
+    bounding sphere. Turned on by `debug/marker/bounding_sphere` parameter.
+- `robot_model_for_bounding_box` (`visualization_msgs/MarkerArray`)
+
+    Marker array containing the exact robot model used for computation of
+    bounding box. Turned on by `debug/marker/bounding_box` parameter.
 - `scan_point_cloud_inside` (`sensor_msgs/PointCloud2`)
 
     Debugging pointcloud with points classified as `INSIDE`. Turned on by
@@ -596,3 +640,11 @@ These options are there to help correctly set up and debug the filter operation 
 
     Whether to publish debugging marker array containing the exact robot body 
     model used for shadow test.
+- `debug/marker/bounding_sphere` (`bool`, default `false`)
+
+    Whether to publish debugging marker array containing the exact robot body 
+    model used for computing the bounding sphere.
+- `debug/marker/bounding_box` (`bool`, default `false`)
+
+    Whether to publish debugging marker array containing the exact robot body 
+    model used for computing the bounding box.
