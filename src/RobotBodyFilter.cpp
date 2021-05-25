@@ -1051,10 +1051,14 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
         ++collisionIndex;
       }
 
-      if (collisionIndex == 0) {
-        ROS_WARN(
-          "RobotBodyFilter: No collision element found for link %s of robot %s. This link will not be filtered out "
-          "from laser scans.", link->name.c_str(), parsedUrdfModel.getName().c_str());
+      // no collision element found; only warn for links that are not ignored and have at least one visual
+      if (collisionIndex == 0 && !link->visual_array.empty()) {
+        if ((this->onlyLinks.empty() || (this->onlyLinks.find(link->name) != this->onlyLinks.end())) &&
+             this->linksIgnoredEverywhere.find(link->name) == this->linksIgnoredEverywhere.end()) {
+          ROS_WARN(
+            "RobotBodyFilter: No collision element found for link %s of robot %s. This link will not be filtered out "
+            "from laser scans.", link->name.c_str(), parsedUrdfModel.getName().c_str());
+        }
       }
     }
 
