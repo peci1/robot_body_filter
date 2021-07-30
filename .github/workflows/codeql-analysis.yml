@@ -42,6 +42,7 @@ jobs:
         echo "deb http://packages.ros.org/ros/ubuntu bionic main" | sudo tee /etc/apt/sources.list.d/ros1-latest.list
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends ros-melodic-ros-core build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
+        sudo apt-get dist-upgrade -y
         sudo rosdep init && sudo rosdep update --rosdistro melodic
     
     - name: Install package dependencies
