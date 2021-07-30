@@ -67,14 +67,13 @@ bool RobotBodyFilter<T>::configure() {
   stripLeadingSlash(this->filteringFrame, true);
   this->minDistance = this->getParamVerbose("sensor/min_distance", 0.0, "m");
   this->maxDistance = this->getParamVerbose("sensor/max_distance", 0.0, "m");
-  this->inflationPadding = this->getParamVerbose("body_model/inflation/padding", 0.0, "m");
-  this->inflationScale = this->getParamVerbose("body_model/inflation/scale", 1.0);
   this->robotDescriptionParam = this->getParamVerbose("body_model/robot_description_param", "robot_description");
   this->keepCloudsOrganized = this->getParamVerbose("filter/keep_clouds_organized", true);
   this->modelPoseUpdateInterval = this->getParamVerbose("filter/model_pose_update_interval", ros::Duration(0, 0), "s");
   const bool doClipping = this->getParamVerbose("filter/do_clipping", true);
   const bool doContainsTest = this->getParamVerbose("filter/do_contains_test", true);
   const bool doShadowTest = this->getParamVerbose("filter/do_shadow_test", true);
+  const double maxShadowDistance = this->getParamVerbose("filter/max_shadow_distance", this->maxDistance, "m");
   this->reachableTransformTimeout = this->getParamVerbose("transforms/timeout/reachable", ros::Duration(0.1), "s");
   this->unreachableTransformTimeout = this->getParamVerbose("transforms/timeout/unreachable", ros::Duration(0.2), "s");
   this->requireAllFramesReachable = this->getParamVerbose("transforms/require_all_reachable", false);
@@ -100,14 +99,104 @@ bool RobotBodyFilter<T>::configure() {
   this->publishDebugPclShadow = this->getParamVerbose("debug/pcl/shadow", false);
   this->publishDebugContainsMarker = this->getParamVerbose("debug/marker/contains", false);
   this->publishDebugShadowMarker = this->getParamVerbose("debug/marker/shadow", false);
+  this->publishDebugBsphereMarker = this->getParamVerbose("debug/marker/bounding_sphere", false);
+  this->publishDebugBboxMarker = this->getParamVerbose("debug/marker/bounding_box", false);
+
+  const auto inflationPadding = this->getParamVerbose("body_model/inflation/padding", 0.0, "m");
+  const auto inflationScale = this->getParamVerbose("body_model/inflation/scale", 1.0);
+  this->defaultContainsInflation.padding = this->getParamVerbose("body_model/inflation/contains_test/padding", inflationPadding, "m");
+  this->defaultContainsInflation.scale = this->getParamVerbose("body_model/inflation/contains_test/scale", inflationScale);
+  this->defaultShadowInflation.padding = this->getParamVerbose("body_model/inflation/shadow_test/padding", inflationPadding, "m");
+  this->defaultShadowInflation.scale = this->getParamVerbose("body_model/inflation/shadow_test/scale", inflationScale);
+  this->defaultBsphereInflation.padding = this->getParamVerbose("body_model/inflation/bounding_sphere/padding", inflationPadding, "m");
+  this->defaultBsphereInflation.scale = this->getParamVerbose("body_model/inflation/bounding_sphere/scale", inflationScale);
+  this->defaultBboxInflation.padding = this->getParamVerbose("body_model/inflation/bounding_box/padding", inflationPadding, "m");
+  this->defaultBboxInflation.scale = this->getParamVerbose("body_model/inflation/bounding_box/scale", inflationScale);
+
+  // read per-link padding
+  const auto perLinkInflationPadding = this->getParamVerboseMap("body_model/inflation/per_link/padding", std::map<std::string, double>(), "m");
+  for (const auto& inflationPair : perLinkInflationPadding)
+  {
+    bool containsOnly;
+    bool shadowOnly;
+    bool bsphereOnly;
+    bool bboxOnly;
+
+    auto linkName = inflationPair.first;
+    linkName = removeSuffix(linkName, CONTAINS_SUFFIX, &containsOnly);
+    linkName = removeSuffix(linkName, SHADOW_SUFFIX, &shadowOnly);
+    linkName = removeSuffix(linkName, BSPHERE_SUFFIX, &bsphereOnly);
+    linkName = removeSuffix(linkName, BBOX_SUFFIX, &bboxOnly);
+
+    if (!shadowOnly && !bsphereOnly && !bboxOnly)
+      this->perLinkContainsInflation[linkName] =
+          ScaleAndPadding(this->defaultContainsInflation.scale, inflationPair.second);
+    if (!containsOnly && !bsphereOnly && !bboxOnly)
+      this->perLinkShadowInflation[linkName] =
+          ScaleAndPadding(this->defaultShadowInflation.scale, inflationPair.second);
+    if (!containsOnly && !shadowOnly && !bboxOnly)
+      this->perLinkBsphereInflation[linkName] =
+          ScaleAndPadding(this->defaultBsphereInflation.scale, inflationPair.second);
+    if (!containsOnly && !shadowOnly && !bsphereOnly)
+      this->perLinkBboxInflation[linkName] =
+          ScaleAndPadding(this->defaultBboxInflation.scale, inflationPair.second);
+  }
+
+  // read per-link scale
+  const auto perLinkInflationScale = this->getParamVerboseMap("body_model/inflation/per_link/scale", std::map<std::string, double>());
+  for (const auto& inflationPair : perLinkInflationScale)
+  {
+    bool containsOnly;
+    bool shadowOnly;
+    bool bsphereOnly;
+    bool bboxOnly;
+
+    auto linkName = inflationPair.first;
+    linkName = removeSuffix(linkName, CONTAINS_SUFFIX, &containsOnly);
+    linkName = removeSuffix(linkName, SHADOW_SUFFIX, &shadowOnly);
+    linkName = removeSuffix(linkName, BSPHERE_SUFFIX, &bsphereOnly);
+    linkName = removeSuffix(linkName, BBOX_SUFFIX, &bboxOnly);
+
+    if (!shadowOnly && !bsphereOnly && !bboxOnly)
+    {
+      if (this->perLinkContainsInflation.find(linkName) == this->perLinkContainsInflation.end())
+        this->perLinkContainsInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultContainsInflation.padding);
+      else
+        this->perLinkContainsInflation[linkName].scale = inflationPair.second;
+    }
+
+    if (!containsOnly && !bsphereOnly && !bboxOnly)
+    {
+      if (this->perLinkShadowInflation.find(linkName) == this->perLinkShadowInflation.end())
+        this->perLinkShadowInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultShadowInflation.padding);
+      else
+        this->perLinkShadowInflation[linkName].scale = inflationPair.second;
+    }
+
+    if (!containsOnly && !shadowOnly && !bboxOnly)
+    {
+      if (this->perLinkBsphereInflation.find(linkName) == this->perLinkBsphereInflation.end())
+        this->perLinkBsphereInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultBsphereInflation.padding);
+      else
+        this->perLinkBsphereInflation[linkName].scale = inflationPair.second;
+    }
+
+    if (!containsOnly && !shadowOnly && !bsphereOnly)
+    {
+      if (this->perLinkBboxInflation.find(linkName) == this->perLinkBboxInflation.end())
+        this->perLinkBboxInflation[linkName] = ScaleAndPadding(inflationPair.second, this->defaultBboxInflation.padding);
+      else
+        this->perLinkBboxInflation[linkName].scale = inflationPair.second;
+    }
+  }
 
   // can contain either whole link names, or scoped names of their collisions (i.e. "link::collision_1" or "link::my_collision")
-  this->linksIgnoredInBoundingSphere = this->template getParamVerboseSet<set<string>>("ignored_links/bounding_sphere");
-  this->linksIgnoredInBoundingBox = this->template getParamVerboseSet<set<string> >("ignored_links/bounding_box");
-  this->linksIgnoredInContainsTest = this->template getParamVerboseSet<set<string> >("ignored_links/contains_test");
-  this->linksIgnoredInShadowTest = this->template getParamVerboseSet<set<string> >("ignored_links/shadow_test", { "laser" });
-  this->linksIgnoredEverywhere = this->template getParamVerboseSet<set<string> >("ignored_links/everywhere");
-  this->onlyLinks = this->template getParamVerboseSet<set<string> >("only_links");
+  this->linksIgnoredInBoundingSphere = this->template getParamVerboseSet<string>("ignored_links/bounding_sphere");
+  this->linksIgnoredInBoundingBox = this->template getParamVerboseSet<string>("ignored_links/bounding_box");
+  this->linksIgnoredInContainsTest = this->template getParamVerboseSet<string>("ignored_links/contains_test");
+  this->linksIgnoredInShadowTest = this->template getParamVerboseSet<string>("ignored_links/shadow_test", { "laser" });
+  this->linksIgnoredEverywhere = this->template getParamVerboseSet<string>("ignored_links/everywhere");
+  this->onlyLinks = this->template getParamVerboseSet<string>("only_links");
 
   this->robotDescriptionUpdatesFieldName = this->getParamVerbose("body_model/dynamic_robot_description/field_name", "robot_model");
   // subscribe for robot_description param changes
@@ -194,6 +283,16 @@ bool RobotBodyFilter<T>::configure() {
     this->debugShadowMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>("robot_model_for_shadow_test", 100);
   }
 
+  if (this->publishDebugBsphereMarker)
+  {
+    this->debugBsphereMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>("robot_model_for_bounding_sphere", 100);
+  }
+
+  if (this->publishDebugBboxMarker)
+  {
+    this->debugBboxMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>("robot_model_for_bounding_box", 100);
+  }
+
   if (this->computeDebugBoundingBox) {
     this->boundingBoxDebugMarkerPublisher = this->nodeHandle.template advertise<visualization_msgs::MarkerArray>(
       "robot_bounding_box_debug", 100);
@@ -218,7 +317,7 @@ bool RobotBodyFilter<T>::configure() {
   auto getShapeTransformCallback = std::bind(&RobotBodyFilter::getShapeTransform, this, std::placeholders::_1, std::placeholders::_2);
   shapeMask = std::make_unique<RayCastingShapeMask>(getShapeTransformCallback,
       this->minDistance, this->maxDistance,
-      doClipping, doContainsTest, doShadowTest);
+      doClipping, doContainsTest, doShadowTest, maxShadowDistance);
 
   // the other case happens when configure() is called again from update() (e.g. when a new bag file
   // started playing)
@@ -392,6 +491,7 @@ bool RobotBodyFilter<T>::computeMask(
       point.y() = *y_it;
       point.z() = *z_it;
 
+      // TODO viewpoint can be autocomputed from stamps
       viewPoint.x() = static_cast<double>(*vp_x_it);
       viewPoint.y() = static_cast<double>(*vp_y_it);
       viewPoint.z() = static_cast<double>(*vp_z_it);
@@ -862,8 +962,8 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
 
     this->shapesIgnoredInBoundingSphere.clear();
     this->shapesIgnoredInBoundingBox.clear();
-    std::set<point_containment_filter::ShapeHandle> ignoreInContainsTest;
-    std::set<point_containment_filter::ShapeHandle> ignoreInShadowTest;
+    std::unordered_set<MultiShapeHandle> ignoreInContainsTest;
+    std::unordered_set<MultiShapeHandle> ignoreInShadowTest;
 
     // add all model's collision links as masking shapes
     for (const auto &links : parsedUrdfModel.links_) {
@@ -880,64 +980,85 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
           continue;  // collisionIndex is intentionally not increased
         }
 
-        const std::set<std::string> collisionNames = {
-            link->name,
-            link->name + "::" + collision->name,
-            "*::" + collision->name,
-            link->name + "::" + std::to_string(collisionIndex),
+        const auto NAME_LINK = link->name;
+        const auto NAME_COLLISION_NAME = "*::" + collision->name;
+        const auto NAME_LINK_COLLISION_NR = link->name + "::" + std::to_string(collisionIndex);
+        const auto NAME_LINK_COLLISON_NAME = link->name + "::" + collision->name;
+
+        const std::vector<std::string> collisionNames = {
+            NAME_LINK,
+            NAME_COLLISION_NAME,
+            NAME_LINK_COLLISION_NR,
+            NAME_LINK_COLLISON_NAME,
         };
+
+        std::set<std::string> collisionNamesSet;
+        std::set<std::string> collisionNamesContains;
+        std::set<std::string> collisionNamesShadow;
+        for (const auto& name : collisionNames)
+        {
+          collisionNamesSet.insert(name);
+          collisionNamesContains.insert(name + CONTAINS_SUFFIX);
+          collisionNamesShadow.insert(name + SHADOW_SUFFIX);
+        }
 
         // if onlyLinks is nonempty, make sure this collision belongs to a specified link
         if (!this->onlyLinks.empty()) {
-          if (isSetIntersectionEmpty(collisionNames, this->onlyLinks)) {
+          if (isSetIntersectionEmpty(collisionNamesSet, this->onlyLinks)) {
             ++collisionIndex;
             continue;
           }
         }
 
         // if the link is ignored, go on
-        if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredEverywhere)) {
+        if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredEverywhere)) {
           ++collisionIndex;
           continue;
         }
 
         const auto collisionShape = constructShape(*collision->geometry);
-        std::stringstream ss(link->name);
-        ss << "::";
-        if (collision->name.empty())
-          ss << std::to_string(collisionIndex);
-        else
-          ss << collision->name;
-        const auto shapeName = ss.str();
+        const auto shapeName = collision->name.empty() ? NAME_LINK_COLLISION_NR : NAME_LINK_COLLISON_NAME;
 
         // add the collision shape to shapeMask; the inflation parameters come into play here
+        const auto containsTestInflation = this->getLinkInflationForContainsTest(collisionNames);
+        const auto shadowTestInflation = this->getLinkInflationForShadowTest(collisionNames);
+        const auto bsphereInflation = this->getLinkInflationForBoundingSphere(collisionNames);
+        const auto bboxInflation = this->getLinkInflationForBoundingBox(collisionNames);
         const auto shapeHandle = this->shapeMask->addShape(collisionShape,
-            this->inflationScale, this->inflationPadding, false, shapeName);
-        this->shapesToLinks[shapeHandle] = CollisionBodyWithLink(collision, link, collisionIndex);
+            containsTestInflation.scale, containsTestInflation.padding, shadowTestInflation.scale,
+            shadowTestInflation.padding, bsphereInflation.scale, bsphereInflation.padding,
+            bboxInflation.scale, bboxInflation.padding, false, shapeName);
+        this->shapesToLinks[shapeHandle.contains] = this->shapesToLinks[shapeHandle.shadow] =
+            this->shapesToLinks[shapeHandle.bsphere] = this->shapesToLinks[shapeHandle.bbox] =
+                CollisionBodyWithLink(collision, link, collisionIndex, shapeHandle);
 
-        if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredInBoundingSphere)) {
-          this->shapesIgnoredInBoundingSphere.insert(shapeHandle);
+        if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInBoundingSphere)) {
+          this->shapesIgnoredInBoundingSphere.insert(shapeHandle.bsphere);
         }
 
-        if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredInBoundingBox)) {
-          this->shapesIgnoredInBoundingBox.insert(shapeHandle);
+        if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInBoundingBox)) {
+          this->shapesIgnoredInBoundingBox.insert(shapeHandle.bbox);
         }
 
-        if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredInContainsTest)) {
+        if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInContainsTest)) {
           ignoreInContainsTest.insert(shapeHandle);
         }
 
-        if (!isSetIntersectionEmpty(collisionNames, this->linksIgnoredInShadowTest)) {
+        if (!isSetIntersectionEmpty(collisionNamesSet, this->linksIgnoredInShadowTest)) {
           ignoreInShadowTest.insert(shapeHandle);
         }
 
         ++collisionIndex;
       }
 
-      if (collisionIndex == 0) {
-        ROS_WARN(
-          "RobotBodyFilter: No collision element found for link %s of robot %s. This link will not be filtered out "
-          "from laser scans.", link->name.c_str(), parsedUrdfModel.getName().c_str());
+      // no collision element found; only warn for links that are not ignored and have at least one visual
+      if (collisionIndex == 0 && !link->visual_array.empty()) {
+        if ((this->onlyLinks.empty() || (this->onlyLinks.find(link->name) != this->onlyLinks.end())) &&
+             this->linksIgnoredEverywhere.find(link->name) == this->linksIgnoredEverywhere.end()) {
+          ROS_WARN(
+            "RobotBodyFilter: No collision element found for link %s of robot %s. This link will not be filtered out "
+            "from laser scans.", link->name.c_str(), parsedUrdfModel.getName().c_str());
+        }
       }
     }
 
@@ -962,8 +1083,14 @@ void RobotBodyFilter<T>::clearRobotMask() {
   {
     std::lock_guard<std::mutex> guard(*this->modelMutex);
 
+    std::unordered_set<MultiShapeHandle> removedMultiShapes;
     for (const auto& shapeToLink : this->shapesToLinks) {
-      this->shapeMask->removeShape(shapeToLink.first, false);
+      const auto& multiShape = shapeToLink.second.multiHandle;
+      if (removedMultiShapes.find(multiShape) == removedMultiShapes.end())
+      {
+        this->shapeMask->removeShape(multiShape, false);
+        removedMultiShapes.insert(multiShape);
+      }
     }
     this->shapeMask->updateInternalShapeLists();
 
@@ -999,6 +1126,28 @@ void RobotBodyFilter<T>::publishDebugMarkers(const ros::Time& scanTime) const {
     createBodyVisualizationMsg(this->shapeMask->getBodiesForShadowTest(), scanTime,
                                color, markerArray);
     this->debugShadowMarkerPublisher.publish(markerArray);
+  }
+
+  if (this->publishDebugBsphereMarker) {
+    visualization_msgs::MarkerArray markerArray;
+    std_msgs::ColorRGBA color;
+    color.g = 1.0;
+    color.b = 1.0;
+    color.a = 0.5;
+    createBodyVisualizationMsg(this->shapeMask->getBodiesForBoundingSphere(), scanTime,
+                               color, markerArray);
+    this->debugBsphereMarkerPublisher.publish(markerArray);
+  }
+
+  if (this->publishDebugBboxMarker) {
+    visualization_msgs::MarkerArray markerArray;
+    std_msgs::ColorRGBA color;
+    color.r = 1.0;
+    color.b = 1.0;
+    color.a = 0.5;
+    createBodyVisualizationMsg(this->shapeMask->getBodiesForBoundingBox(), scanTime,
+                               color, markerArray);
+    this->debugBboxMarkerPublisher.publish(markerArray);
   }
 }
 
@@ -1053,13 +1202,16 @@ void RobotBodyFilter<T>::computeAndPublishBoundingSphere(
   std::vector<bodies::BoundingSphere> spheres;
   {
     visualization_msgs::MarkerArray boundingSphereDebugMsg;
-    for (const auto &shapeHandleAndSphere : this->shapeMask->getBoundingSpheres())
+    for (const auto &shapeHandleAndBody : this->shapeMask->getBodiesForBoundingSphere())
     {
-      const auto &shapeHandle = shapeHandleAndSphere.first;
-      const auto &sphere = shapeHandleAndSphere.second;
+      const auto &shapeHandle = shapeHandleAndBody.first;
+      const auto &body = shapeHandleAndBody.second;
 
       if (this->shapesIgnoredInBoundingSphere.find(shapeHandle) != this->shapesIgnoredInBoundingSphere.end())
         continue;
+
+      bodies::BoundingSphere sphere;
+      body->computeBoundingSphere(sphere);
 
       spheres.push_back(sphere);
 
@@ -1161,15 +1313,16 @@ void RobotBodyFilter<T>::computeAndPublishBoundingBox(
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBody : this->shapeMask->getBodies())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForBoundingBox())
     {
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
-      bodies::AxisAlignedBoundingBox box;
-      body->computeBoundingBox(box);
 
       if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
         continue;
+
+      bodies::AxisAlignedBoundingBox box;
+      body->computeBoundingBox(box);
 
       boxes.push_back(box);
 
@@ -1285,16 +1438,16 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBody : this->shapeMask->getBodies())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForBoundingBox())
     {
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
 
-      bodies::OrientedBoundingBox box;
-      bodies::computeBoundingBox(body, box);
-
       if (this->shapesIgnoredInBoundingBox.find(shapeHandle) != this->shapesIgnoredInBoundingBox.end())
         continue;
+
+      bodies::OrientedBoundingBox box;
+      bodies::computeBoundingBox(body, box);
 
       boxes.push_back(box);
 
@@ -1419,14 +1572,13 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
 
   const auto localTfMsg = this->tfBuffer->lookupTransform(this->localBoundingBoxFrame,
       this->filteringFrame, scanTime);
-  Eigen::Isometry3d localTf, oldPose;
-  localTf = tf2::transformToEigen(localTfMsg.transform);
+  const Eigen::Isometry3d localTf = tf2::transformToEigen(localTfMsg.transform);
 
   std::vector<bodies::AxisAlignedBoundingBox> boxes;
 
   {
     visualization_msgs::MarkerArray boundingBoxDebugMsg;
-    for (const auto& shapeHandleAndBody : this->shapeMask->getBodies())
+    for (const auto& shapeHandleAndBody : this->shapeMask->getBodiesForBoundingBox())
     {
       const auto& shapeHandle = shapeHandleAndBody.first;
       const auto& body = shapeHandleAndBody.second;
@@ -1435,10 +1587,7 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
         continue;
 
       bodies::AxisAlignedBoundingBox box;
-      oldPose = body->getPose();
-      body->setPose(localTf * oldPose);
-      body->computeBoundingBox(box);
-      body->setPose(oldPose);
+      bodies::computeBoundingBoxAt(body, box, localTf * body->getPose());
 
       boxes.push_back(box);
 
@@ -1534,7 +1683,7 @@ void RobotBodyFilter<T>::computeAndPublishLocalBoundingBox(
 
 template<typename T>
 void RobotBodyFilter<T>::createBodyVisualizationMsg(
-    const std::map<point_containment_filter::ShapeHandle, bodies::Body*>& bodies,
+    const std::map<point_containment_filter::ShapeHandle, const bodies::Body*>& bodies,
     const ros::Time& stamp, const std_msgs::ColorRGBA& color,
     visualization_msgs::MarkerArray& markerArray) const
 {
@@ -1631,6 +1780,97 @@ template<typename T>
 RobotBodyFilter<T>::~RobotBodyFilter(){
   if (this->tfFramesWatchdog != nullptr)
     this->tfFramesWatchdog->stop();
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForContainsTest(
+    const string &linkName) const
+{
+  return this->getLinkInflationForContainsTest({linkName});
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForContainsTest(
+    const std::vector<std::string>& linkNames) const
+{
+  return this->getLinkInflation(linkNames, this->defaultContainsInflation,
+      this->perLinkContainsInflation);
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForShadowTest(
+    const string &linkName) const
+{
+  return this->getLinkInflationForShadowTest({linkName});
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForShadowTest(
+    const std::vector<std::string>& linkNames) const
+{
+  return this->getLinkInflation(linkNames, this->defaultShadowInflation,
+      this->perLinkShadowInflation);
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingSphere(
+    const string &linkName) const
+{
+  return this->getLinkInflationForBoundingSphere({linkName});
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingSphere(
+    const std::vector<std::string>& linkNames) const
+{
+  return this->getLinkInflation(linkNames, this->defaultBsphereInflation,
+      this->perLinkBsphereInflation);
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingBox(
+    const string &linkName) const
+{
+  return this->getLinkInflationForBoundingBox({linkName});
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflationForBoundingBox(
+    const std::vector<std::string>& linkNames) const
+{
+  return this->getLinkInflation(linkNames, this->defaultBboxInflation,
+      this->perLinkBboxInflation);
+}
+
+template<typename T>
+ScaleAndPadding RobotBodyFilter<T>::getLinkInflation(
+    const std::vector<std::string>& linkNames, const ScaleAndPadding& defaultInflation,
+    const std::map<std::string, ScaleAndPadding>& perLinkInflation) const
+{
+  ScaleAndPadding result = defaultInflation;
+
+  for (const auto& linkName : linkNames)
+  {
+    if (perLinkInflation.find(linkName) != perLinkInflation.end())
+      result = perLinkInflation.at(linkName);
+  }
+
+  return result;
+}
+
+ScaleAndPadding::ScaleAndPadding(double scale, double padding)
+    :scale(scale), padding(padding)
+{
+}
+
+bool ScaleAndPadding::operator==(const ScaleAndPadding& other) const
+{
+  return this->scale == other.scale && this->padding == other.padding;
+}
+
+bool ScaleAndPadding::operator!=(const ScaleAndPadding& other) const
+{
+  return !(*this == other);
 }
 
 }

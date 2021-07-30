@@ -19,6 +19,22 @@ test_chain_config:
     ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
     body_model/inflation/scale: 1.1
     body_model/inflation/padding: 0.01
+    body_model/inflation/per_link/scale:
+      "antenna::contains": 1.2
+      "antenna::bounding_sphere": 1.2
+      "antenna::bounding_box": 1.2
+      "*::big_collision_box::contains": 2
+      "*::big_collision_box::bounding_sphere": 2
+      "*::big_collision_box::bounding_box": 2
+      "*::big_collision_box::shadow": 3
+      "wrong_type": True
+      "wrong_type2": "str"
+    body_model/inflation/per_link/padding:
+      "laser::shadow": 0.015
+      "base_link": 0.05
+    body_model/inflation/per_link/all_wrong:
+      "laser": "0.015"
+      "base_link": "0.05"
     body_model/robot_description_param: 'test_robot_description'
     transforms/buffer_length: 60.0
     transforms/timeout/reachable: 0.2
@@ -62,6 +78,22 @@ test_dict_config:
     ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
     body_model/inflation/scale: 1.1
     body_model/inflation/padding: 0.01
+    body_model/inflation/per_link/scale:
+      "antenna::contains": 1.2
+      "antenna::bounding_sphere": 1.2
+      "antenna::bounding_box": 1.2
+      "*::big_collision_box::contains": 2
+      "*::big_collision_box::bounding_sphere": 2
+      "*::big_collision_box::bounding_box": 2
+      "*::big_collision_box::shadow": 3
+      "wrong_type": True
+      "wrong_type2": "str"
+    body_model/inflation/per_link/padding:
+      "laser::shadow": 0.015
+      "base_link": 0.05
+    body_model/inflation/per_link/all_wrong:
+      "laser": "0.015"
+      "base_link": "0.05"
     body_model/robot_description_param: 'test_robot_description'
     transforms/buffer_length: 60.0
     transforms/timeout/reachable: 0.2
@@ -156,6 +188,14 @@ compute_mask_config_point_by_point:
     ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
     body_model/inflation/scale: 1.1
     body_model/inflation/padding: 0.01
+    body_model/inflation/per_link/scale:
+      "base_link::0::contains": 1.0
+      "base_link::0::bounding_sphere": 1.0
+      "base_link::0::bounding_box": 1.0
+    body_model/inflation/per_link/padding:
+      "base_link::0::contains": 0.02
+      "base_link::0::bounding_sphere": 0.02
+      "base_link::0::bounding_box": 0.02
     body_model/robot_description_param: 'test_robot_description'
     transforms/buffer_length: 60.0
     transforms/timeout/reachable: 0.2
@@ -200,6 +240,14 @@ compute_mask_config_all_at_once:
     ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
     body_model/inflation/scale: 1.1
     body_model/inflation/padding: 0.01
+    body_model/inflation/per_link/scale:
+      "base_link::0::contains": 1.0
+      "base_link::0::bounding_sphere": 1.0
+      "base_link::0::bounding_box": 1.0
+    body_model/inflation/per_link/padding:
+      "base_link::0::contains": 0.02
+      "base_link::0::bounding_sphere": 0.02
+      "base_link::0::bounding_box": 0.02
     body_model/robot_description_param: 'test_robot_description'
     transforms/buffer_length: 60.0
     transforms/timeout/reachable: 0.2
