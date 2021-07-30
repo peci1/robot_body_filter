@@ -2,6 +2,22 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Merge pull request `#11 <https://github.com/peci1/robot_body_filter/issues/11>`_ from peci1/correct-pointcloud-transforms
+  Add possibility to specify pointcloud channels that should be transformed together with positional data.
+* Merge pull request `#14 <https://github.com/peci1/robot_body_filter/issues/14>`_ from peci1/per_link_scaling
+  Add support for scaling/padding each link differently
+* Short-circuit classification of NaN points.
+* Warn about missing collision elements only for non-ignored links and only if they have at least one visual.
+* Fixed bounding shapes computation
+* Added filter/max_shadow_distance for great performance increase
+* Added possibility to scale/pad collisions separately for computation of bounding box and sphere.
+* Unique-ify test target name to allow building with geometric_shapes.
+* Use correct Eigen allocator.
+* Reflected the newly added support for non-uniformly scaled meshes.
+* Contributors: Martin Pecka
+
 1.1.9 (2021-04-17)
 ------------------
 * Compatibility with Noetic.
