@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.2.0 (2021-07-30)
+------------------
 * Merge pull request `#11 <https://github.com/peci1/robot_body_filter/issues/11>`_ from peci1/correct-pointcloud-transforms
   Add possibility to specify pointcloud channels that should be transformed together with positional data.
 * Merge pull request `#14 <https://github.com/peci1/robot_body_filter/issues/14>`_ from peci1/per_link_scaling
