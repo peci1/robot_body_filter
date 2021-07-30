@@ -33,7 +33,7 @@ void robot_body_filter::CropBoxPointCloud2::applyFilter(pcl::PCLPointCloud2 &out
     // For every "removed" point, set the x, y, z fields to user_filter_value_
     for (const auto ri : *removed_indices_) // ri = removed index
     {
-      auto pt_data = reinterpret_cast<std::uint8_t*>(&output.data[ri * output.point_step]);
+      auto pt_data = reinterpret_cast<std::uint8_t*>(&output.data[ri * static_cast<size_t>(output.point_step)]);
       for (const auto &offset : offsets)
       {
         memcpy(pt_data + offset, &user_filter_value_, sizeof(float));
