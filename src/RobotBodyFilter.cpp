@@ -400,6 +400,15 @@ bool RobotBodyFilterPointCloud2::configure() {
     return false;
 
   this->outputFrame = this->getParamVerbose("frames/output", this->filteringFrame);
+
+  const auto pointChannels = this->getParamVerbose("cloud/point_channels", std::vector<std::string>{"vp_"});
+  const auto directionChannels = this->getParamVerbose("cloud/direction_channels", std::vector<std::string>{"normal_"});
+
+  for (const auto& channel : pointChannels)
+    this->channelsToTransform[channel] = CloudChannelType::POINT;
+  for (const auto& channel : directionChannels)
+    this->channelsToTransform[channel] = CloudChannelType::DIRECTION;
+
   stripLeadingSlash(this->outputFrame, true);
 
   return true;
@@ -653,7 +662,7 @@ bool RobotBodyFilterLaserScan::update(const LaserScan &inputScan, LaserScan &fil
         }
 
         transformWithChannels(tmpPointCloud, projectedPointCloud,
-            *this->tfBuffer, this->filteringFrame);
+            *this->tfBuffer, this->filteringFrame, this->channelsToTransform);
       }
     }
 
@@ -797,7 +806,8 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
       return false;
     }
 
-    transformWithChannels(inputCloud, transformedCloud, *this->tfBuffer, this->filteringFrame);
+    transformWithChannels(inputCloud, transformedCloud, *this->tfBuffer, this->filteringFrame,
+                          this->channelsToTransform);
   }
 
   // Compute the mask and use it (transform message only if sensorFrame is specified)
@@ -834,7 +844,7 @@ bool RobotBodyFilterPointCloud2::update(const sensor_msgs::PointCloud2 &inputClo
       return false;
     }
 
-    transformWithChannels(tmpCloud, filteredCloud, *this->tfBuffer, this->outputFrame);
+    transformWithChannels(tmpCloud, filteredCloud, *this->tfBuffer, this->outputFrame, this->channelsToTransform);
   }
 
   return true;

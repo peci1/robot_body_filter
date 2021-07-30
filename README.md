@@ -12,6 +12,13 @@ Filters the robot's body out of point clouds and laser scans.
 
 ## Build Status
 
+### Continuous integration
+
+| ROS Version | Build Status |
+|---|---|
+| __Melodic__ | [![Build Status](https://github.com/peci1/robot_body_filter/workflows/CI/badge.svg?branch=master)](https://github.com/peci1/robot_body_filter/actions?query=workflow%3ACI) <br/> [![Build Status](https://api.travis-ci.com/peci1/robot_body_filter.svg?branch=master&status=passed)](https://travis-ci.com/github/peci1/robot_body_filter) |
+
+
 ### Dev job
 
 | ROS Version | Build Status |
@@ -520,6 +527,23 @@ configuration of your filter.
 
     If robot model is published by dynamic reconfigure, this is the name of the 
     Config message field which holds the robot model.
+- `cloud/point_channels` (`list[string]`, default `["vp_"]`)
+
+    List of channels of the incoming pointcloud that should be transformed as
+    positional data. The 3D positions channel given by fields `x`, `y` and `z`
+    is always transformed. This list contains prefixes of fields that form another
+    channel(s). E.g. to transform the channel given by fields `vp_x`, `vp_y` and
+    `vp_z`, add item `"vp_"` to the list. If a channel is not present in the cloud,
+    nothing happens. This parameter is only available in the `PointCloud2` version
+    of the filter.
+- `cloud/direction_channels` (`list[string]`, default `["normal_"]`)
+
+    List of channels of the incoming pointcloud that should be transformed as
+    directional data. This list contains prefixes of fields that form channel(s).
+    E.g. to transform the channel given by fields `normal_x`, `normal_y` and
+    `normal_z`, add item `"normal_"` to the list. If a channel is not present in the cloud,
+    nothing happens. This parameter is only available in the `PointCloud2` version
+    of the filter.
 
 ## Debug Operation
 

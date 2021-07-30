@@ -58,6 +58,10 @@ endif()
 add_library(${PROJECT_NAME}_utils ${UTILS_SRCS})
 target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES} ${PCL_LIBRARIES})
 
+add_library(tf2_sensor_msgs_rbf src/utils/tf2_sensor_msgs.cpp)
+target_link_libraries(tf2_sensor_msgs_rbf PRIVATE ${PROJECT_NAME}_utils PUBLIC ${catkin_LIBRARIES})
+add_dependencies(tf2_sensor_msgs_rbf ${catkin_EXPORTED_TARGETS})
+
 add_library(RayCastingShapeMask src/RayCastingShapeMask.cpp)
 target_link_libraries(RayCastingShapeMask ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 add_dependencies(RayCastingShapeMask ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
@@ -69,6 +73,7 @@ add_dependencies(TFFramesWatchdog ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_E
 add_library(${PROJECT_NAME} src/RobotBodyFilter.cpp)
 target_link_libraries(${PROJECT_NAME}
   ${PROJECT_NAME}_utils
+  tf2_sensor_msgs_rbf
   TFFramesWatchdog
   RayCastingShapeMask
   ${catkin_LIBRARIES}
@@ -79,7 +84,7 @@ add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EX
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
-install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_utils
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_utils tf2_sensor_msgs_rbf
    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
@@ -118,7 +123,7 @@ if (CATKIN_ENABLE_TESTING)
   target_link_libraries(test_cloud ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_tf2_sensor_msgs test/test_tf2_sensor_msgs.cpp)
-  target_link_libraries(test_tf2_sensor_msgs ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+  target_link_libraries(test_tf2_sensor_msgs tf2_sensor_msgs_rbf ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_obb test/test_obb.cpp)
   target_link_libraries(test_obb ${PROJECT_NAME}_utils ${catkin_LIBRARIES})

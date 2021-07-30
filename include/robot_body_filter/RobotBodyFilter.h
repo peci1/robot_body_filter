@@ -14,6 +14,7 @@
 
 #include <ros/ros.h>
 #include <robot_body_filter/utils/filter_utils.hpp>
+#include <robot_body_filter/utils/tf2_sensor_msgs.h>
 #include <sensor_msgs/LaserScan.h>
 #include <robot_body_filter/RayCastingShapeMask.h>
 #include <moveit/occupancy_map_monitor/occupancy_map_updater.h>
@@ -461,6 +462,9 @@ public:
 
 protected:
   laser_geometry::LaserProjection laserProjector;
+
+  // in RobotBodyFilterLaserScan::update we project the scan to a pointcloud with viewpoints
+  const std::unordered_map<std::string, CloudChannelType> channelsToTransform { {"vp_", CloudChannelType::POINT} };
 };
 
 class RobotBodyFilterPointCloud2 : public RobotBodyFilter<sensor_msgs::PointCloud2>
@@ -474,6 +478,8 @@ public:
 protected:
   /** \brief Frame into which the output data should be transformed. */
   std::string outputFrame;
+
+  std::unordered_map<std::string, CloudChannelType> channelsToTransform;
 };
 
 }
