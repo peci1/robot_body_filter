@@ -51,6 +51,13 @@ class WrongBody : public ::bodies::Body
   {
     throw std::runtime_error("Should not be called");
   }
+  // noetic has this function as pure virtual, melodic should not have it at all,
+  // so defining it here like this (using virtual and not override) should work
+  // in both cases
+  virtual std::vector<double> getScaledDimensions() const
+  {
+    throw std::runtime_error("Should not be called");
+  }
 
 protected:
   void updateInternalData() override
