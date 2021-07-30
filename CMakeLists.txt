@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.0.2)
 project(robot_body_filter)
 
 set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -20,8 +20,13 @@ find_package(Threads REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBFCL_PC REQUIRED fcl)
+# find *absolute* paths to LIBFCL_* paths
 find_path(LIBFCL_INCLUDE_DIRS fcl/config.h HINTS ${LIBFCL_PC_INCLUDE_DIR} ${LIBFCL_PC_INCLUDE_DIRS})
-find_library(LIBFCL_LIBRARIES fcl HINTS ${LIBFCL_PC_LIBRARY_DIRS})
+set(LIBFCL_LIBRARIES)
+foreach(_lib ${LIBFCL_PC_LIBRARIES})
+  find_library(_lib_${_lib} ${_lib} HINTS ${LIBFCL_PC_LIBRARY_DIRS})
+  list(APPEND LIBFCL_LIBRARIES ${_lib_${_lib}})
+endforeach()
 
 
 add_message_files(FILES OrientedBoundingBox.msg OrientedBoundingBoxStamped.msg Sphere.msg SphereStamped.msg)
@@ -36,22 +41,26 @@ catkin_package(
 include_directories(SYSTEM ${LIBFCL_INCLUDE_DIRS})
 include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 
-add_library(${PROJECT_NAME}_utils
+set(UTILS_SRCS
   src/utils/bodies.cpp
   src/utils/cloud.cpp
-  src/utils/crop_box.cpp
   src/utils/obb.cpp
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
   src/utils/tf2_eigen.cpp
-  src/utils/time_utils.cpp
-)
+  src/utils/tf2_sensor_msgs.cpp
+  src/utils/time_utils.cpp)
+
+if (PCL_VERSION VERSION_LESS "1.10")
+  set(UTILS_SRCS ${UTILS_SRCS} src/utils/crop_box.cpp)
+endif()
+
+add_library(${PROJECT_NAME}_utils ${UTILS_SRCS})
 target_link_libraries(${PROJECT_NAME}_utils ${catkin_LIBRARIES} ${LIBFCL_LIBRARIES} ${PCL_LIBRARIES})
 
 add_library(tf2_sensor_msgs_rbf src/utils/tf2_sensor_msgs.cpp)
 target_link_libraries(tf2_sensor_msgs_rbf PRIVATE ${PROJECT_NAME}_utils PUBLIC ${catkin_LIBRARIES})
 add_dependencies(tf2_sensor_msgs_rbf ${catkin_EXPORTED_TARGETS})
-target_compile_options(tf2_sensor_msgs_rbf PRIVATE -march=native)
 
 add_library(${PROJECT_NAME}
   src/RobotBodyFilter.cpp
@@ -80,8 +89,8 @@ if (CATKIN_ENABLE_TESTING)
   catkin_add_gtest(test_set_utils test/test_set_utils.cpp)
   target_link_libraries(test_set_utils ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
-  catkin_add_gtest(test_shapes test/test_shapes.cpp)
-  target_link_libraries(test_shapes ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+  catkin_add_gtest(test_shapes_rbf test/test_shapes.cpp)
+  target_link_libraries(test_shapes_rbf ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_urdf_eigen test/test_urdf_eigen.cpp)
   target_link_libraries(test_urdf_eigen ${PROJECT_NAME}_utils ${catkin_LIBRARIES})

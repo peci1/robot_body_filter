@@ -2,6 +2,11 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.1.9 (2021-04-17)
+------------------
+* Compatibility with Noetic.
+* Contributors: Martin Pecka
+
 1.1.8 (2020-04-06)
 ------------------
 * Fixed typo.

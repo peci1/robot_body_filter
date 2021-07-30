@@ -2,7 +2,13 @@
 #define ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
 
 #include <rosconsole/macros_generated.h>
+#include <ros/common.h>
+
+#if ROS_VERSION_MINIMUM(1, 15, 0)
+#include <filters/filter_base.hpp>
+#else
 #include <filters/filter_base.h>
+#endif
 
 #include "robot_body_filter/utils/string_utils.hpp"
 

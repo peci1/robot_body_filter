@@ -299,7 +299,7 @@ protected:
    *                            contains timestamps relative to the time in
    *                            header.
    * \param mask Output mask of the points.
-   * \param sensorFrame Sensor frame id. Only needed for clouds with all points
+   * \param sensorFrame Sensor frame id. Only needed for scans with all points
    *                    captured at the same time. Point-by-point scans read
    *                    sensor position from the viewpoint channels.
    * \return Whether the computation succeeded.
