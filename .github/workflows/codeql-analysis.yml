@@ -43,6 +43,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends ros-melodic-ros-core build-essential python-rosdep python-rosinstall python-vcstools python-catkin-tools
         sudo rosdep init && sudo rosdep update --rosdistro melodic
+        sudo apt remove -y libomp5-9  # fixes codeql environment?
     
     - name: Install package dependencies
       run: |
