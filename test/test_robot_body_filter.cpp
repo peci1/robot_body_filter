@@ -213,8 +213,20 @@ TEST(RobotBodyFilter, LoadParams)
   EXPECT_TRUE(filter->linksIgnoredInContainsTest.empty());
   EXPECT_TRUE(filter->linksIgnoredEverywhere.empty());
   EXPECT_TRUE(filter->onlyLinks.empty());
-  EXPECT_DOUBLE_EQ(1.1, filter->inflationScale);
-  EXPECT_DOUBLE_EQ(0.01, filter->inflationPadding);
+  EXPECT_DOUBLE_EQ(1.1, filter->defaultContainsInflation.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->defaultContainsInflation.padding);
+  EXPECT_DOUBLE_EQ(1.1, filter->defaultShadowInflation.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->defaultShadowInflation.padding);
+  EXPECT_EQ((std::map<std::string, ScaleAndPadding>({
+    {"*::big_collision_box", ScaleAndPadding(2.0, 0.01)},
+    {"base_link", ScaleAndPadding(1.1, 0.05)},
+    {"antenna", ScaleAndPadding(1.2, 0.01)},
+  })), filter->perLinkContainsInflation);
+  EXPECT_EQ((std::map<std::string, ScaleAndPadding>({
+    {"*::big_collision_box", ScaleAndPadding(3.0, 0.01)},
+    {"base_link", ScaleAndPadding(1.1, 0.05)},
+    {"laser", ScaleAndPadding(1.1, 0.015)},
+  })), filter->perLinkShadowInflation);
   EXPECT_EQ("test_robot_description", filter->robotDescriptionParam);
   EXPECT_EQ("robot_model", filter->robotDescriptionUpdatesFieldName);
   EXPECT_DOUBLE_EQ(60.0, filter->tfBufferLength.toSec());
@@ -297,8 +309,10 @@ TEST(RobotBodyFilter, LoadParamsAllConfig)
   EXPECT_EQ(std::set<std::string>({"base_link"}), filter->linksIgnoredInContainsTest);
   EXPECT_EQ(std::set<std::string>({"base_link"}), filter->linksIgnoredEverywhere);
   EXPECT_EQ(std::set<std::string>({"laser"}), filter->onlyLinks);
-  EXPECT_DOUBLE_EQ(1.1, filter->inflationScale);
-  EXPECT_DOUBLE_EQ(0.01, filter->inflationPadding);
+  EXPECT_DOUBLE_EQ(1.1, filter->defaultContainsInflation.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->defaultContainsInflation.padding);
+  EXPECT_DOUBLE_EQ(1.1, filter->defaultShadowInflation.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->defaultShadowInflation.padding);
   EXPECT_EQ("test_robot_description", filter->robotDescriptionParam);
   EXPECT_EQ("robot", filter->robotDescriptionUpdatesFieldName);
   EXPECT_DOUBLE_EQ(60.0, filter->tfBufferLength.toSec());
@@ -364,11 +378,11 @@ TEST(RobotBodyFilter, ParseRobot)
   nh.setParam("test_robot_description", ROBOT_URDF);
   filterBase->configure("test_dict_config", nh);
 
-  // base_link, base_link::big_collision_box, laser, antenna
-  EXPECT_EQ(4, filter->shapesToLinks.size());
+  // base_link, base_link::big_collision_box::contains/shadow, laser::contains/shadow, antenna::contains/shadow
+  EXPECT_EQ(7, filter->shapesToLinks.size());
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(4, filter->shapeMask->getBodies().size());
+  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
   EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
   EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
 
@@ -381,10 +395,10 @@ TEST(RobotBodyFilter, ParseRobot)
   EXPECT_EQ(0, filter->shapeMask->getBodiesForShadowTest().size());
 
   filter->addRobotMaskFromUrdf(ROBOT_URDF);
-  EXPECT_EQ(4, filter->shapesToLinks.size());
+  EXPECT_EQ(7, filter->shapesToLinks.size());
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(4, filter->shapeMask->getBodies().size());
+  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
   EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
   EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
 
@@ -408,10 +422,10 @@ TEST(RobotBodyFilter, ParseRobot)
 
   auto cfgConst = boost::const_pointer_cast<const dynamic_reconfigure::Config>(cfg);
   filter->robotDescriptionUpdated(cfgConst);
-  EXPECT_EQ(4, filter->shapesToLinks.size());
+  EXPECT_EQ(7, filter->shapesToLinks.size());
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(4, filter->shapeMask->getBodies().size());
+  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
   EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
   EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
 
@@ -419,10 +433,10 @@ TEST(RobotBodyFilter, ParseRobot)
   filter->clearRobotMask();
   nh.setParam("test_robot_description", ROBOT_URDF);
   filterBase->configure("test_dict_config", nh);
-  EXPECT_EQ(4, filter->shapesToLinks.size());
+  EXPECT_EQ(7, filter->shapesToLinks.size());
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
   EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(4, filter->shapeMask->getBodies().size());
+  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
   EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
   EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
 }
@@ -563,7 +577,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
     *x_it = 10; *y_it = 0; *z_it = 0; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointInBox
-    *x_it = 0.95; *y_it = 0.95; *z_it = 0.95; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
+    *x_it = 0.85; *y_it = 0.85; *z_it = 0.85; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointInSphere
     *x_it = 1.35; *y_it = 0; *z_it = 0; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
@@ -677,7 +691,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
     *x_it = 10; *y_it = 0; *z_it = 0; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointInBox
-    *x_it = 5.95; *y_it = 0.95; *z_it = 0.95; *vp_x_it = 3.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 10;
+    *x_it = 5.85; *y_it = 0.85; *z_it = 0.85; *vp_x_it = 3.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 10;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointInSphere
     *x_it = 6.35; *y_it = 0; *z_it = 0; *vp_x_it = 3.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 10;
@@ -826,15 +840,15 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 
   EXPECT_EQ("odom", boundingSphere->header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingSphere->header.stamp);
-  EXPECT_NEAR(sqrt(3), boundingSphere->sphere.radius, 1e-6);
+  EXPECT_NEAR(sqrt(3) * 0.92, boundingSphere->sphere.radius, 1e-6);
   EXPECT_NEAR(0.0, boundingSphere->sphere.center.x, 1e-6);
   EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.y);
   EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.z);
   EXPECT_EQ("odom", boundingSphereMarker->header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingSphereMarker->header.stamp);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereMarker->scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereMarker->scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereMarker->scale.z, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.x, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.y, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.z, 1e-6);
   EXPECT_NEAR(0, boundingSphereMarker->pose.position.x, 1e-6);
   EXPECT_NEAR(0, boundingSphereMarker->pose.position.y, 1e-6);
   EXPECT_NEAR(0, boundingSphereMarker->pose.position.z, 1e-6);
@@ -950,7 +964,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 //  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
 //  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
   EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
   EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
   EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
   EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -964,7 +978,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 //  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
 //  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
   EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
   EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
   EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
   EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -978,7 +992,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 //  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
 //  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
   EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
   EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
   EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
   EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -992,7 +1006,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 //  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
 //  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
   EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
   EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
   EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
   EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -1006,7 +1020,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 //  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
 //  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
 //  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
   EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
   EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
 //  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -1020,7 +1034,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
   EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
   EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-//  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+//  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
 //  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
 //  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
 //  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -1034,7 +1048,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 //  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
 //  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
 //  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-//  EXPECT_NEAR(5.95, *x_it, 1e-6); ++x_it; // pointInBox
+//  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
 //  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
 //  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
   EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
@@ -1045,9 +1059,9 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   ASSERT_EQ(2, boundingSphereDebugMarker->markers.size());
   EXPECT_EQ("odom", boundingSphereDebugMarker->markers[0].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingSphereDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereDebugMarker->markers[0].scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereDebugMarker->markers[0].scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereDebugMarker->markers[0].scale.z, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.x, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.y, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.z, 1e-6);
   EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.x, 1e-6);
   EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.y, 1e-6);
   EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.z, 1e-6);
@@ -1107,9 +1121,9 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   EXPECT_EQ(1, boundingBoxDebugMarker->markers[0].frame_locked);
   EXPECT_EQ("odom", boundingBoxDebugMarker->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(2, boundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, boundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, boundingBoxDebugMarker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
@@ -1189,9 +1203,9 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[0].frame_locked);
   EXPECT_EQ("odom", orientedBoundingBoxDebugMarker->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(2, orientedBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, orientedBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, orientedBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
@@ -1271,9 +1285,9 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[0].frame_locked);
   EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(2, localBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, localBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, localBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(-0.122, localBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
@@ -1353,9 +1367,9 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   EXPECT_EQ(1, robotModelContainsTest->markers[0].frame_locked);
   EXPECT_EQ("odom", robotModelContainsTest->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[1].header.stamp);
-  EXPECT_NEAR(2, robotModelContainsTest->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, robotModelContainsTest->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, robotModelContainsTest->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.z, 1e-6);
@@ -1486,7 +1500,7 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
     *x_it = 1.5 + -1.47; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointSensor2
     *x_it = 1.5 + -1.42; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointClipMin
     *x_it = 1.5 + 10; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointClipMax
-    *x_it = 1.5 + 0.95; *y_it = 0.95; *z_it = 0.95; ++x_it, ++y_it, ++z_it; // pointInBox
+    *x_it = 1.5 + 0.85; *y_it = 0.85; *z_it = 0.85; ++x_it, ++y_it, ++z_it; // pointInBox
     *x_it = 1.5 + 1.35; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointInSphere
     *x_it = 1.5 + 0; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointInBoth
     *x_it = 1.5 + -0.25; *y_it = -2; *z_it = 2; ++x_it, ++y_it, ++z_it; // pointShadowBox
@@ -1611,15 +1625,15 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
 
   EXPECT_EQ("laser", boundingSphere->header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingSphere->header.stamp);
-  EXPECT_NEAR(sqrt(3), boundingSphere->sphere.radius, 1e-6);
+  EXPECT_NEAR(sqrt(3) * 0.92, boundingSphere->sphere.radius, 1e-6);
   EXPECT_NEAR(1.5, boundingSphere->sphere.center.x, 1e-6);
   EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.y);
   EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.z);
   EXPECT_EQ("laser", boundingSphereMarker->header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingSphereMarker->header.stamp);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereMarker->scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereMarker->scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereMarker->scale.z, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.x, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.y, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.z, 1e-6);
   EXPECT_NEAR(1.5, boundingSphereMarker->pose.position.x, 1e-6);
   EXPECT_NEAR(0, boundingSphereMarker->pose.position.y, 1e-6);
   EXPECT_NEAR(0, boundingSphereMarker->pose.position.z, 1e-6);
@@ -1827,7 +1841,7 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   EXPECT_NAN(*x_it); ++x_it; // pointSensor2
   EXPECT_NAN(*x_it); ++x_it; // pointClipMin
   EXPECT_NAN(*x_it); ++x_it; // pointClipMax
-  EXPECT_NEAR(1.5 +  0.95, *x_it, 1e-6); ++x_it; // pointInBox
+  EXPECT_NEAR(1.5 +  0.85, *x_it, 1e-6); ++x_it; // pointInBox
   EXPECT_NEAR(1.5 +  1.35, *x_it, 1e-6); ++x_it; // pointInSphere
   EXPECT_NEAR(1.5 +  0.0, *x_it, 1e-6); ++x_it; // pointInBoth
   EXPECT_NAN(*x_it); ++x_it; // pointShadowBox
@@ -1880,9 +1894,9 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   ASSERT_EQ(2, boundingSphereDebugMarker->markers.size());
   EXPECT_EQ("laser", boundingSphereDebugMarker->markers[0].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingSphereDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereDebugMarker->markers[0].scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereDebugMarker->markers[0].scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3), boundingSphereDebugMarker->markers[0].scale.z, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.x, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.y, 1e-6);
+  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.z, 1e-6);
   EXPECT_NEAR(1.5, boundingSphereDebugMarker->markers[0].pose.position.x, 1e-6);
   EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.y, 1e-6);
   EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.z, 1e-6);
@@ -1942,9 +1956,9 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   EXPECT_EQ(1, boundingBoxDebugMarker->markers[0].frame_locked);
   EXPECT_EQ("laser", boundingBoxDebugMarker->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(2, boundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, boundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, boundingBoxDebugMarker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(1.5, boundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
@@ -2024,9 +2038,9 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[0].frame_locked);
   EXPECT_EQ("laser", orientedBoundingBoxDebugMarker->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(2, orientedBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, orientedBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, orientedBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(1.5, orientedBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
@@ -2106,9 +2120,9 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[0].frame_locked);
   EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(2, localBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, localBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, localBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(-0.122, localBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
@@ -2188,9 +2202,9 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   EXPECT_EQ(1, robotModelContainsTest->markers[0].frame_locked);
   EXPECT_EQ("laser", robotModelContainsTest->markers[1].header.frame_id);
   EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[1].header.stamp);
-  EXPECT_NEAR(2, robotModelContainsTest->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, robotModelContainsTest->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, robotModelContainsTest->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.z, 1e-5);
   EXPECT_NEAR(1.5, robotModelContainsTest->markers[1].pose.position.x, 1e-6);
   EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.y, 1e-6);
   EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.z, 1e-6);

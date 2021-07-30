@@ -35,7 +35,7 @@ generate_messages(DEPENDENCIES ${MESSAGE_DEPS})
 catkin_package(
     CATKIN_DEPENDS ${THIS_PACKAGE_DEPS} ${MESSAGE_DEPS} message_runtime
     INCLUDE_DIRS include
-    LIBRARIES ${PROJECT_NAME} ${PROJECT_NAME}_utils
+    LIBRARIES ${PROJECT_NAME} RayCastingShapeMask TFFramesWatchdog ${PROJECT_NAME}_utils
 )
 
 include_directories(SYSTEM ${LIBFCL_INCLUDE_DIRS})
@@ -62,11 +62,23 @@ add_library(tf2_sensor_msgs_rbf src/utils/tf2_sensor_msgs.cpp)
 target_link_libraries(tf2_sensor_msgs_rbf PRIVATE ${PROJECT_NAME}_utils PUBLIC ${catkin_LIBRARIES})
 add_dependencies(tf2_sensor_msgs_rbf ${catkin_EXPORTED_TARGETS})
 
-add_library(${PROJECT_NAME}
-  src/RobotBodyFilter.cpp
-  src/TFFramesWatchdog.cpp
-  src/RayCastingShapeMask.cpp)
-target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_utils tf2_sensor_msgs_rbf ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+add_library(RayCastingShapeMask src/RayCastingShapeMask.cpp)
+target_link_libraries(RayCastingShapeMask ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+add_dependencies(RayCastingShapeMask ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+add_library(TFFramesWatchdog src/TFFramesWatchdog.cpp)
+target_link_libraries(TFFramesWatchdog ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+add_dependencies(TFFramesWatchdog ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
+
+add_library(${PROJECT_NAME} src/RobotBodyFilter.cpp)
+target_link_libraries(${PROJECT_NAME}
+  ${PROJECT_NAME}_utils
+  tf2_sensor_msgs_rbf
+  TFFramesWatchdog
+  RayCastingShapeMask
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
 add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS} ${${PROJECT_NAME}_EXPORTED_TARGETS})
 
 install(DIRECTORY include/${PROJECT_NAME}/
@@ -116,14 +128,17 @@ if (CATKIN_ENABLE_TESTING)
   catkin_add_gtest(test_obb test/test_obb.cpp)
   target_link_libraries(test_obb ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
+  catkin_add_gtest(test_xmlrpc_traits test/test_xmlrpc_traits.cpp)
+  target_link_libraries(test_xmlrpc_traits ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
+
   add_rostest_gtest(test_filter_utils test/test_filter_utils.test test/test_filter_utils.cpp)
   target_link_libraries(test_filter_utils ${PROJECT_NAME} ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_tf_frames_watchdog test/test_tf_frames_watchdog.cpp)
-  target_link_libraries(test_tf_frames_watchdog ${PROJECT_NAME} ${catkin_LIBRARIES})
+  target_link_libraries(test_tf_frames_watchdog TFFramesWatchdog ${catkin_LIBRARIES})
 
   catkin_add_gtest(test_ray_casting_shape_mask test/test_ray_casting_shape_mask.cpp)
-  target_link_libraries(test_ray_casting_shape_mask ${PROJECT_NAME} ${catkin_LIBRARIES})
+  target_link_libraries(test_ray_casting_shape_mask RayCastingShapeMask ${catkin_LIBRARIES})
   if ("${CMAKE_BUILD_TYPE}" STREQUAL "Release" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
     target_compile_definitions(test_ray_casting_shape_mask PRIVATE RELEASE_BUILD=1)
   else()

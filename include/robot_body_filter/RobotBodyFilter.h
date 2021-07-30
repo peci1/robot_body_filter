@@ -44,6 +44,7 @@ struct CollisionBodyWithLink {
   urdf::CollisionSharedPtr collision;
   urdf::LinkSharedPtr link;
   size_t indexInCollisionArray;
+  MultiShapeHandle multiHandle;
   std::string cacheKey;
 
   CollisionBodyWithLink() :
@@ -52,15 +53,35 @@ struct CollisionBodyWithLink {
 
   CollisionBodyWithLink(urdf::CollisionSharedPtr collision,
                         urdf::LinkSharedPtr link,
-                        const size_t indexInCollisionArray):
-      collision(collision), link(link),
-      indexInCollisionArray(indexInCollisionArray)
+                        const size_t indexInCollisionArray,
+                        const MultiShapeHandle& multiHandle):
+      collision(collision), link(link), indexInCollisionArray(indexInCollisionArray),
+      multiHandle(multiHandle)
   {
     std::ostringstream stream;
     stream << link->name << "-" << indexInCollisionArray;
     this->cacheKey = stream.str();
   }
 };
+
+struct ScaleAndPadding
+{
+  double scale;
+  double padding;
+  ScaleAndPadding(double scale = 1.0, double padding = 0.0);
+
+  bool operator==(const ScaleAndPadding& other) const;
+  bool operator!=(const ScaleAndPadding& other) const;
+};
+
+/** \brief Suffix added to link/collision names to distinguish their usage in contains tests only. */
+static const std::string CONTAINS_SUFFIX = "::contains";
+/** \brief Suffix added to link/collision names to distinguish their usage in shadow tests only. */
+static const std::string SHADOW_SUFFIX = "::shadow";
+/** \brief Suffix added to link/collision names to distinguish their usage in bounding sphere computation only. */
+static const std::string BSPHERE_SUFFIX = "::bounding_sphere";
+/** \brief Suffix added to link/collision names to distinguish their usage in bounding box computation only. */
+static const std::string BBOX_SUFFIX = "::bounding_box";
 
 /**
  * \brief Filter to remove robot's own body from laser scan.
@@ -137,13 +158,43 @@ protected:
   //! The maximum distance of points from the sensor origin to apply this filter on (in meters).
   double maxDistance;
 
-  /// A scale that is applied to the collision model for the purposes of collision checking (1.0 = no scaling).
-  /** Every collision element is scaled individually with the scaling center in its origin. */
-  double inflationScale;
+  //! The default inflation that is applied to the collision model for the purposes of checking if a point is contained
+  //! by the robot model (scale 1.0 = no scaling, padding 0.0 = no padding). Every collision element is scaled
+  //! individually with the scaling center in its origin. Padding is added individually to every collision element.
+  ScaleAndPadding defaultContainsInflation;
 
-  /// A constant padding to be added to the collision model for the purposes of collision checking (in meters).
-  /** It is added individually to every collision element. */
-  double inflationPadding;
+  //! The default inflation that is applied to the collision model for the purposes of checking if a point is shadowed
+  //! by the robot model (scale 1.0 = no scaling, padding 0.0 = no padding). Every collision element is scaled
+  //! individually with the scaling center in its origin. Padding is added individually to every collision element.
+  ScaleAndPadding defaultShadowInflation;
+
+  //! The default inflation that is applied to the collision model for the purposes of computing the bounding sphere.
+  //! Every collision element is scaled individually with the scaling center in its origin. Padding is added
+  //! individually to every collision element.
+  ScaleAndPadding defaultBsphereInflation;
+
+  //! The default inflation that is applied to the collision model for the purposes of computing the bounding box.
+  //! Every collision element is scaled individually with the scaling center in its origin. Padding is added
+  //! individually to every collision element.
+  ScaleAndPadding defaultBboxInflation;
+
+  //! Inflation that is applied to a collision element for the purposes of checking if a point is contained by the
+  //! robot model (scale 1.0 = no scaling, padding 0.0 = no padding). Elements not present in this list are scaled and
+  //! padded with defaultContainsInflation.
+  std::map<std::string, ScaleAndPadding> perLinkContainsInflation;
+
+  //! Inflation that is applied to a collision element for the purposes of checking if a point is shadowed by the
+  //! robot model (scale 1.0 = no scaling, padding 0.0 = no padding). Elements not present in this list are scaled and
+  //! padded with defaultShadowInflation.
+  std::map<std::string, ScaleAndPadding> perLinkShadowInflation;
+
+  //! Inflation that is applied to a collision element for the purposes of computing the bounding sphere.
+  //! Elements not present in this list are scaled and padded with defaultBsphereInflation.
+  std::map<std::string, ScaleAndPadding> perLinkBsphereInflation;
+
+  //! Inflation that is applied to a collision element for the purposes of computing the bounding box.
+  //! Elements not present in this list are scaled and padded with defaultBboxInflation.
+  std::map<std::string, ScaleAndPadding> perLinkBboxInflation;
 
   //! Name of the parameter where the robot model can be found.
   std::string robotDescriptionParam;
@@ -198,6 +249,8 @@ protected:
   ros::Publisher debugPointCloudShadowPublisher;
   ros::Publisher debugContainsMarkerPublisher;
   ros::Publisher debugShadowMarkerPublisher;
+  ros::Publisher debugBsphereMarkerPublisher;
+  ros::Publisher debugBboxMarkerPublisher;
 
   //! Service server for reloading robot model.
   ros::ServiceServer reloadRobotModelServiceServer;
@@ -243,6 +296,8 @@ protected:
   bool publishDebugPclShadow;
   bool publishDebugContainsMarker;
   bool publishDebugShadowMarker;
+  bool publishDebugBsphereMarker;
+  bool publishDebugBboxMarker;
 
   //! Timeout for reachable transforms.
   ros::Duration reachableTransformTimeout;
@@ -352,7 +407,7 @@ protected:
   bool triggerModelReload(std_srvs::TriggerRequest&, std_srvs::TriggerResponse&);
 
   void createBodyVisualizationMsg(
-      const std::map<point_containment_filter::ShapeHandle, bodies::Body*>& bodies,
+      const std::map<point_containment_filter::ShapeHandle, const bodies::Body*>& bodies,
       const ros::Time& stamp, const std_msgs::ColorRGBA& color,
       visualization_msgs::MarkerArray& markerArray) const;
 
@@ -383,6 +438,18 @@ protected:
    * pointcloud without bounding box.
    */
   void computeAndPublishLocalBoundingBox(const sensor_msgs::PointCloud2& projectedPointCloud) const;
+
+  ScaleAndPadding getLinkInflationForContainsTest(const std::string& linkName) const;
+  ScaleAndPadding getLinkInflationForContainsTest(const std::vector<std::string>& linkNames) const;
+  ScaleAndPadding getLinkInflationForShadowTest(const std::string& linkName) const;
+  ScaleAndPadding getLinkInflationForShadowTest(const std::vector<std::string>& linkNames) const;
+  ScaleAndPadding getLinkInflationForBoundingSphere(const std::string& linkName) const;
+  ScaleAndPadding getLinkInflationForBoundingSphere(const std::vector<std::string>& linkNames) const;
+  ScaleAndPadding getLinkInflationForBoundingBox(const std::string& linkName) const;
+  ScaleAndPadding getLinkInflationForBoundingBox(const std::vector<std::string>& linkNames) const;
+
+private:
+  ScaleAndPadding getLinkInflation(const std::vector<std::string>& linkNames, const ScaleAndPadding& defaultInflation, const std::map<std::string, ScaleAndPadding>& perLinkInflation) const;
 };
 
 class RobotBodyFilterLaserScan : public RobotBodyFilter<sensor_msgs::LaserScan>
