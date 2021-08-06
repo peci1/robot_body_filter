@@ -2,6 +2,13 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Merge pull request `#15 <https://github.com/peci1/robot_body_filter/issues/15>`_ from universal-field-robots/master
+  TFFramesWatchdog and RayCastingShapeMask need to be installed in the CMakeLists.txt
+* Added RayCastingShapeMask and TFFramesWatchdog to install targets in cmake
+* Contributors: Josh Owen, Martin Pecka
+
 1.2.0 (2021-07-30)
 ------------------
 * Merge pull request `#11 <https://github.com/peci1/robot_body_filter/issues/11>`_ from peci1/correct-pointcloud-transforms
