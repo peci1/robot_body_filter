@@ -2,6 +2,10 @@
 
 Filters the robot's body out of point clouds and laser scans.
 
+## Tutorial
+
+Check out the webinar recording where a lot of options for this filter are explained and demonstrated! https://www.youtube.com/watch?v=j0ljV0uZy3Q
+
 ## Changes vs [PR2/robot_self_filter](https://github.com/PR2/robot_self_filter):
 - Now the package is a normal `filters::FilterBase` filter and not a standalone node.
 - Using both containment and ray-tracing tests. 
