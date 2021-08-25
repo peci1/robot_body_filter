@@ -97,8 +97,8 @@ protected:
 
     if (valueToStringFn != nullptr)
     {
-      ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
-                                      << name << ", assigning default: "
+      ROS_INFO_STREAM(this->getName() << ": Parameter " << name
+                                      << " not defined, assigning default: "
                                       << valueToStringFn(defaultValue)
                                       << prependIfNonEmpty(unit, " "));
     }
@@ -288,8 +288,8 @@ protected:
       {
         if (innerDefaultUsed)
         {
-          ROS_WARN_STREAM(this->getName() << ": Cannot find value for parameter: "
-                                          << name << ", assigning default: "
+          ROS_INFO_STREAM(this->getName() << ": Parameter " << name
+                                          << " not defined, assigning default: "
                                           << valueToStringFn(defaultValue)
                                           << prependIfNonEmpty(unit, " "));
         }
