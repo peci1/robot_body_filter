@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<launch>
+	
+    <arg name="robot_namespace"            default=""/>
+    <arg name="description_name"           default="smb_description"/>
+    <arg name="control_namespace"          default="control"/>
+    <arg name="enable_ekf"                 default="false"/>
+    <arg name="laser_enabled"              default="true"/>
+    <arg name="joint_states_topic"         default="joint_states"/>
+    <arg name="description_file"           default="$(find smb_description)/urdf/smb_standalone.urdf.xacro"/>
+    <arg name="simulation"                 default="false"/>
+    <arg name="joystick"                   default="true"/>
+
+
+    
+    <!-- Load robot description for controller -->
+    <include file="$(find smb_description)/launch/load.launch">
+        <arg name="lidar"            value="$(arg laser_enabled)"/>
+        <arg name="simulation"       value="$(arg simulation)"/>
+        <arg name="use_ros_control"  value="true"/>
+        <arg name="description_name" value="$(arg description_name)"/>
+        <arg name="description_file" value="$(arg description_file)"/>
+        <arg name="wheel_joint_type" value="continuous"/>
+        <arg name="robot_namespace"  value="$(arg robot_namespace)"/>
+        <arg name="publish_tf"       value="true"/>
+    </include>
+
+
+    <node name = "laser_filter" 
+        pkg="sensor_filters" 
+        type = "pointcloud2_filter_chain" 
+        output = "screen">
+        
+        <rosparam command="load" file="$(find robot_body_filter)/param/vlp16_filter_params.yaml" />
+    
+        <remap from="~input"                    to="/rslidar_points_filtered" />
+        <remap from="~output"                   to="/points_filtered" />
+        
+    </node>
+    
+</launch>
+			
