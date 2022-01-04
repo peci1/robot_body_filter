@@ -4,7 +4,7 @@ Filters the robot's body out of point clouds and laser scans.
 
 ## Dependencies
 - https://github.com/ctu-vras/sensor_filters
-- See `launch`, `param`, and `example` for more details
+- See `launch`, `param`, and `examples` for more details
 
 ## Tutorial
 
