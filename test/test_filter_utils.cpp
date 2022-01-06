@@ -23,6 +23,8 @@ class TestFilter : public robot_body_filter::FilterBase<std::string>
     EXPECT_EQ("fixed", this->getParamVerbose("nonexistent", std::string("fixed"), "", &defaultUsed)); EXPECT_TRUE(defaultUsed);
     EXPECT_EQ("odom", this->getParamVerbose("frames/fixed", "fixed", "", &defaultUsed)); EXPECT_FALSE(defaultUsed);
     EXPECT_EQ("fixed", this->getParamVerbose("nonexistent", "fixed", "", &defaultUsed)); EXPECT_TRUE(defaultUsed);
+    EXPECT_EQ("test", this->getParamVerbose("test_value", "test", "", &defaultUsed)); EXPECT_TRUE(defaultUsed); // wrong value type
+    EXPECT_EQ(1, this->getParamVerbose("frames/fixed", 1, "", &defaultUsed)); EXPECT_TRUE(defaultUsed); // wrong value type
     EXPECT_THROW(this->getParamVerbose("test/negative", static_cast<uint64_t>(1)),
       std::invalid_argument);
     EXPECT_EQ(1, this->getParamVerbose("nonexistent", static_cast<uint64_t>(1), "", &defaultUsed)); EXPECT_TRUE(defaultUsed);

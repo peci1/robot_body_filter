@@ -61,6 +61,7 @@ test_chain_config:
     debug/pcl/shadow: False
     debug/marker/contains: False
     debug/marker/shadow: False
+    test_value: 1.1234
 
 test_dict_config:
   name: "robot_body_filter"
@@ -120,6 +121,7 @@ test_dict_config:
     debug/pcl/shadow: False
     debug/marker/contains: False
     debug/marker/shadow: False
+    test_value: 1.1234
 
 all_config:
   name: "robot_body_filter"
@@ -172,6 +174,7 @@ all_config:
     debug/pcl/shadow: True
     debug/marker/contains: True
     debug/marker/shadow: True
+    test_value: 1.1234
 
 compute_mask_config_point_by_point:
   name: "robot_body_filter"
@@ -222,6 +225,7 @@ compute_mask_config_point_by_point:
     debug/pcl/shadow: True
     debug/marker/contains: True
     debug/marker/shadow: True
+    test_value: 1.1234
 
 compute_mask_config_all_at_once:
   name: "robot_body_filter"
@@ -274,3 +278,4 @@ compute_mask_config_all_at_once:
     debug/pcl/shadow: True
     debug/marker/contains: True
     debug/marker/shadow: True
+    test_value: 1.1234

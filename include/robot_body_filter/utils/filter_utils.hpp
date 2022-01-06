@@ -17,6 +17,31 @@
 namespace robot_body_filter
 {
 
+namespace
+{
+/**
+ * \brief Internal use only. This class exposes the XmlRpcValue -> typed data conversion
+ * provided by filters::FilterBase::getParam(), which is normally protected. We use this
+ * workaround to avoid copy-pasting the code here.
+ */
+template<typename F>
+class FilterParamHelper : public filters::FilterBase<F>
+{
+public:
+  FilterParamHelper(const std::string& key, const XmlRpc::XmlRpcValue& value)
+  {
+    this->params_[key] = value[key];
+  }
+  template<typename T> bool getParamHelper(const std::string& name, T& value) const
+  {
+    return filters::FilterBase<F>::getParam(name, value);
+  }
+  bool update(const F& data_in, F& data_out) override {return false;}
+protected:
+  bool configure() override {return false;}
+};
+}
+
 template<typename F>
 class FilterBase : public filters::FilterBase<F>
 {
@@ -43,10 +68,10 @@ protected:
    *             logging). Set to nullptr to disable logging.
    * \return The loaded param value.
    */
-  template< typename T>
+  template<typename T>
   T getParamVerbose(const std::string &name, const T &defaultValue = T(),
              const std::string &unit = "", bool* defaultUsed = nullptr,
-             ToStringFn<T> valueToStringFn = &to_string)
+             ToStringFn<T> valueToStringFn = &to_string) const
   {
     T value;
     if (filters::FilterBase<F>::getParam(name, value))
@@ -61,10 +86,16 @@ protected:
         *defaultUsed = false;
       return value;
     }
-
-    // The parameter has slashes in its name, so try a "recursive" search
-    if (name.length() > 1 && name.find_first_of('/', 1) != std::string::npos)
-    {
+    else if (this->params_.find(name) != this->params_.end())
+    {  // the parameter was found, but has a wrong type
+      ROS_ERROR_STREAM(this->getName() << ": Parameter " << name << " found, "
+        "but its value has a wrong type. Expected XmlRpc type " <<
+        XmlRpcTraits<T>::stringType << ", got type: " <<
+        to_string(this->params_.at(name).getType()) <<
+        ". Using the default value instead.");
+    }
+    else if (name.length() > 1 && name.find_first_of('/', 1) != std::string::npos)
+    {  // The parameter has slashes in its name, so try a "recursive" search
       auto slashPos = name.find_first_of('/', 1);
       auto head = name.substr(0, slashPos);
       auto tail = name.substr(slashPos + 1);
@@ -76,8 +107,27 @@ protected:
         {
           if (val.hasMember(tail))
           {
-            filters::FilterBase<F>::params_[name] = val[tail];
-            return this->getParamVerbose(name, defaultValue, unit, defaultUsed, valueToStringFn);
+            auto tmpFilter = FilterParamHelper<F>(tail, val);
+            if (tmpFilter.getParamHelper(tail, value))
+            {
+              if (defaultUsed != nullptr)
+                *defaultUsed = false;
+              if (valueToStringFn != nullptr)
+              {
+                ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
+                  ", value: " << valueToStringFn(value) << prependIfNonEmpty(unit, " "));
+              }
+              return value;
+            }
+            else
+            {
+              ROS_ERROR_STREAM(this->getName() << ": Parameter " << name << " found, "
+                "but its value has a wrong type. Expected XmlRpc type " <<
+                XmlRpcTraits<T>::stringType << ", got type: " <<
+                to_string(val[tail].getType()) <<
+                ". Using the default value instead.");
+              break;
+            }
           } else {
             slashPos = tail.find_first_of('/', 1);
             if (slashPos == std::string::npos)
@@ -121,7 +171,7 @@ protected:
    */
   std::string getParamVerbose(const std::string &name, const char* defaultValue,
                               const std::string &unit = "", bool* defaultUsed = nullptr,
-                              ToStringFn<std::string> valueToStringFn = &to_string)
+                              ToStringFn<std::string> valueToStringFn = &to_string) const
   {
     return this->getParamVerbose(name, std::string(defaultValue), unit, defaultUsed, valueToStringFn);
   }
@@ -145,7 +195,7 @@ protected:
    */
   uint64_t getParamVerbose(const std::string &name, const uint64_t &defaultValue,
                            const std::string &unit = "", bool* defaultUsed = nullptr,
-                           ToStringFn<int> valueToStringFn = &to_string)
+                           ToStringFn<int> valueToStringFn = &to_string) const
   {
     return this->getParamUnsigned<uint64_t, int>(name, defaultValue, unit, defaultUsed,
         valueToStringFn);
@@ -171,7 +221,7 @@ protected:
                                const unsigned int &defaultValue,
                                const std::string &unit = "",
                                bool* defaultUsed = nullptr,
-                               ToStringFn<int> valueToStringFn = &to_string)
+                               ToStringFn<int> valueToStringFn = &to_string) const
   {
     return this->getParamUnsigned<unsigned int, int>(name, defaultValue, unit, defaultUsed,
         valueToStringFn);
@@ -195,7 +245,7 @@ protected:
                                 const ros::Duration &defaultValue,
                                 const std::string &unit = "",
                                 bool* defaultUsed = nullptr,
-                                ToStringFn<double> valueToStringFn = &to_string)
+                                ToStringFn<double> valueToStringFn = &to_string) const
   {
     return this->getParamCast<ros::Duration, double>(name, defaultValue.toSec(), unit, defaultUsed,
         valueToStringFn);
@@ -220,7 +270,7 @@ protected:
       const std::set<T> &defaultValue = std::set<T>(),
       const std::string &unit = "",
       bool* defaultUsed = nullptr,
-      ToStringFn<std::vector<T>> valueToStringFn = &to_string)
+      ToStringFn<std::vector<T>> valueToStringFn = &to_string) const
   {
     std::vector<T> vector(defaultValue.begin(), defaultValue.end());
     vector = this->getParamVerbose(name, vector, unit, defaultUsed, valueToStringFn);
@@ -233,7 +283,7 @@ protected:
       const std::map<std::string, T> &defaultValue = std::map<std::string, T>(),
       const std::string &unit = "",
       bool* defaultUsed = nullptr,
-      ToStringFn<MapType> valueToStringFn = &to_string)
+      ToStringFn<MapType> valueToStringFn = &to_string) const
   {
     // convert default value to XmlRpc so that we can utilize FilterBase::getParam(XmlRpcValue).
     XmlRpc::XmlRpcValue defaultValueXmlRpc;
@@ -310,7 +360,7 @@ private:
   template<typename Result, typename Param>
   Result getParamUnsigned(const std::string &name, const Result &defaultValue,
                           const std::string &unit = "", bool* defaultUsed = nullptr,
-                          ToStringFn<Param> valueToStringFn = &to_string)
+                          ToStringFn<Param> valueToStringFn = &to_string) const
   {
     const Param signedValue = this->getParamVerbose(name, static_cast<Param>(defaultValue), unit,
         defaultUsed, valueToStringFn);
@@ -330,7 +380,7 @@ private:
   template<typename Result, typename Param>
   Result getParamCast(const std::string &name, const Param &defaultValue,
                       const std::string &unit = "", bool* defaultUsed = nullptr,
-                      ToStringFn<Param> valueToStringFn = &to_string)
+                      ToStringFn<Param> valueToStringFn = &to_string) const
   {
     const Param paramValue = this->getParamVerbose(name, defaultValue, unit, defaultUsed,
         valueToStringFn);
@@ -339,5 +389,5 @@ private:
 
 };
 
-};
+}
 #endif //ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
