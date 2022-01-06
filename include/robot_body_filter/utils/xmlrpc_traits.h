@@ -6,7 +6,7 @@
 namespace robot_body_filter
 {
 
-template<typename T>
+template<typename T, class Enable = void>
 struct XmlRpcTraits
 {
   inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeInvalid };
@@ -43,11 +43,22 @@ template<> struct XmlRpcTraits<tm>
   inline static const std::string stringType { to_string(xmlRpcType) };
 };
 
+template<typename T> struct XmlRpcTraits<std::vector<T>, typename std::enable_if<XmlRpcTraits<T>::xmlRpcType != XmlRpc::XmlRpcValue::TypeInvalid>::type>
+{
+  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeArray };
+  inline static const std::string stringType { to_string(xmlRpcType) };
+};
+  
 template<> struct XmlRpcTraits<typename XmlRpc::XmlRpcValue::BinaryData>
 {
   inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeBase64 };
   inline static const std::string stringType { to_string(xmlRpcType) };
+};
 
+template<typename T> struct XmlRpcTraits<std::map<std::string, T>, typename std::enable_if<XmlRpcTraits<T>::xmlRpcType != XmlRpc::XmlRpcValue::TypeInvalid>::type>
+{
+  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeStruct };
+  inline static const std::string stringType { to_string(xmlRpcType) };
 };
 
 }
