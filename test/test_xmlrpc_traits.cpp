@@ -65,6 +65,19 @@ TEST(XmlRpcTraits, String)
   ASSERT_EQ("invalid", (XmlRpcTraits<std::map<std::string, std::map<std::string, float>>>::stringType));
 }
 
+TEST(XmlRpcTraits, ToString)
+{
+  EXPECT_EQ("bool", to_string(XmlRpc::XmlRpcValue::TypeBoolean));
+  EXPECT_EQ("int", to_string(XmlRpc::XmlRpcValue::TypeInt));
+  EXPECT_EQ("double", to_string(XmlRpc::XmlRpcValue::TypeDouble));
+  EXPECT_EQ("string", to_string(XmlRpc::XmlRpcValue::TypeString));
+  EXPECT_EQ("datetime", to_string(XmlRpc::XmlRpcValue::TypeDateTime));
+  EXPECT_EQ("binary", to_string(XmlRpc::XmlRpcValue::TypeBase64));
+  EXPECT_EQ("struct", to_string(XmlRpc::XmlRpcValue::TypeStruct));
+  EXPECT_EQ("array", to_string(XmlRpc::XmlRpcValue::TypeArray));
+  EXPECT_EQ("invalid", to_string(XmlRpc::XmlRpcValue::TypeInvalid));
+}
+
 int main(int argc, char **argv)
 {
   testing::InitGoogleTest(&argc, argv);

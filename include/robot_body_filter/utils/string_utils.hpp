@@ -105,32 +105,6 @@ inline std::string to_string(const XmlRpc::XmlRpcValue &value)
   return ss.str();
 }
 
-template<>
-inline std::string to_string(const XmlRpc::XmlRpcValue::Type &value)
-{
-  switch (value)
-  {
-    case XmlRpc::XmlRpcValue::TypeBoolean:
-      return "bool";
-    case XmlRpc::XmlRpcValue::TypeInt:
-      return "int";
-    case XmlRpc::XmlRpcValue::TypeDouble:
-      return "double";
-    case XmlRpc::XmlRpcValue::TypeString:
-      return "string";
-    case XmlRpc::XmlRpcValue::TypeDateTime:
-      return "datetime";
-    case XmlRpc::XmlRpcValue::TypeBase64:
-      return "binary";
-    case XmlRpc::XmlRpcValue::TypeArray:
-      return "array";
-    case XmlRpc::XmlRpcValue::TypeStruct:
-      return "struct";
-    default:
-      return "invalid";
-  }
-}
-
 template<typename T>
 inline std::string to_string(const std::vector<T> &value)
 {

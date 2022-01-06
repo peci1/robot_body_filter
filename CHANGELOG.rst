@@ -2,6 +2,15 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Changed xmlrpc_traits variables to constexpr static instead of inline static
+  to decrease the required C++ language standard for this part.
+  Changed stringType from std::string to const char*.
+* Improved xmlrpc_traits to recognize more types of valid structures.
+* Make filter_utils FilterBase::getParamVerbose() methods const.
+* Contributors: Martin Pecka
+
 1.2.2 (2021-08-25)
 ------------------
 * Change ROS_WARN to ROS_INFO when loading a value of an undefined parameter

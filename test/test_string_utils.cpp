@@ -88,15 +88,6 @@ TEST(StringUtils, ToString)
   EXPECT_EQ("1.500000000", to_string(ros::SteadyTime(1, 500000000)));
   EXPECT_EQ("1.500000000", to_string(ros::Duration(1, 500000000)));
   EXPECT_EQ("1.500000000", to_string(ros::WallDuration(1, 500000000)));
-  EXPECT_EQ("bool", to_string(XmlRpc::XmlRpcValue::TypeBoolean));
-  EXPECT_EQ("int", to_string(XmlRpc::XmlRpcValue::TypeInt));
-  EXPECT_EQ("double", to_string(XmlRpc::XmlRpcValue::TypeDouble));
-  EXPECT_EQ("string", to_string(XmlRpc::XmlRpcValue::TypeString));
-  EXPECT_EQ("datetime", to_string(XmlRpc::XmlRpcValue::TypeDateTime));
-  EXPECT_EQ("binary", to_string(XmlRpc::XmlRpcValue::TypeBase64));
-  EXPECT_EQ("struct", to_string(XmlRpc::XmlRpcValue::TypeStruct));
-  EXPECT_EQ("array", to_string(XmlRpc::XmlRpcValue::TypeArray));
-  EXPECT_EQ("invalid", to_string(XmlRpc::XmlRpcValue::TypeInvalid));
   XmlRpc::XmlRpcValue::setDoubleFormat("%.2f");
   EXPECT_EQ("2.00", to_string(XmlRpc::XmlRpcValue(2.0)));
   EXPECT_EQ("2", to_string(XmlRpc::XmlRpcValue(2)));

@@ -6,59 +6,90 @@
 namespace robot_body_filter
 {
 
+constexpr const char* to_cstring(const XmlRpc::XmlRpcValue::Type &value)
+{
+  switch (value)
+  {
+    case XmlRpc::XmlRpcValue::TypeBoolean:
+      return "bool";
+    case XmlRpc::XmlRpcValue::TypeInt:
+      return "int";
+    case XmlRpc::XmlRpcValue::TypeDouble:
+      return "double";
+    case XmlRpc::XmlRpcValue::TypeString:
+      return "string";
+    case XmlRpc::XmlRpcValue::TypeDateTime:
+      return "datetime";
+    case XmlRpc::XmlRpcValue::TypeBase64:
+      return "binary";
+    case XmlRpc::XmlRpcValue::TypeArray:
+      return "array";
+    case XmlRpc::XmlRpcValue::TypeStruct:
+      return "struct";
+    default:
+      return "invalid";
+  }
+}
+
+template<>
+inline std::string to_string(const XmlRpc::XmlRpcValue::Type &value)
+{
+  return to_cstring(value);
+}
+
 template<typename T, class Enable = void>
 struct XmlRpcTraits
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeInvalid };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeInvalid };
+  constexpr static const char* stringType { to_cstring(xmlRpcType) };
 };
 
 template<> struct XmlRpcTraits<bool>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeBoolean };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeBoolean };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 template<> struct XmlRpcTraits<int>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeInt };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeInt };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 template<> struct XmlRpcTraits<double>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeDouble };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeDouble };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 template<> struct XmlRpcTraits<std::string>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeString };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeString };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 template<> struct XmlRpcTraits<tm>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeDateTime };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeDateTime };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 template<typename T> struct XmlRpcTraits<std::vector<T>, typename std::enable_if<XmlRpcTraits<T>::xmlRpcType != XmlRpc::XmlRpcValue::TypeInvalid>::type>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeArray };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeArray };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
   
 template<> struct XmlRpcTraits<typename XmlRpc::XmlRpcValue::BinaryData>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeBase64 };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeBase64 };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 template<typename T> struct XmlRpcTraits<std::map<std::string, T>, typename std::enable_if<XmlRpcTraits<T>::xmlRpcType != XmlRpc::XmlRpcValue::TypeInvalid>::type>
 {
-  inline static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeStruct };
-  inline static const std::string stringType { to_string(xmlRpcType) };
+  constexpr static const XmlRpc::XmlRpcValue::Type xmlRpcType { XmlRpc::XmlRpcValue::TypeStruct };
+  constexpr static const char* stringType  { to_cstring(xmlRpcType) };
 };
 
 }
