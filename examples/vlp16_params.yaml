@@ -1,0 +1,29 @@
+# This is an example filter config for a commercial robot that use Velodyne VLP-16.
+cloud_filter_chain:
+  # Only containment filtering
+  - name: robot_body_filter_containment
+    type: robot_body_filter/RobotBodyFilterPointCloud2
+    params:
+      debug/pcl/clip: false
+      debug/pcl/inside: false
+      debug/pcl/shadow: false
+      sensor/min_distance: 0.05
+      sensor/max_distance: 10
+      # For more information of how to choose the fixed frame and configure point_by_point, see the discussion at https://github.com/peci1/robot_body_filter/pull/18#discussion_r780655811
+      sensor/point_by_point: true
+      frames/fixed: odom
+      frames/sensor: lidar_frame
+      frames/filtering: lidar_frame
+      frames/output: lidar_frame
+      body_model/inflation/scale: 1.0
+      body_model/inflation/padding: 0.03
+      body_model/robot_description_param: robot_description
+      filter/do_clipping: true
+      filter/do_contains_test: true
+      filter/do_shadow_test: false
+      only_links:
+        - base_link
+        - gps_link
+        - imu_link
+        - lidar_mount_link
+        - top
