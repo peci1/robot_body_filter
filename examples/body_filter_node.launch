@@ -7,7 +7,7 @@
         type = "pointcloud2_filter_chain" 
         output = "screen">
         
-        <rosparam command="load" file="$(dirname)/examples/vlp16_params.yaml" />
+        <rosparam command="load" file="$(dirname)/vlp16_params.yaml" />
         <remap from="~input"                    to="velodyne_points" />
         <remap from="~output"                   to="velodyne_points_filtered" />
     </node>
