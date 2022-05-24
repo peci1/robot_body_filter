@@ -44,7 +44,7 @@
 
 #include <eigen_stl_containers/eigen_stl_containers.h>
 
-namespace bodies
+namespace robot_body_filter
 {
 
 class OBBPrivate;

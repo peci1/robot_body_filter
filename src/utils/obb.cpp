@@ -12,7 +12,7 @@ typedef fcl::Vector3d FCL_Vec3;
 typedef fcl::OBB<double> FCL_OBB;
 #endif
 
-namespace bodies
+namespace robot_body_filter
 {
 
 #if FCL_MINOR_VERSION == 5
@@ -144,7 +144,7 @@ bool OBB::contains(const Eigen::Vector3d& point) const
   return obb_->contain(toFcl(point));
 }
 
-bool OBB::overlaps(const bodies::OBB& other) const
+bool OBB::overlaps(const OBB& other) const
 {
   return obb_->overlap(*other.obb_);
 }

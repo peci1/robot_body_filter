@@ -135,7 +135,7 @@ void computeBoundingBox(const bodies::Body *body,
                                 OrientedBoundingBox &bbox) {
   if (body == nullptr)
   {
-    bbox = OBB();
+    bbox = robot_body_filter::OBB();
     return;
   }
 
@@ -166,7 +166,7 @@ void computeBoundingBox(const bodies::Sphere *body,
                                 OrientedBoundingBox &bbox) {
   if (body == nullptr)
   {
-    bbox = OBB();
+    bbox = robot_body_filter::OBB();
     return;
   }
 
@@ -183,7 +183,7 @@ void computeBoundingBox(const bodies::Box *body,
                                 OrientedBoundingBox &bbox) {
   if (body == nullptr)
   {
-    bbox = OBB();
+    bbox = robot_body_filter::OBB();
     return;
   }
 
@@ -194,7 +194,7 @@ void computeBoundingBox(const bodies::Cylinder *body,
                                 OrientedBoundingBox &bbox) {
   if (body == nullptr)
   {
-    bbox = OBB();
+    bbox = robot_body_filter::OBB();
     return;
   }
 
@@ -207,7 +207,7 @@ void computeBoundingBox(const bodies::ConvexMesh *body,
                                 OrientedBoundingBox &bbox) {
   if (body == nullptr)
   {
-    bbox = OBB();
+    bbox = robot_body_filter::OBB();
     return;
   }
 

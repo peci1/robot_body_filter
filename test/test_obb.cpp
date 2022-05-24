@@ -2,7 +2,7 @@
 #include <robot_body_filter/utils/obb.h>
 #include "utils.cpp"
 
-using namespace bodies;
+using namespace robot_body_filter;
 
 TEST(OBB, ConstructFromExtentsAndPose)
 {
