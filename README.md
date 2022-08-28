@@ -16,26 +16,27 @@ Check out the webinar recording where a lot of options for this filter are expla
 
 ## Build Status
 
-### Continuous integration
-
-| ROS Version | Build Status |
-|---|---|
-| __Melodic__ | [![Build Status](https://github.com/peci1/robot_body_filter/workflows/CI/badge.svg?branch=master)](https://github.com/peci1/robot_body_filter/actions?query=workflow%3ACI) <br/> [![Build Status](https://api.travis-ci.com/peci1/robot_body_filter.svg?branch=master&status=passed)](https://travis-ci.com/github/peci1/robot_body_filter) |
 
 
-### Dev job
 
-| ROS Version | Build Status |
-|---|---|
-| __Melodic__ | [![Build Status](http://build.ros.org/buildStatus/icon?job=Mdev__robot_body_filter__ubuntu_bionic_amd64)](http://build.ros.org/job/Mdev__robot_body_filter__ubuntu_bionic_amd64) |
-| __Noetic__ | [![Build Status](http://build.ros.org/buildStatus/icon?job=Ndev__robot_body_filter__ubuntu_focal_amd64)](http://build.ros.org/job/Ndev__robot_body_filter__ubuntu_focal_amd64) |
+Development versions:
+[![Github Actions](https://github.com/peci1/robot_body_filter/workflows/CI/badge.svg?branch=master)](https://github.com/peci1/robot_body_filter/actions?query=workflow%3ACI)
+[![Dev melodic](http://build.ros.org/job/Mdev__robot_body_filter__ubuntu_bionic_amd64/badge/icon?subject=melodic)](http://build.ros.org/job/Mdev__robot_body_filter__ubuntu_bionic_amd64)
+[![Dev noetic](http://build.ros.org/job/Ndev__robot_body_filter__ubuntu_focal_amd64/badge/icon?subject=noetic)](http://build.ros.org/job/Ndev__robot_body_filter__ubuntu_focal_amd64)
 
-### Release jobs
+Release jobs Melodic
+[![Melodic version](https://img.shields.io/ros/v/melodic/robot_body_filter)](http://packages.ros.org/ros/ubuntu/pool/main/r/ros-melodic-robot-body-filter/):
+[![Bin melodic-amd64](https://build.ros.org/job/Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary/badge/icon?subject=bionic+amd64)](https://build.ros.org/job/Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary/)
+[![Bin melodic-arm64](https://build.ros.org/job/Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary/badge/icon?subject=bionic+arm64)](https://build.ros.org/job/Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary/)
+[![Bin melodic-armhf](https://build.ros.org/job/Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary/badge/icon?subject=bionic+armhf)](https://build.ros.org/job/Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary/)
 
-| ROS Version | Ubuntu amd64 | Ubuntu armhf | Ubuntu arm64 | Debian amd64 | Debian arm64 |
-|---|---|---|---|---|---|
-| __Melodic__ | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary)](http://build.ros.org/job/Mbin_uB64__robot_body_filter__ubuntu_bionic_amd64__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary)](http://build.ros.org/job/Mbin_ubhf_uBhf__robot_body_filter__ubuntu_bionic_armhf__binary) | Bionic [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary)](http://build.ros.org/job/Mbin_ubv8_uBv8__robot_body_filter__ubuntu_bionic_arm64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary)](http://build.ros.org/job/Mbin_ds_dS64__robot_body_filter__debian_stretch_amd64__binary) | Stretch [![Build Status](http://build.ros.org/buildStatus/icon?job=Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary)](http://build.ros.org/job/Mbin_dsv8_dSv8__robot_body_filter__debian_stretch_arm64__binary) |
-| __Noetic__ | Focal [![Build Status](http://build.ros.org/buildStatus/icon?job=Nbin_uF64__robot_body_filter__ubuntu_focal_amd64__binary)](http://build.ros.org/job/Nbin_uF64__robot_body_filter__ubuntu_focal_amd64__binary) | Focal [![Build Status](http://build.ros.org/buildStatus/icon?job=Nbin_ufhf_uFhf__robot_body_filter__ubuntu_focal_armhf__binary)](http://build.ros.org/job/Nbin_ufhf_uFhf__robot_body_filter__ubuntu_focal_armhf__binary) | Focal [![Build Status](http://build.ros.org/buildStatus/icon?job=Nbin_ufv8_uFv8__robot_body_filter__ubuntu_focal_arm64__binary)](http://build.ros.org/job/Nbin_ufv8_uFv8__robot_body_filter__ubuntu_focal_arm64__binary) | Buster [![Build Status](http://build.ros.org/buildStatus/icon?job=Nbin_db_dB64__robot_body_filter__debian_buster_amd64__binary)](http://build.ros.org/job/Nbin_db_dB64__robot_body_filter__debian_buster_amd64__binary) | Buster [![Build Status](http://build.ros.org/buildStatus/icon?job=Nbin_dbv8_dBv8__robot_body_filter__debian_buster_arm64__binary)](http://build.ros.org/job/Nbin_dbv8_dBv8__robot_body_filter__debian_buster_arm64__binary) |
+Release jobs Noetic
+[![Noetic version](https://img.shields.io/ros/v/noetic/robot_body_filter)](http://packages.ros.org/ros/ubuntu/pool/main/r/ros-noetic-robot-body-filter/):
+[![Bin noetic focal-amd64](https://build.ros.org/job/Nbin_uF64__robot_body_filter__ubuntu_focal_amd64__binary/badge/icon?subject=focal+amd64)](https://build.ros.org/job/Nbin_uF64__robot_body_filter__ubuntu_focal_amd64__binary/)
+[![Bin noetic focal-arm64](https://build.ros.org/job/Nbin_ufv8_uFv8__robot_body_filter__ubuntu_focal_arm64__binary/badge/icon?subject=focal+arm64)](https://build.ros.org/job/Nbin_ufv8_uFv8__robot_body_filter__ubuntu_focal_arm64__binary/)
+[![Bin noetic focal-armhf](https://build.ros.org/job/Nbin_ufhf_uFhf__robot_body_filter__ubuntu_focal_armhf__binary/badge/icon?subject=focal+armhf)](https://build.ros.org/job/Nbin_ufhf_uFhf__robot_body_filter__ubuntu_focal_armhf__binary/)
+[![Bin noetic buster-amd64](https://build.ros.org/job/Nbin_db_dB64__robot_body_filter__debian_buster_amd64__binary/badge/icon?subject=buster+amd64)](https://build.ros.org/job/Nbin_db_dB64__robot_body_filter__debian_buster_amd64__binary/)
+[![Bin noetic buster-arm64](https://build.ros.org/job/Nbin_dbv8_dBv8__robot_body_filter__debian_buster_arm64__binary/badge/icon?subject=buster+amd64)](https://build.ros.org/job/Nbin_dbv8_dBv8__robot_body_filter__debian_buster_arm64__binary/)
 
 ## Basic Operation
 
