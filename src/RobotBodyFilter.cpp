@@ -3,16 +3,11 @@
 #include <functional>
 #include <memory>
 
-/* HACK HACK HACK */
-/* We use it to access mesh bounding box. */
-#define protected public
-#include <geometric_shapes/bodies.h>
-#undef protected
-
 #include "robot_body_filter/RobotBodyFilter.h"
 
 #include "pluginlib/class_list_macros.h"
 
+#include <geometric_shapes/bodies.h>
 #include <geometric_shapes/body_operations.h>
 #include <geometric_shapes/shape_operations.h>
 #include <geometric_shapes/shape_to_marker.h>
@@ -1457,7 +1452,7 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
         continue;
 
       bodies::OrientedBoundingBox box;
-      bodies::computeBoundingBox(body, box);
+      body->computeBoundingBox(box);
 
       boxes.push_back(box);
 
@@ -1488,8 +1483,8 @@ void RobotBodyFilter<T>::computeAndPublishOrientedBoundingBox(
 
   if (this->computeOrientedBoundingBox)
   {
-    bodies::OrientedBoundingBox box;
-    bodies::mergeOrientedBoundingBoxesApprox(boxes, box);
+    bodies::OrientedBoundingBox box(Eigen::Isometry3d::Identity(), Eigen::Vector3d::Zero());
+    bodies::mergeBoundingBoxesApprox(boxes, box);
 
     robot_body_filter::OrientedBoundingBoxStamped boundingBoxMsg;
 

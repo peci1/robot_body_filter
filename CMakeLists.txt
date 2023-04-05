@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.7.2)
 project(robot_body_filter)
 
 set (CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -44,7 +44,6 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 set(UTILS_SRCS
   src/utils/bodies.cpp
   src/utils/cloud.cpp
-  src/utils/obb.cpp
   src/utils/shapes.cpp
   src/utils/string_utils.cpp
   src/utils/tf2_eigen.cpp
@@ -125,9 +124,6 @@ if (CATKIN_ENABLE_TESTING)
   catkin_add_gtest(test_tf2_sensor_msgs test/test_tf2_sensor_msgs.cpp)
   target_link_libraries(test_tf2_sensor_msgs tf2_sensor_msgs_rbf ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
-  catkin_add_gtest(test_obb test/test_obb.cpp)
-  target_link_libraries(test_obb ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
-
   catkin_add_gtest(test_xmlrpc_traits test/test_xmlrpc_traits.cpp)
   target_link_libraries(test_xmlrpc_traits ${PROJECT_NAME}_utils ${catkin_LIBRARIES})
 
@@ -147,4 +143,5 @@ if (CATKIN_ENABLE_TESTING)
 
   add_rostest_gtest(test_robot_body_filter test/test_robot_body_filter.test test/test_robot_body_filter.cpp)
   target_link_libraries(test_robot_body_filter ${PROJECT_NAME} ${catkin_LIBRARIES})
+  target_compile_options(test_robot_body_filter PRIVATE -fno-var-tracking-assignments)  # speed up build
 endif()

@@ -7,7 +7,7 @@
 namespace robot_body_filter
 {
 
-/** \brief Consruct a masking shape out of the given URDF geometry.
+/** \brief Construct a masking shape out of the given URDF geometry.
  *
  * Just a helper function to convert urdf::Geometry to the corresponding shapes::Shape.
  *

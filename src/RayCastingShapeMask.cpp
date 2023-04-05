@@ -119,7 +119,7 @@ void RayCastingShapeMask::updateBodyPoses()
 
 void RayCastingShapeMask::updateBodyPosesNoLock()
 {
-  Eigen::Isometry3d transform;
+  auto transform = Eigen::Isometry3d::Identity();
   point_containment_filter::ShapeHandle containsHandle;
   bodies::Body* containsBody;
   bodies::Body* shadowBody;
