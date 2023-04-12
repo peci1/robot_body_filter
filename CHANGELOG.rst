@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.3.0 (2023-04-12)
+------------------
 * Removed local implementation of oriented bounding boxes in favor of geometric_shapes/obb. **This change breaks API and ABI**, but I hope nobody explicitly used the OBB part of this library. This change requires geometric_shapes version 0.6.6+ (Melodic) or 0.7.5+ (Noetic) (released April 2023).
 * Add example launch & config for ease of use. Thanks Doan Nguyen for the contribution!
 * Changed xmlrpc_traits variables to constexpr static instead of inline static to decrease the required C++ language standard for this part. Changed stringType from std::string to const char*.
