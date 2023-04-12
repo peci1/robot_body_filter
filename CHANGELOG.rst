@@ -4,12 +4,13 @@ Changelog for package robot_body_filter
 
 Forthcoming
 -----------
-* Changed xmlrpc_traits variables to constexpr static instead of inline static
-  to decrease the required C++ language standard for this part.
-  Changed stringType from std::string to const char*.
+* Removed local implementation of oriented bounding boxes in favor of geometric_shapes/obb. **This change breaks API and ABI**, but I hope nobody explicitly used the OBB part of this library. This change requires geometric_shapes version 0.6.6+ (Melodic) or 0.7.5+ (Noetic) (released April 2023).
+* Add example launch & config for ease of use. Thanks Doan Nguyen for the contribution!
+* Changed xmlrpc_traits variables to constexpr static instead of inline static to decrease the required C++ language standard for this part. Changed stringType from std::string to const char*.
 * Improved xmlrpc_traits to recognize more types of valid structures.
 * Make filter_utils FilterBase::getParamVerbose() methods const.
-* Contributors: Martin Pecka
+  Allowed by https://github.com/ros/filters/pull/35 (released in Melodic filters 1.8.2 (October 2021) and Noetic filters 1.9.1 (September 2021)).
+* Contributors: Doan Nguyen, Martin Pecka
 
 1.2.2 (2021-08-25)
 ------------------
