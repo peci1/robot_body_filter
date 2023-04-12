@@ -35,8 +35,6 @@ Release jobs Noetic
 [![Bin noetic focal-amd64](https://build.ros.org/job/Nbin_uF64__robot_body_filter__ubuntu_focal_amd64__binary/badge/icon?subject=focal+amd64)](https://build.ros.org/job/Nbin_uF64__robot_body_filter__ubuntu_focal_amd64__binary/)
 [![Bin noetic focal-arm64](https://build.ros.org/job/Nbin_ufv8_uFv8__robot_body_filter__ubuntu_focal_arm64__binary/badge/icon?subject=focal+arm64)](https://build.ros.org/job/Nbin_ufv8_uFv8__robot_body_filter__ubuntu_focal_arm64__binary/)
 [![Bin noetic focal-armhf](https://build.ros.org/job/Nbin_ufhf_uFhf__robot_body_filter__ubuntu_focal_armhf__binary/badge/icon?subject=focal+armhf)](https://build.ros.org/job/Nbin_ufhf_uFhf__robot_body_filter__ubuntu_focal_armhf__binary/)
-[![Bin noetic buster-amd64](https://build.ros.org/job/Nbin_db_dB64__robot_body_filter__debian_buster_amd64__binary/badge/icon?subject=buster+amd64)](https://build.ros.org/job/Nbin_db_dB64__robot_body_filter__debian_buster_amd64__binary/)
-[![Bin noetic buster-arm64](https://build.ros.org/job/Nbin_dbv8_dBv8__robot_body_filter__debian_buster_arm64__binary/badge/icon?subject=buster+amd64)](https://build.ros.org/job/Nbin_dbv8_dBv8__robot_body_filter__debian_buster_arm64__binary/)
 
 ## Basic Operation
 

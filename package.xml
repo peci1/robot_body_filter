@@ -17,8 +17,10 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <depend>dynamic_reconfigure</depend>
-  <depend>filters</depend>
-  <depend>geometric_shapes</depend>
+  <depend condition="$ROS_DISTRO != noetic" version_gte="1.8.2">filters</depend>
+  <depend condition="$ROS_DISTRO == noetic" version_gte="1.9.1">filters</depend>
+  <depend condition="$ROS_DISTRO != noetic" version_gte="0.6.6">geometric_shapes</depend>
+  <depend condition="$ROS_DISTRO == noetic" version_gte="0.7.5">geometric_shapes</depend>
   <depend>geometry_msgs</depend>
   <depend>laser_geometry</depend>
   <depend>libpcl-all-dev</depend>
