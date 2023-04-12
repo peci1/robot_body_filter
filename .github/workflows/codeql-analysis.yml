@@ -34,7 +34,7 @@ jobs:
         echo 'Etc/UTC' | sudo tee /etc/timezone && sudo ln -s /usr/share/zoneinfo/Etc/UTC /etc/localtime && sudo apt-get install -y --no-install-recommends tzdata
         sudo apt-get install -y --no-install-recommends dirmngr gnupg2
         sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
-        echo "deb http://packages.ros.org/ros/ubuntu focal main" | sudo tee /etc/apt/sources.list.d/ros1-latest.list
+        echo "deb http://packages.ros.org/ros-testing/ubuntu focal main" | sudo tee /etc/apt/sources.list.d/ros1-latest.list
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends ros-noetic-ros-core build-essential python3-rosdep python3-rosinstall python3-vcstools python3-catkin-tools
         sudo apt-get dist-upgrade -y
