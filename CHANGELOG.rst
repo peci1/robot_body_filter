@@ -2,6 +2,11 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Explicitly specify minimum versions of required libraries.
+* Contributors: Martin Pecka
+
 1.3.0 (2023-04-12)
 ------------------
 * Removed local implementation of oriented bounding boxes in favor of geometric_shapes/obb. **This change breaks API and ABI**, but I hope nobody explicitly used the OBB part of this library. This change requires geometric_shapes version 0.6.6+ (Melodic) or 0.7.5+ (Noetic) (released April 2023).
