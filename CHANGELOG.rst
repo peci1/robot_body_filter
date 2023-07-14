@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.3.1 (2023-07-14)
+------------------
 * Explicitly specify minimum versions of required libraries.
 * Contributors: Martin Pecka
 
