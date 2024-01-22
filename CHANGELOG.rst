@@ -2,8 +2,8 @@
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.3.2 (2024-01-22)
+------------------
 * Do not segfault when a mesh resource is not found.
 * Added full_example.
 * Contributors: Martin Pecka
