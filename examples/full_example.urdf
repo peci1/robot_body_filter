@@ -1,0 +1,81 @@
+<?xml version="1.0" ?>
+<robot name="NIFTi">
+    <link name="base_link">
+        <visual>
+            <origin rpy="0 0 0" xyz="-0.1220 0 0"/>
+            <geometry><box size="1.8 1.8 1.8"/></geometry>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="-0.1220 0 0"/>
+            <geometry><box size="1.8 1.8 1.8"/></geometry>
+        </collision>
+        <collision name="big_collision_box">
+            <origin rpy="0 0 0" xyz="-0.1 0 0"/>
+            <!--geometry><box size="2.2545 2.2545 2.2545"/></geometry-->
+            <geometry><mesh filename="package://robot_body_filter/examples/box.dae" scale="2.2545 1.12545 0.7515"/></geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="-0.034 0 0.142"/>
+            <mass value="6.0"/>
+            <inertia ixx="0.001" ixy="0.0001" ixz="0.0" iyy="0.02" iyz="-0.0001" izz="0.03"/>
+        </inertial>
+    </link>
+    <link name="antenna">
+        <visual>
+            <origin rpy="0 0 0" xyz="-0.01864 0 0"/>
+            <geometry><sphere radius="1.24091" /></geometry>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="-0.01864 0 0"/>
+            <geometry><sphere radius="1.24091"/></geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="0.5"/>
+            <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.001" iyz="-0.0001" izz="0.004"/>
+        </inertial>
+    </link>
+    <joint name="antenna_j" type="fixed">
+        <parent link="base_link"/>
+        <child link="antenna"/>
+        <origin rpy="0 0 0" xyz="0.01864 0 0"/>
+    </joint>
+    <link name="laser_base">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry><box size="0.0005 0.0005 0.0005"/></geometry>
+        </visual>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="1e-5"/>
+            <inertia ixx="1e-3" ixy="1e-6" ixz="1e-6" iyy="1e-3" iyz="1e-6" izz="1e-3"/>
+        </inertial>
+    </link>
+    <joint name="laser_base_j" type="fixed">
+        <parent link="base_link"/>
+        <child link="laser_base"/>
+        <origin rpy="0 0 0" xyz="-1.5 0 0"/>
+    </joint>
+    <link name="laser">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry><box size="0.07273 0.07273 0.07273"/></geometry>
+        </visual>
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry><box size="0.07273 0.07273 0.07273"/></geometry>
+        </collision>
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <mass value="1"/>
+            <inertia ixx="0.003" ixy="0" ixz="0" iyy="0.003" iyz="0" izz="0.002"/>
+        </inertial>
+    </link>
+    <joint name="laser_j" type="revolute">
+        <parent link="laser_base"/>
+        <child link="laser"/>
+        <axis xyz="1 0 0"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <limit effort="0" lower="-2.3561945" upper="2.3561945" velocity="4"/>
+    </joint>
+</robot>

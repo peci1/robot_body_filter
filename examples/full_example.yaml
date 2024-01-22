@@ -1,0 +1,42 @@
+# This is an example filter config for tracked vehicle Absolem from Czech Technical University's
+# VRAS team. The robot is equipped with a 2D lidar attached to a rotating pivot point.
+scan_filter_chain:
+  - name: RobotBodyFilter
+    type: robot_body_filter/RobotBodyFilterLaserScan
+    params:
+      frames/fixed: 'odom'
+      frames/sensor: 'laser'
+      filter/model_pose_update_interval: 0.002  # do not get lower, the processing is then too slow
+      sensor/point_by_point: True
+      sensor/min_distance: 0.03
+      sensor/max_distance: 50.0
+      ignored_links/bounding_sphere: ["antenna", "base_link::big_collision_box"]
+      ignored_links/shadow_test: ["laser", "base_link::big_collision_box"]
+      body_model/inflation/scale: 1.07
+      body_model/inflation/padding: 0.01
+      body_model/robot_description_param: 'robot_description'
+      transforms/buffer_length: 60.0
+      transforms/timeout/reachable: 0.2
+      transforms/timeout/unreachable: 0.2
+      bounding_sphere/compute: True
+      bounding_sphere/debug: True
+      bounding_sphere/marker: True
+      bounding_sphere/publish_cut_out_pointcloud: True
+      bounding_box/compute: True
+      bounding_box/debug: True
+      bounding_box/marker: True
+      bounding_box/publish_cut_out_pointcloud: True
+      oriented_bounding_box/compute: True
+      oriented_bounding_box/debug: True
+      oriented_bounding_box/marker: True
+      oriented_bounding_box/publish_cut_out_pointcloud: True
+      local_bounding_box/frame_id: "base_link"
+      local_bounding_box/compute: True
+      local_bounding_box/debug: True
+      local_bounding_box/marker: True
+      local_bounding_box/publish_cut_out_pointcloud: True
+      debug/pcl/inside: True
+      debug/pcl/clip: True
+      debug/pcl/shadow: True
+      debug/marker/contains: True
+      debug/marker/shadow: True
