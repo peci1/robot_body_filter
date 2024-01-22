@@ -1024,6 +1024,13 @@ void RobotBodyFilter<T>::addRobotMaskFromUrdf(const string& urdfModel) {
         const auto collisionShape = constructShape(*collision->geometry);
         const auto shapeName = collision->name.empty() ? NAME_LINK_COLLISION_NR : NAME_LINK_COLLISON_NAME;
 
+        // if the shape could not be constructed, ignore it (e.g. mesh was not found)
+        if (collisionShape == nullptr) {
+          ROS_WARN("Could not construct shape for collision %s, ignoring it.", shapeName.c_str());
+          ++collisionIndex;
+          continue;
+        }
+
         // add the collision shape to shapeMask; the inflation parameters come into play here
         const auto containsTestInflation = this->getLinkInflationForContainsTest(collisionNames);
         const auto shadowTestInflation = this->getLinkInflationForShadowTest(collisionNames);
