@@ -84,9 +84,8 @@ spheres and cylinders (which are fast to process), or you can use **convex**
 meshes (these are much worse performance-wise). If you pass a non-convex mesh,
 its convex hull will be used for the tests. Don't forget that each link
 can have multiple `<collision>` tags. If you do not have time to convert your
-meshes to the basic shapes (there is probably no good tool for it :(, just trial
-and error with restarting RViz), try to at least reduce the number of triangles
-in your meshes. You can use your high-quality meshes in `<visual>` tags.
+meshes to the basic shapes, try to at least reduce the number of triangles
+in your meshes. You can use your high-quality meshes in `<visual>` tags. To simplify your model to primitive shapes, you can either manually edit the URDF, or you can utilize [ColliderGen](https://github.com/cole-bsmr/collidergen).
 
 #### Model inflation
 
