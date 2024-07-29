@@ -1,13 +1,13 @@
 #include "robot_body_filter/utils/string_utils.hpp"
 
-#include <ros/ros.h>
-#include <rosconsole/macros_generated.h>
+// #include <rclcpp.hpp>
+// #include <rosconsole/macros_generated.h>
 
 namespace robot_body_filter {
 
 void warnLeadingSlash(const std::string& s)
 {
-  ROS_WARN_STREAM_ONCE("Found initial slash in " << s);
+  // ROS_WARN_STREAM_ONCE("Found initial slash in " << s);
 }
 
 void stripLeadingSlash(std::string &s, const bool warn)

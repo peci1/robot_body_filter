@@ -1,57 +1,58 @@
 #include <sstream>
 #define private protected
-#include <sensor_msgs/point_cloud2_iterator.h>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 #undef private
-
+#include <cstring>
 #include <robot_body_filter/utils/cloud.h>
 
 namespace robot_body_filter
 {
 
-size_t num_points(const Cloud &cloud)
+size_t num_points(const Cloud& cloud)
 {
   return size_t(cloud.height) * cloud.width;
 }
 
-bool hasField(const Cloud &cloud, const std::string &fieldName) {
-  for (const auto &field : cloud.fields) {
+bool hasField(const Cloud& cloud, const std::string& fieldName) {
+  for (const auto& field : cloud.fields) {
     if (field.name == fieldName)
       return true;
   }
   return false;
 }
 
-sensor_msgs::PointField& getField(Cloud& cloud, const std::string& fieldName) {
-  for (auto &field : cloud.fields) {
+sensor_msgs::msg::PointField& getField(Cloud& cloud, const std::string& fieldName) {
+  for (auto& field : cloud.fields) {
     if (field.name == fieldName)
       return field;
   }
   throw std::runtime_error(std::string("Field ") + fieldName + " does not exist.");
 }
 
-const sensor_msgs::PointField& getField(const Cloud& cloud, const std::string& fieldName) {
-  for (const auto &field : cloud.fields) {
+const sensor_msgs::msg::PointField& getField(const Cloud& cloud,
+                                        const std::string& fieldName) {
+  for (const auto& field : cloud.fields) {
     if (field.name == fieldName)
       return field;
   }
   throw std::runtime_error(std::string("Field ") + fieldName + " does not exist.");
 }
 
-size_t sizeOfPointField(const sensor_msgs::PointField& field)
+size_t sizeOfPointField(const sensor_msgs::msg::PointField& field)
 {
   return sizeOfPointField(field.datatype);
 }
 
 size_t sizeOfPointField(int datatype)
 {
-  if ((datatype == sensor_msgs::PointField::INT8) || (datatype == sensor_msgs::PointField::UINT8))
+  if ((datatype == sensor_msgs::msg::PointField::INT8) || (datatype == sensor_msgs::msg::PointField::UINT8))
     return 1u;
-  else if ((datatype == sensor_msgs::PointField::INT16) || (datatype == sensor_msgs::PointField::UINT16))
+  else if ((datatype == sensor_msgs::msg::PointField::INT16) || (datatype == sensor_msgs::msg::PointField::UINT16))
     return 2u;
-  else if ((datatype == sensor_msgs::PointField::INT32) || (datatype == sensor_msgs::PointField::UINT32) ||
-           (datatype == sensor_msgs::PointField::FLOAT32))
+  else if ((datatype == sensor_msgs::msg::PointField::INT32) || (datatype == sensor_msgs::msg::PointField::UINT32) ||
+           (datatype == sensor_msgs::msg::PointField::FLOAT32))
     return 4u;
-  else if (datatype == sensor_msgs::PointField::FLOAT64)
+  else if (datatype == sensor_msgs::msg::PointField::FLOAT64)
     return 8u;
   else
     throw std::runtime_error(std::string("PointField of type ") + std::to_string(datatype) + " does not exist");
@@ -92,8 +93,8 @@ void GenericCloudIterator<T>::copyData(const GenericCloudIterator<T>& otherIter)
 }
 
 // explicitly instantiate
-template class GenericCloudIteratorBase<unsigned char, unsigned char, unsigned char, sensor_msgs::PointCloud2, GenericCloudIterator>;
-template class GenericCloudIteratorBase<unsigned char, const unsigned char, const unsigned char, const sensor_msgs::PointCloud2, GenericCloudConstIterator>;
+template class GenericCloudIteratorBase<unsigned char, unsigned char, unsigned char, sensor_msgs::msg::PointCloud2, GenericCloudIterator>;
+template class GenericCloudIteratorBase<unsigned char, const unsigned char, const unsigned char, const sensor_msgs::msg::PointCloud2, GenericCloudConstIterator>;
 template class GenericCloudIterator<unsigned char>;
 template class GenericCloudConstIterator<unsigned char>;
 }

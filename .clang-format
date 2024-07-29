@@ -1,0 +1,16 @@
+﻿---
+BasedOnStyle: Google
+
+ColumnLimit: 120
+SortIncludes: Never
+ReflowComments: false
+ReferenceAlignment: Left
+PointerAlignment: Left
+FixNamespaceComments: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterStruct: true
+BreakConstructorInitializers: AfterColon
+PackConstructorInitializers: BinPack
+---
+

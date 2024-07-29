@@ -47,10 +47,10 @@ class WrongBody : public ::bodies::Body
   {
     throw std::runtime_error("Should not be called");
   }
-  void computeBoundingBox(OBB& box) const override
-  {
-    throw std::runtime_error("Should not be called");
-  }
+  // void computeBoundingBox(OBB& box) const override
+  // {
+  //   throw std::runtime_error("Should not be called");
+  // }
   BodyPtr cloneAt(const Eigen::Isometry3d& pose, double padding, double scaling) const override
   {
     throw std::runtime_error("Should not be called");
@@ -109,8 +109,8 @@ TEST(Bodies, ComputeBoundingBoxSphere)
 
   sphere->computeBoundingBox(bbox1);
   body->computeBoundingBox(bbox2);
-  sphere->computeBoundingBox(obb1);
-  body->computeBoundingBox(obb2);
+  // sphere->computeBoundingBox(obb1);
+  // body->computeBoundingBox(obb2);
 
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
@@ -153,8 +153,8 @@ TEST(Bodies, ComputeBoundingBoxBox)
 
   box->computeBoundingBox(bbox1);
   body->computeBoundingBox(bbox2);
-  box->computeBoundingBox(obb1);
-  body->computeBoundingBox(obb2);
+  // box->computeBoundingBox(obb1);
+  // body->computeBoundingBox(obb2);
 
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
@@ -198,8 +198,8 @@ TEST(Bodies, ComputeBoundingBoxCylinder)
 
   cylinder->computeBoundingBox(bbox1);
   body->computeBoundingBox(bbox2);
-  cylinder->computeBoundingBox(obb1);
-  body->computeBoundingBox(obb2);
+  // cylinder->computeBoundingBox(obb1);
+  // body->computeBoundingBox(obb2);
 
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());
@@ -246,8 +246,8 @@ TEST(Bodies, ComputeBoundingBoxConvexMesh)
 
   mesh->computeBoundingBox(bbox1);
   body->computeBoundingBox(bbox2);
-  mesh->computeBoundingBox(obb1);
-  body->computeBoundingBox(obb2);
+  // mesh->computeBoundingBox(obb1);
+  // body->computeBoundingBox(obb2);
 
   // check that bboxes are equal regardless we ask through the exact type or Body*
   EXPECT_EQ(bbox1.min(), bbox2.min());

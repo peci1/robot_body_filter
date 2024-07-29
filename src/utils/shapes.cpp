@@ -1,6 +1,6 @@
 #include <robot_body_filter/utils/shapes.h>
 
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
 #include <geometric_shapes/mesh_operations.h>
 #include <urdf_model/model.h>
 #include <robot_body_filter/utils/bodies.h>
@@ -30,11 +30,11 @@ shapes::ShapeConstPtr robot_body_filter::constructShape(const urdf::Geometry& ge
         Eigen::Vector3d scale(mesh->scale.x, mesh->scale.y, mesh->scale.z);
         result.reset(shapes::createMeshFromResource(mesh->filename, scale));
       } else
-        ROS_WARN("Empty mesh filename");
+        RCLCPP_WARN(rclcpp::get_logger("shapes"), "Empty mesh filename");
       break;
     }
     default: {
-      ROS_ERROR("Unknown geometry type: %d", (int) geometry.type);
+      RCLCPP_ERROR(rclcpp::get_logger("shapes"), "Unknown geometry type: %d", (int) geometry.type);
       break;
     }
   }

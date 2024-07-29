@@ -6,11 +6,14 @@
 
 namespace robot_body_filter
 {
-TFFramesWatchdog::TFFramesWatchdog(std::string robotFrame,
+TFFramesWatchdog::TFFramesWatchdog(
+                                   rclcpp::Node::SharedPtr nodeHandle,
+                                   std::string robotFrame,
                                    std::set<std::string>  monitoredFrames,
                                    std::shared_ptr<tf2_ros::Buffer> tfBuffer,
-                                   ros::Duration unreachableTfLookupTimeout,
-                                   ros::Rate unreachableFramesCheckRate):
+                                   rclcpp::Duration unreachableTfLookupTimeout,
+                                   rclcpp::Rate::SharedPtr unreachableFramesCheckRate):
+    nodeHandle(nodeHandle),                               
     robotFrame(std::move(robotFrame)),
     monitoredFrames(std::move(monitoredFrames)),
     tfBuffer(tfBuffer),
@@ -27,11 +30,11 @@ void TFFramesWatchdog::start() {
 void TFFramesWatchdog::run() {
   this->started = true;
 
-  while (!this->shouldStop && ros::ok()) {
+  while (!this->shouldStop && rclcpp::ok()) {
     if (!this->paused) { // the thread is paused when we want to change the stuff protected by framesMutex.
       this->searchForReachableFrames();
     }
-    this->unreachableFramesCheckRate.sleep();
+    this->unreachableFramesCheckRate->sleep();
   }
 }
 
@@ -42,7 +45,7 @@ bool TFFramesWatchdog::isRunning() const {
 void TFFramesWatchdog::searchForReachableFrames()
 {
 
-  const ros::Time time = ros::Time::now();
+  const rclcpp::Time time = nodeHandle->now();
 
   // detect all unreachable frames
   // we can't join this loop with the following one, because we need to lock the framesMutex, but
@@ -64,14 +67,16 @@ void TFFramesWatchdog::searchForReachableFrames()
       break;
     }
     std::string err;
+    RCLCPP_DEBUG(this->nodeHandle->get_logger(), "robot frame: %s, checking against: %s" , this->robotFrame.c_str(), frame.c_str());
     if (this->tfBuffer->canTransform(this->robotFrame, frame, time, this->unreachableTfLookupTimeout, &err)) {
       this->markReachable(frame);
-      ROS_DEBUG("TFFramesWatchdog (%s): Frame %s became reachable at %i.%i",
-          this->robotFrame.c_str(), frame.c_str(), time.sec, time.nsec);
+      RCLCPP_DEBUG(this->nodeHandle->get_logger(),"TFFramesWatchdog (%s): Frame %s became reachable at %f.%li",
+          this->robotFrame.c_str(), frame.c_str(), time.seconds(), time.nanoseconds());
     } else {
-      ROS_WARN_DELAYED_THROTTLE(3,
-          "TFFramesWatchdog (%s): Frame %s is not reachable! Cause: %s",
-          this->robotFrame.c_str(), frame.c_str(), err.c_str());
+      auto &clk = *nodeHandle->get_clock();
+      RCLCPP_WARN_THROTTLE(this->nodeHandle->get_logger(), clk, 3,
+                           "TFFramesWatchdog (%s): Frame %s is not reachable! Cause: %s", this->robotFrame.c_str(),
+                           frame.c_str(), err.c_str());
     }
   }
 }
@@ -85,13 +90,13 @@ void TFFramesWatchdog::unpause() {
 }
 
 void TFFramesWatchdog::stop() {
-  ROS_INFO("Stopping TF watchdog.");
+  RCLCPP_INFO(this->nodeHandle->get_logger(), "Stopping TF watchdog.");
   this->shouldStop = true;
   this->paused = true;
 
   if (this->started && this->thisThread.joinable())
     this->thisThread.join(); // segfaults without this line
-  ROS_INFO("TF watchdog stopped.");
+  RCLCPP_INFO(this->nodeHandle->get_logger(), "TF watchdog stopped.");
 }
 
 void TFFramesWatchdog::clear() {
@@ -101,10 +106,10 @@ void TFFramesWatchdog::clear() {
   reachableFrames.clear();
 }
 
-optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform(
+optional<geometry_msgs::msg::TransformStamped> TFFramesWatchdog::lookupTransform(
     const std::string &frame,
-    const ros::Time &time,
-    const ros::Duration &timeout,
+    const rclcpp::Time &time,
+    const rclcpp::Duration &timeout,
     std::string *errstr)
 {
   if (!this->started)
@@ -114,7 +119,7 @@ optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform(
     std::lock_guard<std::mutex> guard(this->framesMutex);
     if (!this->isMonitoredNoLock(frame))
     {
-      ROS_WARN("TFFramesWatchdog (%s): Frame %s is not yet monitored, starting "
+      RCLCPP_WARN(this->nodeHandle->get_logger(), "TFFramesWatchdog (%s): Frame %s is not yet monitored, starting "
           "monitoring it.", this->robotFrame.c_str(), frame.c_str());
       this->addMonitoredFrameNoLock(frame);
       // this lookup is lost, same as if the frame is unreachable
@@ -132,11 +137,11 @@ optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform(
   }
 
   if (!this->tfBuffer->canTransform(this->robotFrame, frame, time,
-      remainingTime(time, timeout), errstr)) {
-    ROS_WARN_THROTTLE(3,
-        "TFFramesWatchdog (%s): Frame %s became unreachable. Cause: %s",
-        this->robotFrame.c_str(), frame.c_str(), errstr->c_str());
-
+      remainingTime(*this->nodeHandle->get_clock(), time, timeout), errstr)) {
+    auto &clk = *nodeHandle->get_clock();
+    RCLCPP_WARN_THROTTLE(this->nodeHandle->get_logger(), clk, 3,
+                         "TFFramesWatchdog (%s): Frame %s became unreachable. Cause: %s", this->robotFrame.c_str(),
+                         frame.c_str(), errstr->c_str());
     // if we couldn't get TF for this reachable frame, mark it unreachable
     this->markUnreachable(frame);
     return nullopt;
@@ -145,9 +150,10 @@ optional<geometry_msgs::TransformStamped> TFFramesWatchdog::lookupTransform(
   try
   {
     return this->tfBuffer->lookupTransform(
-        this->robotFrame, frame, time, remainingTime(time, timeout));
+        this->robotFrame, frame, time, remainingTime(*this->nodeHandle->get_clock(), time, timeout));
   } catch (tf2::LookupException&) {
-    ROS_WARN_DELAYED_THROTTLE(3,
+    auto &clk = *nodeHandle->get_clock();
+    RCLCPP_WARN_THROTTLE(this->nodeHandle->get_logger(), clk, 3,
         "TFFramesWatchdog (%s): Frame %s is not reachable. Cause: %s",
         this->robotFrame.c_str(), frame.c_str(), errstr->c_str());
 

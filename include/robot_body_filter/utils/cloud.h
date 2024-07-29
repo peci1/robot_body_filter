@@ -8,14 +8,14 @@
 
 #include <functional>
 
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 #include <robot_body_filter/utils/cloud-impl.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 
 namespace robot_body_filter
 {
 
-typedef sensor_msgs::PointCloud2 Cloud;
+typedef sensor_msgs::msg::PointCloud2 Cloud;
 typedef sensor_msgs::PointCloud2Iterator<float> CloudIter;
 typedef sensor_msgs::PointCloud2Iterator<int> CloudIndexIter;
 typedef sensor_msgs::PointCloud2ConstIterator<float> CloudConstIter;
@@ -111,7 +111,7 @@ bool hasField(const Cloud& cloud, const std::string& fieldName);
  * @return Reference to the field.
  * @throws std::runtime_error if the field doesn't exist.
  */
-sensor_msgs::PointField& getField(Cloud& cloud, const std::string& fieldName);
+sensor_msgs::msg::PointField& getField(Cloud& cloud, const std::string& fieldName);
 
 /**
  * Return the sensor_msgs::PointField with the given name.
@@ -120,7 +120,7 @@ sensor_msgs::PointField& getField(Cloud& cloud, const std::string& fieldName);
  * @return Reference to the field.
  * @throws std::runtime_error if the field doesn't exist.
  */
-const sensor_msgs::PointField& getField(const Cloud& cloud, const std::string& fieldName);
+const sensor_msgs::msg::PointField& getField(const Cloud& cloud, const std::string& fieldName);
 
 /**
  * Return the size (in bytes) of a sensor_msgs::PointField datatype.
@@ -136,7 +136,7 @@ size_t sizeOfPointField(int datatype);
  * @return Size of the data.
  * @throws std::runtime_error if wrong datatype is passed.
  */
-size_t sizeOfPointField(const sensor_msgs::PointField& field);
+size_t sizeOfPointField(const sensor_msgs::msg::PointField& field);
 
 /**
  * Copy data belonging to the given field from `in` cloud to `out` cloud.

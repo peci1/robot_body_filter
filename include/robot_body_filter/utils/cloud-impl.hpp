@@ -1,7 +1,7 @@
 #pragma once
 
-#include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 
 namespace robot_body_filter
 {
@@ -22,19 +22,19 @@ protected:
 
 template<typename T>
 class GenericCloudConstIterator
-    : public GenericCloudIteratorBase<unsigned char, const unsigned char, const unsigned char, const sensor_msgs::PointCloud2, GenericCloudConstIterator> {
+    : public GenericCloudIteratorBase<unsigned char, const unsigned char, const unsigned char, const sensor_msgs::msg::PointCloud2, GenericCloudConstIterator> {
 public:
-  GenericCloudConstIterator(const sensor_msgs::PointCloud2 &cloud_msg, const std::string &field_name) :
-      GenericCloudIteratorBase<T, const T, const unsigned char, const sensor_msgs::PointCloud2, GenericCloudConstIterator>::GenericCloudIteratorBase(
+  GenericCloudConstIterator(const sensor_msgs::msg::PointCloud2 &cloud_msg, const std::string &field_name) :
+      GenericCloudIteratorBase<T, const T, const unsigned char, const sensor_msgs::msg::PointCloud2, GenericCloudConstIterator>::GenericCloudIteratorBase(
           cloud_msg, field_name) {}
 };
 
 template<typename T>
 class GenericCloudIterator
-    : public GenericCloudIteratorBase<unsigned char, unsigned char, unsigned char, sensor_msgs::PointCloud2, GenericCloudIterator> {
+    : public GenericCloudIteratorBase<unsigned char, unsigned char, unsigned char, sensor_msgs::msg::PointCloud2, GenericCloudIterator> {
 public:
-  GenericCloudIterator(sensor_msgs::PointCloud2 &cloud_msg, const std::string &field_name) :
-      GenericCloudIteratorBase<T, T, unsigned char, sensor_msgs::PointCloud2, GenericCloudIterator>::GenericCloudIteratorBase(
+  GenericCloudIterator(sensor_msgs::msg::PointCloud2 &cloud_msg, const std::string &field_name) :
+      GenericCloudIteratorBase<T, T, unsigned char, sensor_msgs::msg::PointCloud2, GenericCloudIterator>::GenericCloudIteratorBase(
           cloud_msg, field_name) {}
 
   void copyData(const GenericCloudConstIterator<T> &otherIter) const;

@@ -10,7 +10,7 @@
 #include <robot_body_filter/utils/bodies.h>
 #include <robot_body_filter/utils/cloud.h>
 #include <geometric_shapes/body_operations.h>
-#include <ros/console.h>
+// #include <ros/console.h>
 
 namespace robot_body_filter
 {

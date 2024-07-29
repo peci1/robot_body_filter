@@ -6,7 +6,7 @@
 #include <string>
 #include <thread>
 
-#include <ros/ros.h>
+// #include <ros/ros.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -25,11 +25,12 @@ namespace robot_body_filter {
  */
 class TFFramesWatchdog {
 public:
-  TFFramesWatchdog(std::string robotFrame,
+  TFFramesWatchdog(rclcpp::Node::SharedPtr nodeHandle,
+                   std::string robotFrame,
                    std::set<std::string>  monitoredFrames,
                    std::shared_ptr<tf2_ros::Buffer> tfBuffer,
-                   ros::Duration unreachableTfLookupTimeout = ros::Duration(0, 100000000),  // 0.1 sec
-                   ros::Rate unreachableFramesCheckRate = ros::Rate(1.0));
+                   rclcpp::Duration unreachableTfLookupTimeout = rclcpp::Duration(0, 100000000),  // 0.1 sec
+                   rclcpp::Rate::SharedPtr unreachableFramesCheckRate = std::make_shared<rclcpp::Rate>(1.0));
 
   virtual ~TFFramesWatchdog();
 
@@ -114,10 +115,10 @@ public:
    * \throws std::runtime_exception If you call this function before a call to
    *         start().
    */
-  optional<geometry_msgs::TransformStamped> lookupTransform(
+  optional<geometry_msgs::msg::TransformStamped> lookupTransform(
       const std::string& frame,
-      const ros::Time& time,
-      const ros::Duration& timeout,
+      const rclcpp::Time& time,
+      const rclcpp::Duration& timeout,
       std::string* errstr = nullptr);
 
 protected:
@@ -181,15 +182,16 @@ protected:
   std::shared_ptr<tf2_ros::Buffer> tfBuffer;
 
   //! Timeout for canTransform() for figuring out if an unreachable frame became reachable.
-  ros::Duration unreachableTfLookupTimeout;
+  rclcpp::Duration unreachableTfLookupTimeout;
   //! Rate at which checking for unreachable frames will be done.
-  ros::Rate unreachableFramesCheckRate;
+  rclcpp::Rate::SharedPtr unreachableFramesCheckRate;
 
   //! Lock this mutex any time you want to work with monitoredFrames or reachableFrames.
   mutable std::mutex framesMutex;
 
 private:
   std::thread thisThread;
+  rclcpp::Node::SharedPtr nodeHandle; //Node handle of robotBodyFilter needed for rclcpp logging and time
 };
 
 }
