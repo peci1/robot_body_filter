@@ -307,6 +307,9 @@ protected:
   //! Whether to process data when there are some unreachable frames.
   bool requireAllFramesReachable;
 
+  //! Tf prefix for link name
+  std::string linkTfPrefix;
+
   //! A mutex that has to be locked in order to work with shapesToLinks or tfBuffer.
   std::shared_ptr<std::mutex> modelMutex;
 
@@ -450,6 +453,7 @@ protected:
 
 private:
   ScaleAndPadding getLinkInflation(const std::vector<std::string>& linkNames, const ScaleAndPadding& defaultInflation, const std::map<std::string, ScaleAndPadding>& perLinkInflation) const;
+  std::string getLinkTfPrefix() const;
 };
 
 class RobotBodyFilterLaserScan : public RobotBodyFilter<sensor_msgs::LaserScan>

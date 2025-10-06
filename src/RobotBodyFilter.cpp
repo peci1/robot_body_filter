@@ -72,6 +72,7 @@ bool RobotBodyFilter<T>::configure() {
   this->reachableTransformTimeout = this->getParamVerbose("transforms/timeout/reachable", ros::Duration(0.1), "s");
   this->unreachableTransformTimeout = this->getParamVerbose("transforms/timeout/unreachable", ros::Duration(0.2), "s");
   this->requireAllFramesReachable = this->getParamVerbose("transforms/require_all_reachable", false);
+  this->linkTfPrefix = this->getParamVerbose("transforms/link_tf_prefix", "");
   this->publishNoBoundingSpherePointcloud = this->getParamVerbose("bounding_sphere/publish_cut_out_pointcloud", false);
   this->publishNoBoundingBoxPointcloud = this->getParamVerbose("bounding_box/publish_cut_out_pointcloud", false);
   this->publishNoOrientedBoundingBoxPointcloud = this->getParamVerbose("oriented_bounding_box/publish_cut_out_pointcloud", false);
@@ -903,7 +904,7 @@ void RobotBodyFilter<T>::updateTransformCache(const ros::Time &time, const ros::
     const auto &link = collisionBody.link;
 
     // here we assume the tf frames' names correspond to the link names
-    const auto linkFrame = link->name;
+    const auto linkFrame = this->getLinkTfPrefix() + link->name;
 
     // the collision object may have a different origin than the visual, we need to account for that
     const auto &collisionOffsetTransform = urdfPose2EigenTransform(collision->origin);
@@ -1884,6 +1885,18 @@ bool ScaleAndPadding::operator!=(const ScaleAndPadding& other) const
 {
   return !(*this == other);
 }
+
+template<typename T>
+std::string RobotBodyFilter<T>::getLinkTfPrefix() const
+{
+
+  if (this->linkTfPrefix.empty())
+  {
+    return "";
+  }
+  return this->linkTfPrefix + "/";
+}
+
 
 }
 
