@@ -4,7 +4,7 @@ namespace robot_body_filter {
 
 ros::Duration remainingTime(const ros::Time &query, const double timeout)
 {
-  ros::Time::waitForValid(ros::WallDuration().fromSec(timeout));
+  ros::Time::waitForValid(ros::WallDuration(0, 0));
   if (!ros::Time::isValid()) {
     ROS_ERROR("ROS time is not yet initialized");
     return ros::Duration(0);
@@ -17,7 +17,7 @@ ros::Duration remainingTime(const ros::Time &query, const double timeout)
 ros::Duration remainingTime(const ros::Time &query,
                             const ros::Duration &timeout)
 {
-  ros::Time::waitForValid(ros::WallDuration(timeout.sec, timeout.nsec));
+  ros::Time::waitForValid(ros::WallDuration(0, 0));
   if (!ros::Time::isValid()) {
     ROS_ERROR("ROS time is not yet initialized");
     return ros::Duration(0);
