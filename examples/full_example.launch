@@ -1,20 +1,23 @@
 <?xml version="1.0"?>
+<!-- SPDX-License-Identifier: BSD-3-Clause -->
+<!-- SPDX-FileCopyrightText: Czech Technical University in Prague -->
+
 <!-- This is a full example that runs the LaserScan filter, spawns a robot from URDF, creates TF for it and publishes a pointcloud. -->
 <launch>
-    <!-- Prerequisite: sensor_filters, rviz, robot_state_publisher, tf2_ros -->
-    <param name="use_sim_time" value="false" />
-    <param name="robot_description" textfile="$(dirname)/full_example.urdf" />
-    <node name="laser_j_pub" pkg="rostopic" type="rostopic" args="pub -s --use-rostime -r10 joint_states sensor_msgs/JointState &quot;{header: {seq: 0, stamp: now, frame_id: 'base_link'}, name: ['laser_j'], position: [0], velocity: [0], effort: [0]}&quot;" />
-    <node name="state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
-    <node name="odom" pkg="tf2_ros" type="static_transform_publisher" args="0 0 0 0 0 0 odom base_link" />
-    <!-- http://wiki.ros.org/sensor_filters -->
-    <node name="laser_filter" pkg="sensor_filters" type="laserscan_filter_chain" output="screen">
-        <rosparam command="load" file="$(dirname)/full_example.yaml" />
-        <remap from="~input" to="scan" />
-        <remap from="~output" to="scan_filtered" />
-    </node>
-    <node name="scan" pkg="rostopic" type="rostopic" args="pub -r10 --use-rostime -s /scan sensor_msgs/LaserScan &quot;{header: {seq: 0, stamp: now, frame_id: 'laser'}, angle_min: -0.5, angle_max: 0.5, angle_increment: 0.25, time_increment: 0.1, scan_time: 0.5, range_min: 0.0, range_max: 50.0, ranges: [1, 2, 3, 4, 5], intensities: [1, 1, 1, 1, 1]}&quot;" />
-    <node name="$(anon rviz)" pkg="rviz" type="rviz" args="-d $(dirname)/../rviz/debug.rviz -f base_link">
-        <remap from="nifti_robot_description" to="robot_description" />
-    </node>
+  <!-- Prerequisite: laser_filters, rviz2, robot_state_publisher, tf2_ros -->
+  <executable
+    name="laser_j_pub"
+    cmd="ros2 topic pub -r10 joint_states sensor_msgs/msg/JointState &quot;{header: {stamp: now, frame_id: 'base_link'}, name: ['laser_j'], position: [0], velocity: [0], effort: [0]}&quot;"/>
+  <node name="state_publisher" pkg="robot_state_publisher" exec="robot_state_publisher">
+    <param name="robot_description" value="$(file-content '$(dirname)/full_example.urdf')"/>
+  </node>
+  <node name="odom" pkg="tf2_ros" exec="static_transform_publisher" args="--frame-id odom --child-frame-id base_link"/>
+
+  <node name="laser_filter" pkg="laser_filters" exec="scan_to_scan_filter_chain" output="screen">
+    <param from="$(dirname)/full_example.yaml"/>
+  </node>
+  <executable
+    name="scan"
+    cmd="ros2 topic pub -r10 /scan sensor_msgs/msg/LaserScan &quot;{header: {stamp: now, frame_id: 'laser'}, angle_min: -0.5, angle_max: 2.0, angle_increment: 0.25, time_increment: 0.1, scan_time: 0.5, range_min: 0.0, range_max: 50.0, ranges: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], intensities: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}&quot;"/>
+  <node name="$(anon rviz)" pkg="rviz2" exec="rviz2" args="-d $(dirname)/../rviz/debug.rviz -f base_link"/>
 </launch>

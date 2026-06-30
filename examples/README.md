@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: BSD-3-Clause -->
+<!-- SPDX-FileCopyrightText: Czech Technical University in Prague -->
+
 # robot_body_filter example configurations
 
 This folder contains examples of configuration of the filter. 

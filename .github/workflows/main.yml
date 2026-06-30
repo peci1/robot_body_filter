@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# SPDX-FileCopyrightText: Czech Technical University in Prague
+
 # This config uses industrial_ci (https://github.com/ros-industrial/industrial_ci.git).
 # For troubleshooting, see readme (https://github.com/ros-industrial/industrial_ci/blob/master/README.rst)
 
@@ -17,15 +20,21 @@ jobs:
       fail-fast: false
       matrix:
         env:
-          - { ROS_DISTRO: humble, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/sloretz/ros:humble-perception", ALLOW_FAIL: no }
           - { ROS_DISTRO: jazzy, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/sloretz/ros:jazzy-perception", ALLOW_FAIL: no }
           - { ROS_DISTRO: kilted, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/sloretz/ros:kilted-perception", ALLOW_FAIL: no }
-          - { ROS_DISTRO: rolling, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/sloretz/ros:rolling-perception", ALLOW_FAIL: yes }
+          # Lyrical CI is temporarily disabled - Moveit has not yet been released
+          # - { ROS_DISTRO: lyrical, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/sloretz/ros:lyrical-perception", ALLOW_FAIL: no}
+          # - { ROS_DISTRO: lyrical, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-resolute-ros-lyrical-desktop:master", ALLOW_FAIL: no }
+          # Rolling CI is temporarily disabled - Moveit has not yet been released
+          # - { ROS_DISTRO: rolling, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/sloretz/ros:rolling-perception", ALLOW_FAIL: yes, OS_CODE_NAME: resolute}
+          # - { ROS_DISTRO: rolling, ROS_REPO: testing, DOCKER_IMAGE: "ghcr.io/ros-tooling/setup-ros-docker/setup-ros-docker-ubuntu-resolute-ros-rolling-desktop:master", ALLOW_FAIL: yes, OS_CODE_NAME: resolute }
     env:
       CCACHE_DIR: /github/home/.ccache # Directory for ccache (and how we enable ccache in industrial_ci)
+      UPSTREAM_WORKSPACE: .github/ci.rosinstall
+      AFTER_SETUP_UPSTREAM_WORKSPACE: 'cd $BASEDIR/upstream_ws/src/ros-utils; for d in *; do if [[ "$d" != "cras_lint" ]] && [[ "$d" != "cras_cpp_common" ]]; then rm -rf "$d"; fi; done'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # This step will fetch/store the directory used by ccache before/after the ci run
       - uses: actions/cache@v3
         with:

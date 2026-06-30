@@ -1,18 +1,19 @@
+<?xml version="1.0" ?>
+<!-- SPDX-License-Identifier: BSD-3-Clause -->
+<!-- SPDX-FileCopyrightText: Czech Technical University in Prague -->
 <class_libraries>
-    <library path="lib/librobot_body_filter">
-        <class name="robot_body_filter/RobotBodyFilterLaserScan"
-               type="robot_body_filter::RobotBodyFilterLaserScan"
-               base_class_type="filters::FilterBase<sensor_msgs::LaserScan>">
-            <description>
-                Filter for removing robot body from laser scans.
-            </description>
-        </class>
-        <class name="robot_body_filter/RobotBodyFilterPointCloud2"
-               type="robot_body_filter::RobotBodyFilterPointCloud2"
-               base_class_type="filters::FilterBase<sensor_msgs::PointCloud2>">
-            <description>
-                Filter for removing robot body from pointclouds.
-            </description>
-        </class>
-    </library>
+  <library path="robot_body_filter">
+    <class name="robot_body_filter/RobotBodyFilterLaserScan" type="robot_body_filter::RobotBodyFilterLaserScan"
+           base_class_type="filters::FilterBase&lt;sensor_msgs::msg::LaserScan&gt;">
+      <description>
+        Filter for removing robot body from laser scans.
+      </description>
+    </class>
+    <class name="robot_body_filter/RobotBodyFilterPointCloud2" type="robot_body_filter::RobotBodyFilterPointCloud2"
+           base_class_type="filters::FilterBase&lt;sensor_msgs::msg::PointCloud2&gt;">
+      <description>
+        Filter for removing robot body from pointclouds.
+      </description>
+    </class>
+  </library>
 </class_libraries>

@@ -1,58 +1,75 @@
+<?xml version="1.0" ?>
+<!-- SPDX-License-Identifier: BSD-3-Clause -->
+<!-- SPDX-FileCopyrightText: Czech Technical University in Prague -->
 <package format="3">
   <name>robot_body_filter</name>
   <version>1.3.2</version>
 
   <description>Filters the robot's body out of laser scans or point clouds.</description>
 
-  <license>BSD</license>
+  <license file="LICENSE">BSD</license>
 
-  <url type="website">https://github.com/peci1/robot_body_filter</url>
+  <url type="repository">https://github.com/ctu-vras/robot_body_filter</url>
+  <url type="bugtracker">https://github.com/ctu-vras/robot_body_filter/issues</url>
+  <url type="website">https://index.ros.org/p/robot_body_filter</url>
 
   <author>Eitan Marder-Eppstein</author>
   <author>Tomas Petricek</author>
   <author>Martin Pecka</author>
+  <author>Sebastian Pelletier</author>
+  <author>David V. Lu!!</author>
 
   <maintainer email="peckama2@fel.cvut.cz">Martin Pecka</maintainer>
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_gen_version_h</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
 
-  <depend>dynamic_reconfigure</depend>
-  <depend condition="$ROS_DISTRO != noetic" version_gte="1.8.2">filters</depend>
-  <depend condition="$ROS_DISTRO == noetic" version_gte="1.9.1">filters</depend>
-  <depend condition="$ROS_DISTRO != noetic" version_gte="0.6.6">geometric_shapes</depend>
-  <depend condition="$ROS_DISTRO == noetic" version_gte="0.7.5">geometric_shapes</depend>
+  <depend>cras_cpp_common</depend>
+  <depend>eigen</depend>
+  <depend>filters</depend>
+  <depend>geometric_shapes</depend>
   <depend>geometry_msgs</depend>
   <depend>laser_geometry</depend>
   <depend>libpcl-all-dev</depend>
-  <depend>moveit_core</depend>
   <depend>moveit_ros_perception</depend>
-  <depend>roscpp</depend>
+  <depend>rclcpp</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>rmw</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
-  <depend>tf2</depend>
+  <depend>std_srvs</depend>
   <depend>tf2_ros</depend>
   <depend>urdf</depend>
+  <depend>urdfdom_headers</depend>
   <depend>visualization_msgs</depend>
 
-  <build_depend>message_generation</build_depend>
-  <build_export_depend>message_runtime</build_export_depend>
-  <exec_depend>message_runtime</exec_depend>
-
-  <build_depend condition="$ROS_DISTRO != noetic">libfcl-dev</build_depend>
-  <exec_depend condition="$ROS_DISTRO != noetic">libfcl-dev</exec_depend>
-  <build_depend condition="$ROS_DISTRO == noetic">fcl</build_depend>
-  <exec_depend condition="$ROS_DISTRO == noetic">fcl</exec_depend>
+  <build_depend>eigen_stl_containers</build_depend>
+  <exec_depend>eigen_stl_containers</exec_depend>
 
   <build_depend>pcl_conversions</build_depend>
   <exec_depend>pcl_conversions</exec_depend>
 
-  <build_depend>pkg-config</build_depend>
-  <build_depend>tf2_eigen</build_depend>
-  <build_depend>tf2_sensor_msgs</build_depend>
+  <build_depend>pluginlib</build_depend>
+  <exec_depend>pluginlib</exec_depend>
 
-  <test_depend>rostest</test_depend>
+  <build_depend>tf2</build_depend>
+  <exec_depend>tf2</exec_depend>
+
+  <build_depend>tf2_eigen</build_depend>
+  <build_depend>tf2_geometry_msgs</build_depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>cras_lint</test_depend>
+  <test_depend>launch</test_depend>
+  <test_depend>launch_ros</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>ros_testing</test_depend>
 
   <export>
-    <filters plugin="${prefix}/laser_filters.xml"/>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

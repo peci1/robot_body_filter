@@ -1,29 +1,46 @@
-# This is an example filter config for a commercial robot that use Velodyne VLP-16.
-cloud_filter_chain:
-  # Only containment filtering
-  - name: robot_body_filter_containment
-    type: robot_body_filter/RobotBodyFilterPointCloud2
-    params:
-      debug/pcl/clip: false
-      debug/pcl/inside: false
-      debug/pcl/shadow: false
-      sensor/min_distance: 0.05
-      sensor/max_distance: 10
-      # For more information of how to choose the fixed frame and configure point_by_point, see the discussion at https://github.com/peci1/robot_body_filter/pull/18#discussion_r780655811
-      sensor/point_by_point: true
-      frames/fixed: odom
-      frames/sensor: lidar_frame
-      frames/filtering: lidar_frame
-      frames/output: lidar_frame
-      body_model/inflation/scale: 1.0
-      body_model/inflation/padding: 0.03
-      body_model/robot_description_param: robot_description
-      filter/do_clipping: true
-      filter/do_contains_test: true
-      filter/do_shadow_test: false
-      only_links:
-        - base_link
-        - gps_link
-        - imu_link
-        - lidar_mount_link
-        - top
+# SPDX-License-Identifier: BSD-3-Clause
+# SPDX-FileCopyrightText: Czech Technical University in Prague
+
+# This is an example filter config for a commercial robot that uses Velodyne VLP-16.
+
+# This config is meant to be loaded by sensor_filters/pointcloud2_filter_chain .
+# See jasmine_velodyne.yaml for an example how to load the filter into laser_filters/cloud_to_cloud_filter_chain .
+
+laser_filter:
+  ros__parameters:
+    pointcloud2_filter_chain:
+      filter1:
+      # Only containment filtering
+        name: robot_body_filter_containment
+        type: robot_body_filter/RobotBodyFilterPointCloud2
+        params:
+          debug:
+            pcl:
+              clip: false
+              inside: false
+              shadow: false
+          sensor:
+            min_distance: 0.05
+            max_distance: 10.0
+          # For more information of how to choose the fixed frame and configure point_by_point, see the discussion at https://github.com/ctu-vras/robot_body_filter/pull/18#discussion_r780655811
+            point_by_point: true
+          frames:
+            fixed: odom
+            sensor: lidar_frame
+            filtering: lidar_frame
+            output: lidar_frame
+          body_model:
+            inflation:
+              scale: 1.0
+              padding: 0.03
+            robot_description_topic: robot_description
+          filter:
+            do_clipping: true
+            do_contains_test: true
+            do_shadow_test: false
+          only_links:
+            - base_link
+            - gps_link
+            - imu_link
+            - lidar_mount_link
+            - top

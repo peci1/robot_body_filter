@@ -1,3 +1,6 @@
+.. SPDX-License-Identifier: BSD-3-Clause
+.. SPDX-FileCopyrightText: Czech Technical University in Prague
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Changelog for package robot_body_filter
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -31,16 +34,16 @@ Changelog for package robot_body_filter
 
 1.2.1 (2021-08-06)
 ------------------
-* Merge pull request `#15 <https://github.com/peci1/robot_body_filter/issues/15>`_ from universal-field-robots/master
+* Merge pull request `#15 <https://github.com/ctu-vras/robot_body_filter/issues/15>`_ from universal-field-robots/master
   TFFramesWatchdog and RayCastingShapeMask need to be installed in the CMakeLists.txt
 * Added RayCastingShapeMask and TFFramesWatchdog to install targets in cmake
 * Contributors: Josh Owen, Martin Pecka
 
 1.2.0 (2021-07-30)
 ------------------
-* Merge pull request `#11 <https://github.com/peci1/robot_body_filter/issues/11>`_ from peci1/correct-pointcloud-transforms
+* Merge pull request `#11 <https://github.com/ctu-vras/robot_body_filter/issues/11>`_ from peci1/correct-pointcloud-transforms
   Add possibility to specify pointcloud channels that should be transformed together with positional data.
-* Merge pull request `#14 <https://github.com/peci1/robot_body_filter/issues/14>`_ from peci1/per_link_scaling
+* Merge pull request `#14 <https://github.com/ctu-vras/robot_body_filter/issues/14>`_ from peci1/per_link_scaling
   Add support for scaling/padding each link differently
 * Short-circuit classification of NaN points.
 * Warn about missing collision elements only for non-ignored links and only if they have at least one visual.
@@ -102,7 +105,7 @@ Changelog for package robot_body_filter
 * Fixed eigen and urdf includes.
 * Fixed printing of std containers in string_utils.
 * CREATE_FILTERED_CLOUD now prepends robot_body_filter stuff with a global namespace to be usable even from other namespaces.
-* Make sure sensor frame is monitored by the watchdog because we need to use it during the filtering. Fixes `#6 <https://github.com/peci1/robot_body_filter/issues/6>`_.
+* Make sure sensor frame is monitored by the watchdog because we need to use it during the filtering. Fixes `#6 <https://github.com/ctu-vras/robot_body_filter/issues/6>`_.
 * Added parameter transforms/require_all_reachable.
 * Added to_string(bool) specialization.
 * Contributors: Martin Pecka
@@ -115,7 +118,7 @@ Changelog for package robot_body_filter
 
 1.1.5 (2019-11-08)
 ------------------
-* refactor(RobotBodyFilter): Made frames/sensor parameter optional (`#2 <https://github.com/peci1/robot_body_filter/issues/2>`_)
+* refactor(RobotBodyFilter): Made frames/sensor parameter optional (`#2 <https://github.com/ctu-vras/robot_body_filter/issues/2>`_)
   The sensor frame will now be derived from the incoming sensor messages.
   This way, messages from different sensors can be processed and the
   filter can be configured without any knowledge of the sensor.
@@ -168,14 +171,14 @@ Changelog for package robot_body_filter
 0.1.31 (2018-11-24)
 -------------------
 * update CHANGELOG
-* Merge pull request `#16 <https://github.com/peci1/robot_body_filter/issues/16>`_ from mikaelarguedas/tinyxml_dependency
+* Merge pull request `#16 <https://github.com/ctu-vras/robot_body_filter/issues/16>`_ from mikaelarguedas/tinyxml_dependency
   depends on tinyxml and link against it
 * Merge branch 'indigo-devel' into tinyxml_dependency
-* Merge pull request `#18 <https://github.com/peci1/robot_body_filter/issues/18>`_ from k-okada/add_travis
+* Merge pull request `#18 <https://github.com/ctu-vras/robot_body_filter/issues/18>`_ from k-okada/add_travis
   update travis.yml
 * update travis.yml
 * depend on tinyxml and link against it
-* Merge pull request `#14 <https://github.com/peci1/robot_body_filter/issues/14>`_ from traclabs/indigo-devel
+* Merge pull request `#14 <https://github.com/ctu-vras/robot_body_filter/issues/14>`_ from traclabs/indigo-devel
   Minor changes to indigo-devel CMake allow this to be used in kinetic and indigo
 * Changes for kinetic
 * Contributors: Devon Ash, Kei Okada, Mikael Arguedas, Patrick Beeson
@@ -183,10 +186,10 @@ Changelog for package robot_body_filter
 0.1.30 (2017-01-20)
 -------------------
 * Update CHANGELOG.rst
-* Merge pull request `#15 <https://github.com/peci1/robot_body_filter/issues/15>`_ from PR2/fix-typo-cmakelists
+* Merge pull request `#15 <https://github.com/ctu-vras/robot_body_filter/issues/15>`_ from PR2/fix-typo-cmakelists
   Fix typo in CMakeLists.txt: CATKIN-DEPENDS -> CATKIN_DEPENDS
 * Fix typo in CMakeLists.txt: CATKIN-DEPENDS -> CATKIN_DEPENDS
-* Merge pull request `#12 <https://github.com/peci1/robot_body_filter/issues/12>`_ from garaemon/max-queue-size
+* Merge pull request `#12 <https://github.com/ctu-vras/robot_body_filter/issues/12>`_ from garaemon/max-queue-size
   Add ~max_queue_size parameter for subscription queue size
 * Add ~max_queue_size parameter for subscription queue size
 * Contributors: Devon Ash, Kentaro Wada, Ryohei Ueda
@@ -194,7 +197,7 @@ Changelog for package robot_body_filter
 0.1.29 (2015-12-05)
 -------------------
 * Re-create changelog for robot_self_filter
-* Merge pull request `#10 <https://github.com/peci1/robot_body_filter/issues/10>`_ from garaemon/pr-4-indigo-devel
+* Merge pull request `#10 <https://github.com/ctu-vras/robot_body_filter/issues/10>`_ from garaemon/pr-4-indigo-devel
   Add robot_self_filter namespace before bodies and shapes namespace.
 * Add robot_self_filter namespace before bodies and shapes namespace.
   geometric_shapes package also provides bodies and shapes namespace
@@ -205,23 +208,23 @@ Changelog for package robot_body_filter
 
 0.1.28 (2015-12-04)
 -------------------
-* Merge pull request `#8 <https://github.com/peci1/robot_body_filter/issues/8>`_ from wkentaro/indigo-devel-merge-master
+* Merge pull request `#8 <https://github.com/ctu-vras/robot_body_filter/issues/8>`_ from wkentaro/indigo-devel-merge-master
   Merge master branch to indigo-devel
 * Merge remote-tracking branch 'origin/master' into indigo-devel
 * Added indigo devel
-* Merge pull request `#7 <https://github.com/peci1/robot_body_filter/issues/7>`_ from wkentaro/self_filter-timestamp
+* Merge pull request `#7 <https://github.com/ctu-vras/robot_body_filter/issues/7>`_ from wkentaro/self_filter-timestamp
   Set correct timestamp for self filtered cloud
 * Set correct timestamp for self filtered cloud
   This is needed because pcl drops some value of timestamp.
   So pcl::fromROSMsg and pcl::toROSMsg does not work to get correct timestamp.
-* Merge pull request `#5 <https://github.com/peci1/robot_body_filter/issues/5>`_ from garaemon/use-protected-member
+* Merge pull request `#5 <https://github.com/ctu-vras/robot_body_filter/issues/5>`_ from garaemon/use-protected-member
   Protected member variables in SelfMask for subclass of SelfMask
 * Protected member variables in SelfMask for subclass of SelfMask
 * Contributors: Devon Ash, Kentaro Wada, Ryohei Ueda, TheDash
 
 0.1.27 (2015-12-01)
 -------------------
-* Merge pull request `#1 <https://github.com/peci1/robot_body_filter/issues/1>`_ from garaemon/robot-self-filter
+* Merge pull request `#1 <https://github.com/ctu-vras/robot_body_filter/issues/1>`_ from garaemon/robot-self-filter
   Porting robot_self_filter from pr2_navigation_self_filter
 * Porting robot_self_filter from pr2_navigation_self_filter
 * Initial commit

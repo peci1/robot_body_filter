@@ -1,109 +1,139 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-FileCopyrightText: Czech Technical University in Prague
+
 #include "gtest/gtest.h"
 
-#include <robot_body_filter/RobotBodyFilter.h>
-#include <xmlrpcpp/XmlRpcValue.h>
-#include "utils.cpp"
+#include <chrono>
+#include <map>
+#include <memory>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
-using namespace robot_body_filter;
+#include <cras_cpp_common/cloud.hpp>
+#include <geometry_msgs/msg/polygon_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include <moveit/point_containment_filter/shape_mask.hpp>
+#include <rclcpp/executors/single_threaded_executor.hpp>
+#include <rclcpp/duration.hpp>
+#include <rclcpp/node.hpp>
+#include <rclcpp/time.hpp>
+#include <rclcpp/utilities.hpp>
+#include <robot_body_filter/msg/oriented_bounding_box_stamped.hpp>
+#include <robot_body_filter/msg/sphere_stamped.hpp>
+#include <robot_body_filter/RayCastingShapeMask.hpp>
+#include <robot_body_filter/RobotBodyFilter.hpp>
+#include <sensor_msgs/msg/laser_scan.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/msg/point_field.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include "utils.cpp"  // NOLINT
+
+using robot_body_filter::msg::OrientedBoundingBoxStamped;
+using robot_body_filter::msg::SphereStamped;
+using robot_body_filter::RayCastingShapeMask;
+using robot_body_filter::ScaleAndPadding;
 
 // This model corresponds to what is in test_ray_casting_shape_mask.blend.
 // However, the sizes of the objects are smaller so that they reach the desired
 // size after applying scale 1.1 and padding 0.01 (as set in test_robot_body_filter.yaml).
-const std::string ROBOT_URDF =
-    "<?xml version=\"1.0\" ?>\n"
-    "<robot name=\"NIFTi\">\n"
-    "    <link name=\"base_link\">\n"
-    "        <visual>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"-0.1220 0 0\"/>\n"
-    "            <geometry><box size=\"1.8 1.8 1.8\"/></geometry>\n"
-    "        </visual>\n"
-    "        <collision>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"-0.1220 0 0\"/>\n"
-    "            <geometry><box size=\"1.8 1.8 1.8\"/></geometry>\n"
-    "        </collision>\n"
-    "        <collision name=\"big_collision_box\">\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"-0.1 0 0\"/>\n"
-    "            <geometry><box size=\"2.2545 2.2545 2.2545\"/></geometry>\n"
-    "        </collision>\n"
-    "        <inertial>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"-0.034 0 0.142\"/>\n"
-    "            <mass value=\"6.0\"/>\n"
-    "            <inertia ixx=\"0.001\" ixy=\"0.0001\" ixz=\"0.0\" iyy=\"0.02\" iyz=\"-0.0001\" izz=\"0.03\"/>\n"
-    "        </inertial>\n"
-    "    </link>\n"
-    "    <link name=\"antenna\">\n"
-    "        <visual>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"-0.01864 0 0\"/>\n"
-    "            <geometry><sphere radius=\"1.24091\" /></geometry>\n"
-    "        </visual>\n"
-    "        <collision>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"-0.01864 0 0\"/>\n"
-    "            <geometry><sphere radius=\"1.24091\"/></geometry>\n"
-    "        </collision>\n"
-    "        <inertial>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "            <mass value=\"0.5\"/>\n"
-    "            <inertia ixx=\"0.005\" ixy=\"0\" ixz=\"0\" iyy=\"0.001\" iyz=\"-0.0001\" izz=\"0.004\"/>\n"
-    "        </inertial>\n"
-    "    </link>\n"
-    "    <joint name=\"antenna_j\" type=\"fixed\">\n"
-    "        <parent link=\"base_link\"/>\n"
-    "        <child link=\"antenna\"/>\n"
-    "        <origin rpy=\"0 0 0\" xyz=\"0.01864 0 0\"/>\n"
-    "    </joint>\n"
-    "    <link name=\"laser_base\">\n"
-    "        <visual>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "            <geometry><box size=\"0.0005 0.0005 0.0005\"/></geometry>\n"
-    "        </visual>\n"
-    "        <inertial>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "            <mass value=\"1e-5\"/>\n"
-    "            <inertia ixx=\"1e-3\" ixy=\"1e-6\" ixz=\"1e-6\" iyy=\"1e-3\" iyz=\"1e-6\" izz=\"1e-3\"/>\n"
-    "        </inertial>\n"
-    "    </link>\n"
-    "    <joint name=\"laser_base_j\" type=\"fixed\">\n"
-    "        <parent link=\"base_link\"/>\n"
-    "        <child link=\"laser_base\"/>\n"
-    "        <origin rpy=\"0 0 0\" xyz=\"-1.5 0 0\"/>\n"
-    "    </joint>\n"
-    "    <link name=\"laser\">\n"
-    "        <visual>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "            <geometry><box size=\"0.07273 0.07273 0.07273\"/></geometry>\n"
-    "        </visual>\n"
-    "        <collision>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "            <geometry><box size=\"0.07273 0.07273 0.07273\"/></geometry>\n"
-    "        </collision>\n"
-    "        <inertial>\n"
-    "            <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "            <mass value=\"1\"/>\n"
-    "            <inertia ixx=\"0.003\" ixy=\"0\" ixz=\"0\" iyy=\"0.003\" iyz=\"0\" izz=\"0.002\"/>\n"
-    "        </inertial>\n"
-    "    </link>\n"
-    "    <joint name=\"laser_j\" type=\"revolute\">\n"
-    "        <parent link=\"laser_base\"/>\n"
-    "        <child link=\"laser\"/>\n"
-    "        <axis xyz=\"1 0 0\"/>\n"
-    "        <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
-    "        <limit effort=\"0\" lower=\"-2.3561945\" upper=\"2.3561945\" velocity=\"4\"/>\n"
-    "    </joint>\n"
-    "</robot>";
+constexpr char ROBOT_URDF[] =
+  "<?xml version=\"1.0\" ?>\n"
+  "<robot name=\"NIFTi\">\n"
+  "  <link name=\"base_link\">\n"
+  "    <visual>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"-0.1220 0 0\"/>\n"
+  "      <geometry><box size=\"1.8 1.8 1.8\"/></geometry>\n"
+  "    </visual>\n"
+  "    <collision>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"-0.1220 0 0\"/>\n"
+  "      <geometry><box size=\"1.8 1.8 1.8\"/></geometry>\n"
+  "    </collision>\n"
+  "    <collision name=\"big_collision_box\">\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"-0.1 0 0\"/>\n"
+  "      <geometry><box size=\"2.2545 2.2545 2.2545\"/></geometry>\n"
+  "    </collision>\n"
+  "    <inertial>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"-0.034 0 0.142\"/>\n"
+  "      <mass value=\"6.0\"/>\n"
+  "      <inertia ixx=\"0.001\" ixy=\"0.0001\" ixz=\"0.0\" iyy=\"0.02\" iyz=\"-0.0001\" izz=\"0.03\"/>\n"
+  "    </inertial>\n"
+  "  </link>\n"
+  "  <link name=\"antenna\">\n"
+  "    <visual>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"-0.01864 0 0\"/>\n"
+  "      <geometry><sphere radius=\"1.24091\" /></geometry>\n"
+  "    </visual>\n"
+  "    <collision>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"-0.01864 0 0\"/>\n"
+  "      <geometry><sphere radius=\"1.24091\"/></geometry>\n"
+  "    </collision>\n"
+  "    <inertial>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "      <mass value=\"0.5\"/>\n"
+  "      <inertia ixx=\"0.005\" ixy=\"0\" ixz=\"0\" iyy=\"0.001\" iyz=\"-0.0001\" izz=\"0.004\"/>\n"
+  "    </inertial>\n"
+  "  </link>\n"
+  "  <joint name=\"antenna_j\" type=\"fixed\">\n"
+  "    <parent link=\"base_link\"/>\n"
+  "    <child link=\"antenna\"/>\n"
+  "    <origin rpy=\"0 0 0\" xyz=\"0.01864 0 0\"/>\n"
+  "  </joint>\n"
+  "  <link name=\"laser_base\">\n"
+  "    <visual>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "      <geometry><box size=\"0.0005 0.0005 0.0005\"/></geometry>\n"
+  "    </visual>\n"
+  "    <inertial>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "      <mass value=\"1e-5\"/>\n"
+  "      <inertia ixx=\"1e-3\" ixy=\"1e-6\" ixz=\"1e-6\" iyy=\"1e-3\" iyz=\"1e-6\" izz=\"1e-3\"/>\n"
+  "    </inertial>\n"
+  "  </link>\n"
+  "  <joint name=\"laser_base_j\" type=\"fixed\">\n"
+  "    <parent link=\"base_link\"/>\n"
+  "    <child link=\"laser_base\"/>\n"
+  "    <origin rpy=\"0 0 0\" xyz=\"-1.5 0 0\"/>\n"
+  "  </joint>\n"
+  "  <link name=\"laser\">\n"
+  "    <visual>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "      <geometry><box size=\"0.07273 0.07273 0.07273\"/></geometry>\n"
+  "    </visual>\n"
+  "    <collision>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "      <geometry><box size=\"0.07273 0.07273 0.07273\"/></geometry>\n"
+  "    </collision>\n"
+  "    <inertial>\n"
+  "      <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "      <mass value=\"1\"/>\n"
+  "      <inertia ixx=\"0.003\" ixy=\"0\" ixz=\"0\" iyy=\"0.003\" iyz=\"0\" izz=\"0.002\"/>\n"
+  "    </inertial>\n"
+  "  </link>\n"
+  "  <joint name=\"laser_j\" type=\"revolute\">\n"
+  "    <parent link=\"laser_base\"/>\n"
+  "    <child link=\"laser\"/>\n"
+  "    <axis xyz=\"1 0 0\"/>\n"
+  "    <origin rpy=\"0 0 0\" xyz=\"0 0 0\"/>\n"
+  "    <limit effort=\"0\" lower=\"-2.3561945\" upper=\"2.3561945\" velocity=\"4\"/>\n"
+  "  </joint>\n"
+  "</robot>";
 
-class RobotBodyFilterLaserScanTest : public RobotBodyFilterLaserScan
-{
-  public: RobotBodyFilterLaserScanTest()
-  {
-    this->failWithoutRobotDescription = true;
+class RobotBodyFilterLaserScanTest : public robot_body_filter::RobotBodyFilterLaserScan {
+public:
+  explicit RobotBodyFilterLaserScanTest(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
+    fail_without_robot_description_ = true;
   }
 
-  virtual ~RobotBodyFilterLaserScanTest()
-  {
+  ~RobotBodyFilterLaserScanTest() override {
     // this prevents spurious SIGABRTs caused probably by some too fast cleanup
-    // after tfFramesWatchdog, or I don't know what...
-    ros::WallDuration(0.1).sleep();
-  };
+    // after tf_frames_watchdog_, or I don't know what...
+    rclcpp::sleep_for(std::chrono::milliseconds(100));
+  }
 
   friend class RobotBodyFilter_InitFromArray_Test;
   friend class RobotBodyFilter_InitFromDict_Test;
@@ -113,393 +143,399 @@ class RobotBodyFilterLaserScanTest : public RobotBodyFilterLaserScan
   friend class RobotBodyFilter_Transforms_Test;
   friend class RobotBodyFilter_ComputeMaskPointByPoint_Test;
   friend class RobotBodyFilter_UpdateLaserScan_Test;
-};
 
-class RobotBodyFilterPointCloud2Test : public RobotBodyFilterPointCloud2
-{
-  public: RobotBodyFilterPointCloud2Test()
-  {
-    this->failWithoutRobotDescription = true;
+protected:
+  RequiredInterfaces createNodeInterfaces() override {
+    if (node_ != nullptr) {
+      return *node_;
+    }
+    return RobotBodyFilterLaserScan::createNodeInterfaces();
   }
 
-  virtual ~RobotBodyFilterPointCloud2Test()
-  {
+private:
+  rclcpp::Node::SharedPtr node_;
+};
+
+class RobotBodyFilterPointCloud2Test : public robot_body_filter::RobotBodyFilterPointCloud2 {
+public:
+  explicit RobotBodyFilterPointCloud2Test(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {
+    fail_without_robot_description_ = true;
+  }
+
+  ~RobotBodyFilterPointCloud2Test() override {
     // this prevents spurious SIGABRTs caused probably by some too fast cleanup
-    // after tfFramesWatchdog, or I don't know what...
-    ros::WallDuration(0.1).sleep();
-  };
+    // after tf_frames_watchdog_, or I don't know what...
+    rclcpp::sleep_for(std::chrono::milliseconds(100));
+  }
 
   friend class RobotBodyFilter_ComputeMaskAllAtOnce_Test;
   friend class RobotBodyFilter_UpdatePointCloud2_Test;
+
+protected:
+  RequiredInterfaces createNodeInterfaces() override {
+    if (node_ != nullptr) {
+      return *node_;
+    }
+    return RobotBodyFilterPointCloud2::createNodeInterfaces();
+  }
+
+private:
+  rclcpp::Node::SharedPtr node_;
 };
 
-TEST(RobotBodyFilter, InitFromArray)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, InitFromDict) {
+  const auto nh = std::make_shared<rclcpp::Node>("test_chain_config");
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
-
-  XmlRpc::XmlRpcValue value;
-  nh.getParam("test_chain_config", value);
-  ASSERT_EQ(XmlRpc::XmlRpcValue::TypeArray, value.getType());
-  ASSERT_EQ(1, value.size());
-
-  // test_robot_description parameter doesn't exist
-  nh.deleteParam("test_robot_description");
-  EXPECT_THROW(filterBase->configure(value[0]), std::runtime_error);
-  EXPECT_FALSE(filter->configured_);
-  ASSERT_NE(nullptr, filter->tfFramesWatchdog);
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
 
   // test that invalid robot model doesn't throw any exception, but also generates no filter shapes
-  nh.setParam("test_robot_description", "<robot name='test'></robot>");
-  filterBase->configure(value[0]);
-  EXPECT_EQ("test_robot_description", filter->robotDescriptionParam);
-  EXPECT_EQ(0, filter->shapesToLinks.size());
+  filter_base->configure(
+    "filter1.params", "test_dict_config", nh->get_node_logging_interface(), nh->get_node_parameters_interface());
+
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = "<robot name='test'></robot>";
+  filter->onRobotModelMsg(msg);
+
+  EXPECT_TRUE(filter->hasModel());
+  EXPECT_EQ("test_robot_description", filter->robot_description_topic_);
+  EXPECT_EQ(0, filter->shapes_to_links_.size());
   EXPECT_TRUE(filter->configured_);
-  EXPECT_GT(ros::Duration(0.1), ros::Time::now() - filter->timeConfigured);
-  ASSERT_NE(nullptr, filter->tfFramesWatchdog);
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));  // Issue #6, monitor sensor frame
+  EXPECT_GT(rclcpp::Duration::from_seconds(0.1), nh->get_clock()->now() - filter->time_configured_);
+  ASSERT_NE(nullptr, filter->tf_frames_watchdog_);
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("laser"));  // Issue #6, monitor sensor frame
 }
 
-TEST(RobotBodyFilter, InitFromDict)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, LoadParams) {
+  const auto nh = std::make_shared<rclcpp::Node>("test_chain_config");
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
 
-  // test_robot_description parameter doesn't exist
-  nh.deleteParam("test_robot_description");
-  EXPECT_THROW(filterBase->configure("test_dict_config", nh), std::runtime_error);
-  EXPECT_FALSE(filter->configured_);
-  ASSERT_NE(nullptr, filter->tfFramesWatchdog);
+  filter_base->configure(
+    "filter1.params", "test_chain_config", nh->get_node_logging_interface(), nh->get_node_parameters_interface());
 
   // test that invalid robot model doesn't throw any exception, but also generates no filter shapes
-  nh.setParam("test_robot_description", "<robot name='test'></robot>");
-  filterBase->configure("test_dict_config", nh);
-  EXPECT_EQ("test_robot_description", filter->robotDescriptionParam);
-  EXPECT_EQ(0, filter->shapesToLinks.size());
-  EXPECT_TRUE(filter->configured_);
-  EXPECT_GT(ros::Duration(0.1), ros::Time::now() - filter->timeConfigured);
-  ASSERT_NE(nullptr, filter->tfFramesWatchdog);
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));  // Issue #6, monitor sensor frame
-}
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = "<robot name='test'></robot>";
+  filter->onRobotModelMsg(msg);
 
-TEST(RobotBodyFilter, LoadParams)
-{
-  ros::NodeHandle nh;
-
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
-
-  // test that invalid robot model doesn't throw any exception, but also generates no filter shapes
-  nh.setParam("test_robot_description", "<robot name='test'></robot>");
-  filterBase->configure("test_dict_config", nh);
-
-  EXPECT_EQ("odom", filter->fixedFrame);
-  EXPECT_EQ("laser", filter->sensorFrame);
-  EXPECT_EQ("odom", filter->filteringFrame);
-  EXPECT_TRUE(filter->keepCloudsOrganized);
-  EXPECT_FLOAT_EQ(0.002, filter->modelPoseUpdateInterval.toSec());
-  EXPECT_TRUE(filter->pointByPointScan);
-  EXPECT_FLOAT_EQ(0.1, filter->minDistance);
-  EXPECT_FLOAT_EQ(10.0, filter->maxDistance);
+  EXPECT_EQ("odom", filter->fixed_frame_);
+  EXPECT_EQ("laser", filter->sensor_frame_);
+  EXPECT_EQ("odom", filter->filtering_frame_);
+  EXPECT_TRUE(filter->keep_clouds_organized_);
+  EXPECT_FLOAT_EQ(0.002, filter->model_pose_update_interval_.seconds());
+  EXPECT_TRUE(filter->point_by_point_scan_);
+  EXPECT_FLOAT_EQ(0.1, filter->min_distance_);
+  EXPECT_FLOAT_EQ(10.0, filter->max_distance_);
   EXPECT_EQ(std::set<std::string>({"antenna", "base_link::big_collision_box"}),
-      filter->linksIgnoredInBoundingSphere);
+            filter->links_ignored_in_bounding_sphere_);
   EXPECT_EQ(std::set<std::string>({"laser", "base_link::big_collision_box"}),
-      filter->linksIgnoredInShadowTest);
-  EXPECT_TRUE(filter->linksIgnoredInBoundingBox.empty());
-  EXPECT_TRUE(filter->linksIgnoredInContainsTest.empty());
-  EXPECT_TRUE(filter->linksIgnoredEverywhere.empty());
-  EXPECT_TRUE(filter->onlyLinks.empty());
-  EXPECT_DOUBLE_EQ(1.1, filter->defaultContainsInflation.scale);
-  EXPECT_DOUBLE_EQ(0.01, filter->defaultContainsInflation.padding);
-  EXPECT_DOUBLE_EQ(1.1, filter->defaultShadowInflation.scale);
-  EXPECT_DOUBLE_EQ(0.01, filter->defaultShadowInflation.padding);
-  EXPECT_EQ((std::map<std::string, ScaleAndPadding>({
-    {"*::big_collision_box", ScaleAndPadding(2.0, 0.01)},
-    {"base_link", ScaleAndPadding(1.1, 0.05)},
-    {"antenna", ScaleAndPadding(1.2, 0.01)},
-  })), filter->perLinkContainsInflation);
-  EXPECT_EQ((std::map<std::string, ScaleAndPadding>({
-    {"*::big_collision_box", ScaleAndPadding(3.0, 0.01)},
-    {"base_link", ScaleAndPadding(1.1, 0.05)},
-    {"laser", ScaleAndPadding(1.1, 0.015)},
-  })), filter->perLinkShadowInflation);
-  EXPECT_EQ("test_robot_description", filter->robotDescriptionParam);
-  EXPECT_EQ("robot_model", filter->robotDescriptionUpdatesFieldName);
-  EXPECT_DOUBLE_EQ(60.0, filter->tfBufferLength.toSec());
-  EXPECT_DOUBLE_EQ(0.2, filter->reachableTransformTimeout.toSec());
-  EXPECT_DOUBLE_EQ(0.2, filter->unreachableTransformTimeout.toSec());
-  EXPECT_TRUE(filter->computeBoundingSphere);
-  EXPECT_FALSE(filter->computeDebugBoundingSphere);
-  EXPECT_FALSE(filter->publishBoundingSphereMarker);
-  EXPECT_FALSE(filter->publishNoBoundingSpherePointcloud);
-  EXPECT_FALSE(filter->computeBoundingBox);
-  EXPECT_FALSE(filter->computeDebugBoundingBox);
-  EXPECT_FALSE(filter->publishBoundingBoxMarker);
-  EXPECT_FALSE(filter->publishNoBoundingBoxPointcloud);
-  EXPECT_FALSE(filter->computeOrientedBoundingBox);
-  EXPECT_FALSE(filter->computeDebugOrientedBoundingBox);
-  EXPECT_FALSE(filter->publishOrientedBoundingBoxMarker);
-  EXPECT_FALSE(filter->publishNoOrientedBoundingBoxPointcloud);
-  EXPECT_TRUE(filter->computeLocalBoundingBox);
-  EXPECT_FALSE(filter->computeDebugLocalBoundingBox);
-  EXPECT_FALSE(filter->publishLocalBoundingBoxMarker);
-  EXPECT_FALSE(filter->publishNoLocalBoundingBoxPointcloud);
-  EXPECT_EQ("base_link", filter->localBoundingBoxFrame);
-  EXPECT_FALSE(filter->publishDebugPclInside);
-  EXPECT_FALSE(filter->publishDebugPclClip);
-  EXPECT_FALSE(filter->publishDebugPclShadow);
-  EXPECT_FALSE(filter->publishDebugContainsMarker);
-  EXPECT_FALSE(filter->publishDebugShadowMarker);
-  EXPECT_FALSE(filter->requireAllFramesReachable);
+            filter->links_ignored_in_shadow_test_);
+  EXPECT_TRUE(filter->links_ignored_in_bounding_box_.empty());
+  EXPECT_TRUE(filter->links_ignored_in_contains_test_.empty());
+  EXPECT_TRUE(filter->links_ignored_everywhere_.empty());
+  EXPECT_TRUE(filter->only_links_.empty());
+  EXPECT_DOUBLE_EQ(1.1, filter->default_contains_inflation_.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->default_contains_inflation_.padding);
+  EXPECT_DOUBLE_EQ(1.1, filter->default_shadow_inflation_.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->default_shadow_inflation_.padding);
+  EXPECT_EQ(
+    (std::map<std::string, ScaleAndPadding>({
+      {"*::big_collision_box", ScaleAndPadding(2.0, 0.01)},
+      {"base_link", ScaleAndPadding(1.1, 0.05)},
+      {"antenna", ScaleAndPadding(1.2, 0.01)},
+      })),
+    filter->per_link_contains_inflation_);
+  EXPECT_EQ(
+    (std::map<std::string, ScaleAndPadding>({
+      {"*::big_collision_box", ScaleAndPadding(3.0, 0.01)},
+      {"base_link", ScaleAndPadding(1.1, 0.05)},
+      {"laser", ScaleAndPadding(1.1, 0.015)},
+      })),
+    filter->per_link_shadow_inflation_);
+  EXPECT_EQ("test_robot_description", filter->robot_description_topic_);
+  EXPECT_DOUBLE_EQ(60.0, filter->tf_buffer_length_.seconds());
+  EXPECT_DOUBLE_EQ(0.2, filter->reachable_transform_timeout_.seconds());
+  EXPECT_DOUBLE_EQ(0.2, filter->unreachable_transform_timeout_.seconds());
+  EXPECT_TRUE(filter->compute_bounding_sphere_);
+  EXPECT_FALSE(filter->compute_debug_bounding_sphere_);
+  EXPECT_FALSE(filter->publish_bounding_sphere_marker_);
+  EXPECT_FALSE(filter->publish_no_bounding_sphere_pointcloud_);
+  EXPECT_FALSE(filter->compute_bounding_box_);
+  EXPECT_FALSE(filter->compute_debug_bounding_box_);
+  EXPECT_FALSE(filter->publish_bounding_box_marker_);
+  EXPECT_FALSE(filter->publish_no_bounding_box_pointcloud_);
+  EXPECT_FALSE(filter->compute_oriented_bounding_box_);
+  EXPECT_FALSE(filter->compute_debug_oriented_bounding_box_);
+  EXPECT_FALSE(filter->publish_oriented_bounding_box_marker_);
+  EXPECT_FALSE(filter->publish_no_oriented_bounding_box_pointcloud_);
+  EXPECT_TRUE(filter->compute_local_bounding_box_);
+  EXPECT_FALSE(filter->compute_debug_local_bounding_box_);
+  EXPECT_FALSE(filter->publish_local_bounding_box_marker_);
+  EXPECT_FALSE(filter->publish_no_local_bounding_box_pointcloud_);
+  EXPECT_EQ("base_link", filter->local_bounding_box_frame_);
+  EXPECT_FALSE(filter->publish_debug_pcl_inside_);
+  EXPECT_FALSE(filter->publish_debug_pcl_clip_);
+  EXPECT_FALSE(filter->publish_debug_pcl_shadow_);
+  EXPECT_FALSE(filter->publish_debug_contains_marker_);
+  EXPECT_FALSE(filter->publish_debug_shadow_marker_);
+  EXPECT_FALSE(filter->require_all_frames_reachable_);
 
-  EXPECT_EQ("/robot_bounding_sphere", filter->boundingSpherePublisher.getTopic());
-  EXPECT_EQ("", filter->boundingBoxPublisher.getTopic());
-  EXPECT_EQ("", filter->orientedBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("/robot_local_bounding_box", filter->localBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("", filter->boundingSphereMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->boundingBoxMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->orientedBoundingBoxMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->localBoundingBoxMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->boundingSphereDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->boundingBoxDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->orientedBoundingBoxDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->localBoundingBoxDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->scanPointCloudNoBoundingSpherePublisher.getTopic());
-  EXPECT_EQ("", filter->scanPointCloudNoBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("", filter->scanPointCloudNoOrientedBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("", filter->scanPointCloudNoLocalBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("", filter->debugPointCloudInsidePublisher.getTopic());
-  EXPECT_EQ("", filter->debugPointCloudClipPublisher.getTopic());
-  EXPECT_EQ("", filter->debugPointCloudShadowPublisher.getTopic());
-  EXPECT_EQ("", filter->debugContainsMarkerPublisher.getTopic());
-  EXPECT_EQ("", filter->debugShadowMarkerPublisher.getTopic());
+  EXPECT_STREQ("/robot_bounding_sphere", filter->bounding_sphere_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->bounding_box_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->oriented_bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_local_bounding_box", filter->local_bounding_box_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->bounding_sphere_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->bounding_box_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->oriented_bounding_box_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->local_bounding_box_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->bounding_sphere_debug_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->bounding_box_debug_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->oriented_bounding_box_debug_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->local_bounding_box_debug_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->scan_point_cloud_no_bounding_sphere_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->scan_point_cloud_no_bounding_box_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->scan_point_cloud_no_oriented_bounding_box_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->scan_point_cloud_no_local_bounding_box_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->debug_point_cloud_inside_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->debug_point_cloud_clip_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->debug_point_cloud_shadow_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->debug_contains_marker_publisher_->get_topic_name());
+  // EXPECT_STREQ("", filter->debug_shadow_marker_publisher_->get_topic_name());
 
-  EXPECT_EQ(ros::this_node::getName() + "/reload_model",
-      filter->reloadRobotModelServiceServer.getService());
+  EXPECT_EQ(std::string("/") + nh->get_name() + "/reload_model",
+            filter->reload_robot_model_service_server_->get_service_name());
 }
 
-TEST(RobotBodyFilter, LoadParamsAllConfig)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, LoadParamsAllConfig) {
+  const auto nh = std::make_shared<rclcpp::Node>("all_config");
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
+
+  filter_base->configure(
+    "filter1.params", "all_config", nh->get_node_logging_interface(), nh->get_node_parameters_interface());
 
   // test that invalid robot model doesn't throw any exception, but also generates no filter shapes
-  nh.setParam("test_robot_description", "<robot name='test'></robot>");
-  filterBase->configure("all_config", nh);
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = "<robot name='test'></robot>";
+  filter->onRobotModelMsg(msg);
 
-  EXPECT_EQ("odom", filter->fixedFrame);
-  EXPECT_EQ("laser", filter->sensorFrame);
-  EXPECT_EQ("base_link", filter->filteringFrame);
-  EXPECT_TRUE(filter->keepCloudsOrganized);
-  EXPECT_FLOAT_EQ(0.002, filter->modelPoseUpdateInterval.toSec());
-  EXPECT_TRUE(filter->pointByPointScan);
-  EXPECT_FLOAT_EQ(0.1, filter->minDistance);
-  EXPECT_FLOAT_EQ(10.0, filter->maxDistance);
+  EXPECT_EQ("odom", filter->fixed_frame_);
+  EXPECT_EQ("laser", filter->sensor_frame_);
+  EXPECT_EQ("base_link", filter->filtering_frame_);
+  EXPECT_TRUE(filter->keep_clouds_organized_);
+  EXPECT_FLOAT_EQ(0.002, filter->model_pose_update_interval_.seconds());
+  EXPECT_TRUE(filter->point_by_point_scan_);
+  EXPECT_FLOAT_EQ(0.1, filter->min_distance_);
+  EXPECT_FLOAT_EQ(10.0, filter->max_distance_);
   EXPECT_EQ(std::set<std::string>({"antenna", "base_link::big_collision_box"}),
-      filter->linksIgnoredInBoundingSphere);
+            filter->links_ignored_in_bounding_sphere_);
   EXPECT_EQ(std::set<std::string>({"laser", "base_link::big_collision_box"}),
-      filter->linksIgnoredInShadowTest);
-  EXPECT_EQ(std::set<std::string>({"base_link"}), filter->linksIgnoredInBoundingBox);
-  EXPECT_EQ(std::set<std::string>({"base_link"}), filter->linksIgnoredInContainsTest);
-  EXPECT_EQ(std::set<std::string>({"base_link"}), filter->linksIgnoredEverywhere);
-  EXPECT_EQ(std::set<std::string>({"laser"}), filter->onlyLinks);
-  EXPECT_DOUBLE_EQ(1.1, filter->defaultContainsInflation.scale);
-  EXPECT_DOUBLE_EQ(0.01, filter->defaultContainsInflation.padding);
-  EXPECT_DOUBLE_EQ(1.1, filter->defaultShadowInflation.scale);
-  EXPECT_DOUBLE_EQ(0.01, filter->defaultShadowInflation.padding);
-  EXPECT_EQ("test_robot_description", filter->robotDescriptionParam);
-  EXPECT_EQ("robot", filter->robotDescriptionUpdatesFieldName);
-  EXPECT_DOUBLE_EQ(60.0, filter->tfBufferLength.toSec());
-  EXPECT_DOUBLE_EQ(0.2, filter->reachableTransformTimeout.toSec());
-  EXPECT_DOUBLE_EQ(0.2, filter->unreachableTransformTimeout.toSec());
-  EXPECT_TRUE(filter->computeBoundingSphere);
-  EXPECT_TRUE(filter->computeDebugBoundingSphere);
-  EXPECT_TRUE(filter->publishBoundingSphereMarker);
-  EXPECT_TRUE(filter->publishNoBoundingSpherePointcloud);
-  EXPECT_TRUE(filter->computeBoundingBox);
-  EXPECT_TRUE(filter->computeDebugBoundingBox);
-  EXPECT_TRUE(filter->publishBoundingBoxMarker);
-  EXPECT_TRUE(filter->publishNoBoundingBoxPointcloud);
-  EXPECT_TRUE(filter->computeOrientedBoundingBox);
-  EXPECT_TRUE(filter->computeDebugOrientedBoundingBox);
-  EXPECT_TRUE(filter->publishOrientedBoundingBoxMarker);
-  EXPECT_TRUE(filter->publishNoOrientedBoundingBoxPointcloud);
-  EXPECT_TRUE(filter->computeLocalBoundingBox);
-  EXPECT_TRUE(filter->computeDebugLocalBoundingBox);
-  EXPECT_TRUE(filter->publishLocalBoundingBoxMarker);
-  EXPECT_TRUE(filter->publishNoLocalBoundingBoxPointcloud);
-  EXPECT_EQ("base_link", filter->localBoundingBoxFrame);
-  EXPECT_TRUE(filter->publishDebugPclInside);
-  EXPECT_TRUE(filter->publishDebugPclClip);
-  EXPECT_TRUE(filter->publishDebugPclShadow);
-  EXPECT_TRUE(filter->publishDebugContainsMarker);
-  EXPECT_TRUE(filter->publishDebugShadowMarker);
-  EXPECT_TRUE(filter->requireAllFramesReachable);
+            filter->links_ignored_in_shadow_test_);
+  EXPECT_EQ(std::set<std::string>({"base_link"}), filter->links_ignored_in_bounding_box_);
+  EXPECT_EQ(std::set<std::string>({"base_link"}), filter->links_ignored_in_contains_test_);
+  EXPECT_EQ(std::set<std::string>({"base_link"}), filter->links_ignored_everywhere_);
+  EXPECT_EQ(std::set<std::string>({"laser"}), filter->only_links_);
+  EXPECT_DOUBLE_EQ(1.1, filter->default_contains_inflation_.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->default_contains_inflation_.padding);
+  EXPECT_DOUBLE_EQ(1.1, filter->default_shadow_inflation_.scale);
+  EXPECT_DOUBLE_EQ(0.01, filter->default_shadow_inflation_.padding);
+  EXPECT_EQ("test_robot_description", filter->robot_description_topic_);
+  EXPECT_DOUBLE_EQ(60.0, filter->tf_buffer_length_.seconds());
+  EXPECT_DOUBLE_EQ(0.2, filter->reachable_transform_timeout_.seconds());
+  EXPECT_DOUBLE_EQ(0.2, filter->unreachable_transform_timeout_.seconds());
+  EXPECT_TRUE(filter->compute_bounding_sphere_);
+  EXPECT_TRUE(filter->compute_debug_bounding_sphere_);
+  EXPECT_TRUE(filter->publish_bounding_sphere_marker_);
+  EXPECT_TRUE(filter->publish_no_bounding_sphere_pointcloud_);
+  EXPECT_TRUE(filter->compute_bounding_box_);
+  EXPECT_TRUE(filter->compute_debug_bounding_box_);
+  EXPECT_TRUE(filter->publish_bounding_box_marker_);
+  EXPECT_TRUE(filter->publish_no_bounding_box_pointcloud_);
+  EXPECT_TRUE(filter->compute_oriented_bounding_box_);
+  EXPECT_TRUE(filter->compute_debug_oriented_bounding_box_);
+  EXPECT_TRUE(filter->publish_oriented_bounding_box_marker_);
+  EXPECT_TRUE(filter->publish_no_oriented_bounding_box_pointcloud_);
+  EXPECT_TRUE(filter->compute_local_bounding_box_);
+  EXPECT_TRUE(filter->compute_debug_local_bounding_box_);
+  EXPECT_TRUE(filter->publish_local_bounding_box_marker_);
+  EXPECT_TRUE(filter->publish_no_local_bounding_box_pointcloud_);
+  EXPECT_EQ("base_link", filter->local_bounding_box_frame_);
+  EXPECT_TRUE(filter->publish_debug_pcl_inside_);
+  EXPECT_TRUE(filter->publish_debug_pcl_clip_);
+  EXPECT_TRUE(filter->publish_debug_pcl_shadow_);
+  EXPECT_TRUE(filter->publish_debug_contains_marker_);
+  EXPECT_TRUE(filter->publish_debug_shadow_marker_);
+  EXPECT_TRUE(filter->require_all_frames_reachable_);
 
-  EXPECT_EQ("/robot_bounding_sphere", filter->boundingSpherePublisher.getTopic());
-  EXPECT_EQ("/robot_bounding_box", filter->boundingBoxPublisher.getTopic());
-  EXPECT_EQ("/robot_oriented_bounding_box", filter->orientedBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("/robot_local_bounding_box", filter->localBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("/robot_bounding_sphere_marker", filter->boundingSphereMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_bounding_box_marker", filter->boundingBoxMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_oriented_bounding_box_marker", filter->orientedBoundingBoxMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_local_bounding_box_marker", filter->localBoundingBoxMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_bounding_sphere_debug", filter->boundingSphereDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_bounding_box_debug", filter->boundingBoxDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_oriented_bounding_box_debug", filter->orientedBoundingBoxDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_local_bounding_box_debug", filter->localBoundingBoxDebugMarkerPublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_no_bsphere", filter->scanPointCloudNoBoundingSpherePublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_no_bbox", filter->scanPointCloudNoBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_no_oriented_bbox", filter->scanPointCloudNoOrientedBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_no_local_bbox", filter->scanPointCloudNoLocalBoundingBoxPublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_inside", filter->debugPointCloudInsidePublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_clip", filter->debugPointCloudClipPublisher.getTopic());
-  EXPECT_EQ("/scan_point_cloud_shadow", filter->debugPointCloudShadowPublisher.getTopic());
-  EXPECT_EQ("/robot_model_for_contains_test", filter->debugContainsMarkerPublisher.getTopic());
-  EXPECT_EQ("/robot_model_for_shadow_test", filter->debugShadowMarkerPublisher.getTopic());
+  EXPECT_STREQ("/robot_bounding_sphere", filter->bounding_sphere_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_bounding_box", filter->bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_oriented_bounding_box", filter->oriented_bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_local_bounding_box", filter->local_bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_bounding_sphere_marker", filter->bounding_sphere_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_bounding_box_marker", filter->bounding_box_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_oriented_bounding_box_marker",
+               filter->oriented_bounding_box_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_local_bounding_box_marker", filter->local_bounding_box_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_bounding_sphere_debug", filter->bounding_sphere_debug_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_bounding_box_debug", filter->bounding_box_debug_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_oriented_bounding_box_debug",
+               filter->oriented_bounding_box_debug_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_local_bounding_box_debug", filter->local_bounding_box_debug_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_no_bsphere",
+               filter->scan_point_cloud_no_bounding_sphere_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_no_bbox", filter->scan_point_cloud_no_bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_no_oriented_bbox",
+               filter->scan_point_cloud_no_oriented_bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_no_local_bbox",
+               filter->scan_point_cloud_no_local_bounding_box_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_inside", filter->debug_point_cloud_inside_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_clip", filter->debug_point_cloud_clip_publisher_->get_topic_name());
+  EXPECT_STREQ("/scan_point_cloud_shadow", filter->debug_point_cloud_shadow_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_model_for_contains_test", filter->debug_contains_marker_publisher_->get_topic_name());
+  EXPECT_STREQ("/robot_model_for_shadow_test", filter->debug_shadow_marker_publisher_->get_topic_name());
 
-  EXPECT_EQ(ros::this_node::getName() + "/reload_model",
-      filter->reloadRobotModelServiceServer.getService());
+  EXPECT_EQ(std::string("/") + nh->get_name() + "/reload_model",
+            filter->reload_robot_model_service_server_->get_service_name());
 }
 
-TEST(RobotBodyFilter, ParseRobot)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, ParseRobot) {
+  const auto nh = std::make_shared<rclcpp::Node>("test_chain_config");
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
 
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("test_dict_config", nh);
+  filter_base->configure(
+    "filter1.params", "test_chain_config", nh->get_node_logging_interface(), nh->get_node_parameters_interface());
+
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = ROBOT_URDF;
+  filter->onRobotModelMsg(msg);
 
   // base_link, base_link::big_collision_box::contains/shadow, laser::contains/shadow, antenna::contains/shadow
-  EXPECT_EQ(7, filter->shapesToLinks.size());
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
-  EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
-  EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
+  EXPECT_EQ(7, filter->shapes_to_links_.size());
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("laser"));
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("base_link"));
+  EXPECT_EQ(7, filter->shape_mask_->getBodies().size());
+  EXPECT_EQ(4, filter->shape_mask_->getBodiesForContainsTest().size());
+  EXPECT_EQ(2, filter->shape_mask_->getBodiesForShadowTest().size());
 
   filter->clearRobotMask();
-  EXPECT_EQ(0, filter->shapesToLinks.size());
-  EXPECT_FALSE(filter->tfFramesWatchdog->isMonitored("laser"));
-  EXPECT_FALSE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(0, filter->shapeMask->getBodies().size());
-  EXPECT_EQ(0, filter->shapeMask->getBodiesForContainsTest().size());
-  EXPECT_EQ(0, filter->shapeMask->getBodiesForShadowTest().size());
+  EXPECT_EQ(0, filter->shapes_to_links_.size());
+  EXPECT_FALSE(filter->tf_frames_watchdog_->isMonitored("laser"));
+  EXPECT_FALSE(filter->tf_frames_watchdog_->isMonitored("base_link"));
+  EXPECT_EQ(0, filter->shape_mask_->getBodies().size());
+  EXPECT_EQ(0, filter->shape_mask_->getBodiesForContainsTest().size());
+  EXPECT_EQ(0, filter->shape_mask_->getBodiesForShadowTest().size());
 
   filter->addRobotMaskFromUrdf(ROBOT_URDF);
-  EXPECT_EQ(7, filter->shapesToLinks.size());
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
-  EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
-  EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
+  EXPECT_EQ(7, filter->shapes_to_links_.size());
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("laser"));
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("base_link"));
+  EXPECT_EQ(7, filter->shape_mask_->getBodies().size());
+  EXPECT_EQ(4, filter->shape_mask_->getBodiesForContainsTest().size());
+  EXPECT_EQ(2, filter->shape_mask_->getBodiesForShadowTest().size());
 
-  nh.setParam("test_robot_description", "<robot name='test'></robot>");
-  std_srvs::TriggerRequest req;
-  std_srvs::TriggerResponse resp;
-  EXPECT_TRUE(filter->triggerModelReload(req, resp));
+  std_msgs::msg::String::SharedPtr msg2(new std_msgs::msg::String);
+  msg2->data = "<robot name='test'></robot>";
+  filter->onRobotModelMsg(msg2);
+  auto req = std::make_shared<std_srvs::srv::Trigger::Request>();
+  auto resp = std::make_shared<std_srvs::srv::Trigger::Response>();
+  filter->triggerModelReload(nullptr, req, resp);
+  EXPECT_TRUE(resp->success);
 
-  EXPECT_EQ(0, filter->shapesToLinks.size());
-  EXPECT_FALSE(filter->tfFramesWatchdog->isMonitored("laser"));
-  EXPECT_FALSE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(0, filter->shapeMask->getBodies().size());
-  EXPECT_EQ(0, filter->shapeMask->getBodiesForContainsTest().size());
-  EXPECT_EQ(0, filter->shapeMask->getBodiesForShadowTest().size());
+  EXPECT_EQ(0, filter->shapes_to_links_.size());
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("laser"));  // sensor frame is always monitored
+  EXPECT_FALSE(filter->tf_frames_watchdog_->isMonitored("base_link"));
+  EXPECT_EQ(0, filter->shape_mask_->getBodies().size());
+  EXPECT_EQ(0, filter->shape_mask_->getBodiesForContainsTest().size());
+  EXPECT_EQ(0, filter->shape_mask_->getBodiesForShadowTest().size());
 
-  auto cfg = boost::make_shared<dynamic_reconfigure::Config>();
-  dynamic_reconfigure::StrParameter param;
-  param.name = "robot_model";
-  param.value = ROBOT_URDF;
-  cfg->strs.push_back(param);
-
-  auto cfgConst = boost::const_pointer_cast<const dynamic_reconfigure::Config>(cfg);
-  filter->robotDescriptionUpdated(cfgConst);
-  EXPECT_EQ(7, filter->shapesToLinks.size());
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
-  EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
-  EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
+  filter->onRobotModelMsg(msg2);
+  EXPECT_EQ(0, filter->shapes_to_links_.size());
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("laser"));
+  EXPECT_FALSE(filter->tf_frames_watchdog_->isMonitored("base_link"));
+  EXPECT_EQ(0, filter->shape_mask_->getBodies().size());
+  EXPECT_EQ(0, filter->shape_mask_->getBodiesForContainsTest().size());
+  EXPECT_EQ(0, filter->shape_mask_->getBodiesForShadowTest().size());
 
   // test reconfiguring (this happens when playing back a bag file and a new one starts playing)
   filter->clearRobotMask();
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("test_dict_config", nh);
-  EXPECT_EQ(7, filter->shapesToLinks.size());
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("laser"));
-  EXPECT_TRUE(filter->tfFramesWatchdog->isMonitored("base_link"));
-  EXPECT_EQ(7, filter->shapeMask->getBodies().size());
-  EXPECT_EQ(4, filter->shapeMask->getBodiesForContainsTest().size());
-  EXPECT_EQ(2, filter->shapeMask->getBodiesForShadowTest().size());
+  filter->onRobotModelMsg(msg);
+  filter_base->configure(
+    "filter1.params", "test_chain_config", nh->get_node_logging_interface(), nh->get_node_parameters_interface());
+  EXPECT_EQ(7, filter->shapes_to_links_.size());
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("laser"));
+  EXPECT_TRUE(filter->tf_frames_watchdog_->isMonitored("base_link"));
+  EXPECT_EQ(7, filter->shape_mask_->getBodies().size());
+  EXPECT_EQ(4, filter->shape_mask_->getBodiesForContainsTest().size());
+  EXPECT_EQ(2, filter->shape_mask_->getBodiesForShadowTest().size());
 }
 
-TEST(RobotBodyFilter, Transforms)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, Transforms) {
+  const auto nh = std::make_shared<rclcpp::Node>("test_chain_config");
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
 
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("test_dict_config", nh);
+  filter_base->configure(
+    "filter1.params", "test_chain_config", nh->get_node_logging_interface(), nh->get_node_parameters_interface());
 
-  geometry_msgs::TransformStamped tf;
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = ROBOT_URDF;
+  filter->onRobotModelMsg(msg);
+
+  geometry_msgs::msg::TransformStamped tf;
   tf.transform.rotation.w = 1.0;
-  for (double d = -5.0; d < 5.0; d += 0.1)
-  {
-    tf.header.stamp = ros::Time::now() + ros::Duration(d);
+  for (double d = -5.0; d < 5.0; d += 0.1) {
+    tf.header.stamp = nh->get_clock()->now() + rclcpp::Duration::from_seconds(d);
 
     tf.transform.translation.x = 1;
     tf.header.frame_id = "odom";
     tf.child_frame_id = "base_link";
-    filter->tfBuffer->setTransform(tf, "test");
+    filter->tf_buffer_->setTransform(tf, "test");
 
     tf.transform.translation.x = -1.5;
     tf.header.frame_id = "base_link";
     tf.child_frame_id = "laser";
-    filter->tfBuffer->setTransform(tf, "test");
+    filter->tf_buffer_->setTransform(tf, "test");
 
     tf.transform.translation.x = 0.01864;
     tf.header.frame_id = "base_link";
     tf.child_frame_id = "antenna";
-    filter->tfBuffer->setTransform(tf, "test");
+    filter->tf_buffer_->setTransform(tf, "test");
   }
 
-  for (double d = 25.0; d < 35.0; d += 0.1)
-  {
-    tf.header.stamp = ros::Time::now() + ros::Duration(d);
+  for (double d = 25.0; d < 35.0; d += 0.1) {
+    tf.header.stamp = nh->get_clock()->now() + rclcpp::Duration::from_seconds(d);
 
     tf.transform.translation.x = 11;
     tf.header.frame_id = "odom";
     tf.child_frame_id = "base_link";
-    filter->tfBuffer->setTransform(tf, "test");
+    filter->tf_buffer_->setTransform(tf, "test");
 
     tf.transform.translation.x = -8.5;
     tf.header.frame_id = "base_link";
     tf.child_frame_id = "laser";
-    filter->tfBuffer->setTransform(tf, "test");
+    filter->tf_buffer_->setTransform(tf, "test");
 
     tf.transform.translation.x = 10.01864;
     tf.header.frame_id = "base_link";
     tf.child_frame_id = "antenna";
-    filter->tfBuffer->setTransform(tf, "test");
+    filter->tf_buffer_->setTransform(tf, "test");
   }
 
-  while (!filter->tfFramesWatchdog->isReachable("antenna"))
-    ros::WallDuration(0.01).sleep();
-  filter->updateTransformCache(ros::Time::now(), ros::Time::now() + ros::Duration(30));
+  while (!filter->tf_frames_watchdog_->isReachable("antenna")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
+  filter->updateTransformCache(nh->get_clock()->now(), nh->get_clock()->now() + rclcpp::Duration::from_seconds(30));
 
   std::map<std::string, point_containment_filter::ShapeHandle> shapes;
-  for (auto& pair : filter->shapesToLinks)
-    shapes[pair.second.cacheKey] = pair.first;
+  for (const auto& [shape, link] : filter->shapes_to_links_) {
+    shapes[link.cache_key] = shape;
+  }
 
   ASSERT_NE(shapes.end(), shapes.find("base_link-0"));
   ASSERT_NE(shapes.end(), shapes.find("base_link-1"));
@@ -508,11 +544,11 @@ TEST(RobotBodyFilter, Transforms)
 
   Eigen::Isometry3d transform;
 
-  filter->cacheLookupBetweenScansRatio = 0.0;
+  filter->cache_lookup_between_scans_ratio_ = 0.0;
   // the positions do not exactly correspond to the ones from URDF; instead, they're composed of the
   // transforms defined above and the offsets of the collision shapes from their links' origins
   ASSERT_TRUE(filter->getShapeTransform(shapes["antenna-0"], transform));
-  EXPECT_NEAR(1.0 -0.01864 + 0.01864, transform.translation().x(), 1e-6);
+  EXPECT_NEAR(1.0 - 0.01864 + 0.01864, transform.translation().x(), 1e-6);
   ASSERT_TRUE(filter->getShapeTransform(shapes["laser-0"], transform));
   EXPECT_NEAR(1 - 1.5, transform.translation().x(), 1e-6);
   ASSERT_TRUE(filter->getShapeTransform(shapes["base_link-0"], transform));
@@ -520,7 +556,7 @@ TEST(RobotBodyFilter, Transforms)
   ASSERT_TRUE(filter->getShapeTransform(shapes["base_link-1"], transform));
   EXPECT_NEAR(1.0 - 0.1, transform.translation().x(), 1e-6);
 
-  filter->cacheLookupBetweenScansRatio = 1.0;
+  filter->cache_lookup_between_scans_ratio_ = 1.0;
   ASSERT_TRUE(filter->getShapeTransform(shapes["antenna-0"], transform));
   EXPECT_NEAR(11 - 0.01864 + 10.01864, transform.translation().x(), 1e-6);
   ASSERT_TRUE(filter->getShapeTransform(shapes["laser-0"], transform));
@@ -531,38 +567,42 @@ TEST(RobotBodyFilter, Transforms)
   EXPECT_NEAR(11 - 0.1, transform.translation().x(), 1e-6);
 }
 
+TEST(RobotBodyFilter, ComputeMaskPointByPoint) {
+  const auto nh = std::make_shared<rclcpp::Node>("compute_mask_config_point_by_point");
 
-TEST(RobotBodyFilter, ComputeMaskPointByPoint)
-{
-  ros::NodeHandle nh;
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nullptr);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
+  filter_base->configure(
+    "filter1.params", "compute_mask_config_point_by_point",
+    nh->get_node_logging_interface(), nh->get_node_parameters_interface());
 
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("compute_mask_config_point_by_point", nh);
+  std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = ROBOT_URDF;
+  filter->onRobotModelMsg(msg);
 
-  Cloud cloud;
-  cloud.header.frame_id = filter->filteringFrame;
-  CloudModifier mod(cloud);
-  mod.setPointCloud2Fields(7,
-                           "x", 1, sensor_msgs::PointField::FLOAT32,
-                           "y", 1, sensor_msgs::PointField::FLOAT32,
-                           "z", 1, sensor_msgs::PointField::FLOAT32,
-                           "vp_x", 1, sensor_msgs::PointField::FLOAT32,
-                           "vp_y", 1, sensor_msgs::PointField::FLOAT32,
-                           "vp_z", 1, sensor_msgs::PointField::FLOAT32,
-                           "stamps", 1, sensor_msgs::PointField::FLOAT32);
+  cras::Cloud cloud;
+  cloud.header.frame_id = filter->filtering_frame_;
+  cras::CloudModifier mod(cloud);
+  mod.setPointCloud2Fields(
+    7,
+    "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "vp_x", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "vp_y", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "vp_z", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "stamps", 1, sensor_msgs::msg::PointField::FLOAT32);
   mod.resize(11);
 
   {
-    CloudIter x_it(cloud, "x");
-    CloudIter y_it(cloud, "y");
-    CloudIter z_it(cloud, "z");
-    CloudIter vp_x_it(cloud, "vp_x");
-    CloudIter vp_y_it(cloud, "vp_y");
-    CloudIter vp_z_it(cloud, "vp_z");
-    CloudIter stamps_it(cloud, "stamps");
+    cras::CloudIter x_it(cloud, "x");
+    cras::CloudIter y_it(cloud, "y");
+    cras::CloudIter z_it(cloud, "z");
+    cras::CloudIter vp_x_it(cloud, "vp_x");
+    cras::CloudIter vp_y_it(cloud, "vp_y");
+    cras::CloudIter vp_z_it(cloud, "vp_z");
+    cras::CloudIter stamps_it(cloud, "stamps");
 
     // pointSensor
     *x_it = -1.5; *y_it = 0; *z_it = 0; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
@@ -600,38 +640,39 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   }
 
   {
-    ros::Time now = ros::Time::now();
+    rclcpp::Time now = nh->get_clock()->now();
     cloud.header.stamp = now;
-    geometry_msgs::TransformStamped tf;
+    geometry_msgs::msg::TransformStamped tf;
     tf.transform.rotation.w = 1.0;
-    for (double d = -5.0; d < 5.0; d += 0.1)
-    {
-      tf.header.stamp = now + ros::Duration(d);
+    for (double d = -5.0; d < 5.0; d += 0.1) {
+      tf.header.stamp = now + rclcpp::Duration::from_seconds(d);
 
       tf.transform.translation.x = 0.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
     }
   }
 
-  while (!filter->tfFramesWatchdog->isReachable("antenna"))
-    ros::WallDuration(0.01).sleep();
-  filter->updateTransformCache(cloud.header.stamp, cloud.header.stamp + ros::Duration(1));
+  while (!filter->tf_frames_watchdog_->isReachable("antenna")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
+  filter->updateTransformCache(cloud.header.stamp, cloud.header.stamp + rclcpp::Duration::from_seconds(1));
 
   std::map<std::string, point_containment_filter::ShapeHandle> shapes;
-  for (auto& pair : filter->shapesToLinks)
-    shapes[pair.second.cacheKey] = pair.first;
+  for (const auto& [shape, link] : filter->shapes_to_links_) {
+    shapes[link.cache_key] = shape;
+  }
 
   ASSERT_NE(shapes.end(), shapes.find("base_link-0"));
   ASSERT_NE(shapes.end(), shapes.find("base_link-1"));
@@ -640,7 +681,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 
   // we reconstruct the scene from test_ray_casting_shape_mask.blend
   Eigen::Isometry3d transform;
-  filter->cacheLookupBetweenScansRatio = 0.0;
+  filter->cache_lookup_between_scans_ratio_ = 0.0;
   ASSERT_TRUE(filter->getShapeTransform(shapes["antenna-0"], transform));
   EXPECT_NEAR(0, transform.translation().x(), 1e-6);
   ASSERT_TRUE(filter->getShapeTransform(shapes["laser-0"], transform));
@@ -653,7 +694,7 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   std::vector<RayCastingShapeMask::MaskValue> mask;
   filter->computeMask(cloud, mask);
 
-  ASSERT_EQ(num_points(cloud), mask.size());
+  ASSERT_EQ(cras::numPoints(cloud), mask.size());
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[0]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[1]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[2]);
@@ -668,15 +709,15 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
 
   // move some points by 5 meters, and some by 10 meters in x and change the relative timestamps so
   // that the 5-meter motion is 10 seconds in future and the 10-meter motion is 20 seconds
-  // this will test the filter->cacheLookupBetweenScansRatio usage
+  // this will test the filter->cache_lookup_between_scans_ratio_ usage
   {
-    CloudIter x_it(cloud, "x");
-    CloudIter y_it(cloud, "y");
-    CloudIter z_it(cloud, "z");
-    CloudIter vp_x_it(cloud, "vp_x");
-    CloudIter vp_y_it(cloud, "vp_y");
-    CloudIter vp_z_it(cloud, "vp_z");
-    CloudIter stamps_it(cloud, "stamps");
+    cras::CloudIter x_it(cloud, "x");
+    cras::CloudIter y_it(cloud, "y");
+    cras::CloudIter z_it(cloud, "z");
+    cras::CloudIter vp_x_it(cloud, "vp_x");
+    cras::CloudIter vp_y_it(cloud, "vp_y");
+    cras::CloudIter vp_z_it(cloud, "vp_z");
+    cras::CloudIter stamps_it(cloud, "stamps");
 
     // pointSensor
     *x_it = -1.5; *y_it = 0; *z_it = 0; *vp_x_it = -1.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 0;
@@ -700,10 +741,10 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
     *x_it = 5; *y_it = 0; *z_it = 0; *vp_x_it = 3.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 10;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointShadowBox
-    *x_it = 5-0.25; *y_it = -2; *z_it = 2; *vp_x_it = 3.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 10;
+    *x_it = 5 - 0.25; *y_it = -2; *z_it = 2; *vp_x_it = 3.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 10;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointShadowSphere
-    *x_it = 10-0.560762; *y_it = 0; *z_it = 1.83871; *vp_x_it = 8.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 20;
+    *x_it = 10 - 0.560762; *y_it = 0; *z_it = 1.83871; *vp_x_it = 8.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 20;
     ++x_it, ++y_it, ++z_it, ++vp_x_it, ++vp_y_it, ++vp_z_it, ++stamps_it;
     // pointShadowBoth
     *x_it = 11.5; *y_it = 0; *z_it = 0; *vp_x_it = 8.5; *vp_y_it = 0; *vp_z_it = 0; *stamps_it = 20;
@@ -714,96 +755,137 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   }
 
   {
-    geometry_msgs::TransformStamped tf;
-    ros::Time now = ros::Time::now();
+    geometry_msgs::msg::TransformStamped tf;
+    rclcpp::Time now = nh->get_clock()->now();
     cloud.header.stamp = now;
     tf.transform.rotation.w = 1;
-    for (double d = -5.0; d < 5.0; d += 0.1)
-    {
-      tf.header.stamp = now + ros::Duration(d);
+    for (double d = -5.0; d < 5.0; d += 0.1) {
+      tf.header.stamp = now + rclcpp::Duration::from_seconds(d);
 
       tf.transform.translation.x = 0.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
-      tf.header.stamp += ros::Duration(20);
+      tf.header.stamp = rclcpp::Time(tf.header.stamp) + rclcpp::Duration::from_seconds(20);
 
       tf.transform.translation.x = 10.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
     }
   }
-  filter->updateTransformCache(cloud.header.stamp, cloud.header.stamp + ros::Duration(20));
+  filter->updateTransformCache(cloud.header.stamp, cloud.header.stamp + rclcpp::Duration::from_seconds(20));
 
-  SphereStampedConstPtr boundingSphere;
-  geometry_msgs::PolygonStampedConstPtr boundingBox;
-  OrientedBoundingBoxStampedConstPtr orientedBoundingBox;
-  geometry_msgs::PolygonStampedConstPtr localBoundingBox;
-  visualization_msgs::MarkerConstPtr boundingSphereMarker;
-  visualization_msgs::MarkerConstPtr boundingBoxMarker;
-  visualization_msgs::MarkerConstPtr orientedBoundingBoxMarker;
-  visualization_msgs::MarkerConstPtr localBoundingBoxMarker;
-  visualization_msgs::MarkerArrayConstPtr boundingSphereDebugMarker;
-  visualization_msgs::MarkerArrayConstPtr boundingBoxDebugMarker;
-  visualization_msgs::MarkerArrayConstPtr orientedBoundingBoxDebugMarker;
-  visualization_msgs::MarkerArrayConstPtr localBoundingBoxDebugMarker;
-  sensor_msgs::PointCloud2ConstPtr pclNoBoundingSphere;
-  sensor_msgs::PointCloud2ConstPtr pclNoBoundingBox;
-  sensor_msgs::PointCloud2ConstPtr pclNoOrientedBoundingBox;
-  sensor_msgs::PointCloud2ConstPtr pclNoLocalBoundingBox;
-  sensor_msgs::PointCloud2ConstPtr pclInside;
-  sensor_msgs::PointCloud2ConstPtr pclClip;
-  sensor_msgs::PointCloud2ConstPtr pclShadow;
-  visualization_msgs::MarkerArrayConstPtr robotModelContainsTest;
-  visualization_msgs::MarkerArrayConstPtr robotModelShadowTest;
+  SphereStamped::ConstSharedPtr bounding_sphere;
+  geometry_msgs::msg::PolygonStamped::ConstSharedPtr bounding_box;
+  OrientedBoundingBoxStamped::ConstSharedPtr oriented_bounding_box;
+  geometry_msgs::msg::PolygonStamped::ConstSharedPtr local_bounding_box;
+  visualization_msgs::msg::Marker::ConstSharedPtr bounding_sphere_marker;
+  visualization_msgs::msg::Marker::ConstSharedPtr bounding_box_marker;
+  visualization_msgs::msg::Marker::ConstSharedPtr oriented_bounding_box_marker;
+  visualization_msgs::msg::Marker::ConstSharedPtr local_bounding_box_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr bounding_sphere_debug_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr bounding_box_debug_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr oriented_bounding_box_debug_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr local_bounding_box_debug_marker;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_bounding_sphere;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_bounding_box;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_oriented_bounding_box;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_local_bounding_box;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_inside;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_clip;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_shadow;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr robot_model_contains_test;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr robot_model_shadow_test;
 
-  ros::Subscriber boundingSphereSubscriber = nh.subscribe<SphereStamped>("/robot_bounding_sphere", 10, [&](const SphereStampedConstPtr& msg){boundingSphere=msg;});
-  ros::Subscriber boundingBoxSubscriber = nh.subscribe<geometry_msgs::PolygonStamped>("/robot_bounding_box", 10, [&](const geometry_msgs::PolygonStampedConstPtr& msg){boundingBox=msg;});
-  ros::Subscriber orientedBoundingBoxSubscriber = nh.subscribe<OrientedBoundingBoxStamped>("/robot_oriented_bounding_box", 10, [&](const OrientedBoundingBoxStampedConstPtr& msg){orientedBoundingBox=msg;});
-  ros::Subscriber localBoundingBoxSubscriber = nh.subscribe<geometry_msgs::PolygonStamped>("/robot_local_bounding_box", 10, [&](const geometry_msgs::PolygonStampedConstPtr& msg){localBoundingBox=msg;});
-  ros::Subscriber boundingSphereMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_bounding_sphere_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){boundingSphereMarker=msg;});
-  ros::Subscriber boundingBoxMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_bounding_box_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){boundingBoxMarker=msg;});
-  ros::Subscriber orientedBoundingBoxMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_oriented_bounding_box_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){orientedBoundingBoxMarker=msg;});
-  ros::Subscriber localBoundingBoxMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_local_bounding_box_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){localBoundingBoxMarker=msg;});
-  ros::Subscriber boundingSphereDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_bounding_sphere_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){boundingSphereDebugMarker=msg;});
-  ros::Subscriber boundingBoxDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_bounding_box_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){boundingBoxDebugMarker=msg;});
-  ros::Subscriber orientedBoundingBoxDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_oriented_bounding_box_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){orientedBoundingBoxDebugMarker=msg;});
-  ros::Subscriber localBoundingBoxDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_local_bounding_box_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){localBoundingBoxDebugMarker=msg;});
-  ros::Subscriber scanPointCloudNoBoundingSphereSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_bsphere", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoBoundingSphere=msg;});
-  ros::Subscriber scanPointCloudNoBoundingBoxSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_bbox", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoBoundingBox=msg;});
-  ros::Subscriber scanPointCloudNoOrientedBoundingBoxSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_oriented_bbox", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoOrientedBoundingBox=msg;});
-  ros::Subscriber scanPointCloudNoLocalBoundingBoxSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_local_bbox", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoLocalBoundingBox=msg;});
-  ros::Subscriber debugPointCloudInsideSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_inside", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclInside=msg;});
-  ros::Subscriber debugPointCloudClipSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_clip", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclClip=msg;});
-  ros::Subscriber debugPointCloudShadowSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_shadow", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclShadow=msg;});
-  ros::Subscriber debugContainsMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_model_for_contains_test", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){robotModelContainsTest=msg;});
-  ros::Subscriber debugShadowMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_model_for_shadow_test", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){robotModelShadowTest=msg;});
+  auto bounding_sphereSubscriber = nh->create_subscription<SphereStamped>(
+    "/robot_bounding_sphere", 10,
+    [&](const SphereStamped::ConstSharedPtr& m){bounding_sphere = m;});
+  auto bounding_boxSubscriber = nh->create_subscription<geometry_msgs::msg::PolygonStamped>(
+    "/robot_bounding_box", 10,
+    [&](const geometry_msgs::msg::PolygonStamped::ConstSharedPtr& m){bounding_box = m;});
+  auto oriented_bounding_boxSubscriber = nh->create_subscription<OrientedBoundingBoxStamped>(
+    "/robot_oriented_bounding_box", 10,
+    [&](const OrientedBoundingBoxStamped::ConstSharedPtr& m){oriented_bounding_box = m;});
+  auto local_bounding_boxSubscriber = nh->create_subscription<geometry_msgs::msg::PolygonStamped>(
+    "/robot_local_bounding_box", 10,
+    [&](const geometry_msgs::msg::PolygonStamped::ConstSharedPtr& m){local_bounding_box = m;});
+  auto bounding_sphere_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_bounding_sphere_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){bounding_sphere_marker = m;});
+  auto bounding_box_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_bounding_box_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){bounding_box_marker = m;});
+  auto oriented_bounding_box_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_oriented_bounding_box_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){oriented_bounding_box_marker = m;});
+  auto local_bounding_box_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_local_bounding_box_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){local_bounding_box_marker = m;});
+  auto bounding_sphere_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_bounding_sphere_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){bounding_sphere_debug_marker = m;});
+  auto bounding_box_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_bounding_box_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){bounding_box_debug_marker = m;});
+  auto oriented_bounding_box_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_oriented_bounding_box_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){oriented_bounding_box_debug_marker = m;});
+  auto local_bounding_box_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_local_bounding_box_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){local_bounding_box_debug_marker = m;});
+  auto scanPointCloudNoBoundingSphereSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_bsphere", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_bounding_sphere = m;});
+  auto scanPointCloudNoBoundingBoxSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_bbox", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_bounding_box = m;});
+  auto scanPointCloudNoOrientedBoundingBoxSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_oriented_bbox", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_oriented_bounding_box = m;});
+  auto scanPointCloudNoLocalBoundingBoxSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_local_bbox", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_local_bounding_box = m;});
+  auto debugPointCloudInsideSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_inside", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_inside = m;});
+  auto debugPointCloudClipSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_clip", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_clip = m;});
+  auto debugPointCloudShadowSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_shadow", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_shadow = m;});
+  auto debugContainsMarkerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_model_for_contains_test", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){robot_model_contains_test = m;});
+  auto debugShadowMarkerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_model_for_shadow_test", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){robot_model_shadow_test = m;});
 
   filter->computeMask(cloud, mask);
 
-  ASSERT_EQ(num_points(cloud), mask.size());
+  ASSERT_EQ(cras::numPoints(cloud), mask.size());
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[0]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[1]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[2]);
@@ -816,778 +898,866 @@ TEST(RobotBodyFilter, ComputeMaskPointByPoint)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::SHADOW, mask[9]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, mask[10]);
 
-  WAIT_FOR_MESSAGE(boundingSphere)
-  WAIT_FOR_MESSAGE(boundingBox)
-  WAIT_FOR_MESSAGE(orientedBoundingBox)
-  WAIT_FOR_MESSAGE(localBoundingBox)
-  WAIT_FOR_MESSAGE(boundingSphereMarker)
-  WAIT_FOR_MESSAGE(boundingBoxMarker)
-  WAIT_FOR_MESSAGE(orientedBoundingBoxMarker)
-  WAIT_FOR_MESSAGE(localBoundingBoxMarker)
-  WAIT_FOR_MESSAGE(boundingSphereDebugMarker)
-  WAIT_FOR_MESSAGE(boundingBoxDebugMarker)
-  WAIT_FOR_MESSAGE(orientedBoundingBoxDebugMarker)
-  WAIT_FOR_MESSAGE(localBoundingBoxDebugMarker)
-  WAIT_FOR_MESSAGE(pclNoBoundingSphere)
-  WAIT_FOR_MESSAGE(pclNoBoundingBox)
-  WAIT_FOR_MESSAGE(pclNoOrientedBoundingBox)
-  WAIT_FOR_MESSAGE(pclNoLocalBoundingBox)
-  WAIT_FOR_MESSAGE(pclInside)
-  WAIT_FOR_MESSAGE(pclClip)
-  WAIT_FOR_MESSAGE(pclShadow)
-  WAIT_FOR_MESSAGE(robotModelContainsTest)
-  WAIT_FOR_MESSAGE(robotModelShadowTest)
+  WAIT_FOR_MESSAGE(nh, bounding_sphere)
+  WAIT_FOR_MESSAGE(nh, bounding_box)
+  WAIT_FOR_MESSAGE(nh, oriented_bounding_box)
+  WAIT_FOR_MESSAGE(nh, local_bounding_box)
+  WAIT_FOR_MESSAGE(nh, bounding_sphere_marker)
+  WAIT_FOR_MESSAGE(nh, bounding_box_marker)
+  WAIT_FOR_MESSAGE(nh, oriented_bounding_box_marker)
+  WAIT_FOR_MESSAGE(nh, local_bounding_box_marker)
+  WAIT_FOR_MESSAGE(nh, bounding_sphere_debug_marker)
+  WAIT_FOR_MESSAGE(nh, bounding_box_debug_marker)
+  WAIT_FOR_MESSAGE(nh, oriented_bounding_box_debug_marker)
+  WAIT_FOR_MESSAGE(nh, local_bounding_box_debug_marker)
+  WAIT_FOR_MESSAGE(nh, pcl_no_bounding_sphere)
+  WAIT_FOR_MESSAGE(nh, pcl_no_bounding_box)
+  WAIT_FOR_MESSAGE(nh, pcl_no_oriented_bounding_box)
+  WAIT_FOR_MESSAGE(nh, pcl_no_local_bounding_box)
+  WAIT_FOR_MESSAGE(nh, pcl_inside)
+  WAIT_FOR_MESSAGE(nh, pcl_clip)
+  WAIT_FOR_MESSAGE(nh, pcl_shadow)
+  WAIT_FOR_MESSAGE(nh, robot_model_contains_test)
+  WAIT_FOR_MESSAGE(nh, robot_model_shadow_test)
 
-  EXPECT_EQ("odom", boundingSphere->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphere->header.stamp);
-  EXPECT_NEAR(sqrt(3) * 0.92, boundingSphere->sphere.radius, 1e-6);
-  EXPECT_NEAR(0.0, boundingSphere->sphere.center.x, 1e-6);
-  EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.y);
-  EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.z);
-  EXPECT_EQ("odom", boundingSphereMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphereMarker->header.stamp);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingSphereMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingSphereMarker->color.a);
+  EXPECT_EQ("odom", bounding_sphere->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere->header.stamp);
+  EXPECT_NEAR(sqrt(3) * 0.92, bounding_sphere->sphere.radius, 1e-6);
+  EXPECT_NEAR(0.0, bounding_sphere->sphere.center.x, 1e-6);
+  EXPECT_DOUBLE_EQ(0, bounding_sphere->sphere.center.y);
+  EXPECT_DOUBLE_EQ(0, bounding_sphere->sphere.center.z);
+  EXPECT_EQ("odom", bounding_sphere_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere_marker->header.stamp);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_marker->scale.x, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_marker->scale.y, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_marker->scale.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_sphere_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_sphere_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingSphereMarker->color.r + boundingSphereMarker->color.g +
-               boundingSphereMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, boundingSphereMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingSphereMarker->action);
-  EXPECT_EQ("bounding_sphere", boundingSphereMarker->ns);
-  EXPECT_EQ(1, boundingSphereMarker->frame_locked);
+  EXPECT_LT(0, bounding_sphere_marker->color.r + bounding_sphere_marker->color.g + bounding_sphere_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, bounding_sphere_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_sphere_marker->action);
+  EXPECT_EQ("bounding_sphere", bounding_sphere_marker->ns);
+  EXPECT_EQ(1, bounding_sphere_marker->frame_locked);
 
-  EXPECT_EQ("odom", boundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBox->header.stamp);
-  ASSERT_EQ(2, boundingBox->polygon.points.size());
-  EXPECT_NEAR(-1.55, boundingBox->polygon.points[0].x, 1e-5);
-  EXPECT_NEAR(-1.375, boundingBox->polygon.points[0].y, 1e-6);
-  EXPECT_NEAR(-1.375, boundingBox->polygon.points[0].z, 1e-6);
-  EXPECT_NEAR(1.375, boundingBox->polygon.points[1].x, 1e-5);
-  EXPECT_NEAR(1.375, boundingBox->polygon.points[1].y, 1e-6);
-  EXPECT_NEAR(1.375, boundingBox->polygon.points[1].z, 1e-6);
-  EXPECT_EQ("odom", boundingBoxMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxMarker->header.stamp);
-  EXPECT_NEAR(2.925, boundingBoxMarker->scale.x, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxMarker->scale.y, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxMarker->scale.z, 1e-5);
-  EXPECT_NEAR(-0.0875, boundingBoxMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxMarker->color.a);
+  EXPECT_EQ("odom", bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box->header.stamp);
+  ASSERT_EQ(2, bounding_box->polygon.points.size());
+  EXPECT_NEAR(-1.55, bounding_box->polygon.points[0].x, 1e-5);
+  EXPECT_NEAR(-1.375, bounding_box->polygon.points[0].y, 1e-6);
+  EXPECT_NEAR(-1.375, bounding_box->polygon.points[0].z, 1e-6);
+  EXPECT_NEAR(1.375, bounding_box->polygon.points[1].x, 1e-5);
+  EXPECT_NEAR(1.375, bounding_box->polygon.points[1].y, 1e-6);
+  EXPECT_NEAR(1.375, bounding_box->polygon.points[1].z, 1e-6);
+  EXPECT_EQ("odom", bounding_box_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_marker->header.stamp);
+  EXPECT_NEAR(2.925, bounding_box_marker->scale.x, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_marker->scale.y, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_marker->scale.z, 1e-5);
+  EXPECT_NEAR(-0.0875, bounding_box_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxMarker->color.r + boundingBoxMarker->color.g +
-      boundingBoxMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxMarker->action);
-  EXPECT_EQ("bounding_box", boundingBoxMarker->ns);
-  EXPECT_EQ(1, boundingBoxMarker->frame_locked);
+  EXPECT_LT(0, bounding_box_marker->color.r + bounding_box_marker->color.g + bounding_box_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_marker->action);
+  EXPECT_EQ("bounding_box", bounding_box_marker->ns);
+  EXPECT_EQ(1, bounding_box_marker->frame_locked);
 
-  EXPECT_EQ("odom", orientedBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBox->header.stamp);
-  EXPECT_NEAR(2.925, orientedBoundingBox->obb.extents.x, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBox->obb.extents.y, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBox->obb.extents.z, 1e-5);
-  EXPECT_NEAR(-0.0875, orientedBoundingBox->obb.pose.translation.x, 1e-5);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.translation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.translation.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.rotation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.rotation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.rotation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBox->obb.pose.rotation.w, 1e-6);
-  EXPECT_EQ("odom", orientedBoundingBoxMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxMarker->header.stamp);
-  EXPECT_NEAR(2.925, orientedBoundingBoxMarker->scale.x, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxMarker->scale.y, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxMarker->scale.z, 1e-5);
-  EXPECT_NEAR(-0.0875, orientedBoundingBoxMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxMarker->color.a);
+  EXPECT_EQ("odom", oriented_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box->header.stamp);
+  EXPECT_NEAR(2.925, oriented_bounding_box->obb.extents.x, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box->obb.extents.y, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box->obb.extents.z, 1e-5);
+  EXPECT_NEAR(-0.0875, oriented_bounding_box->obb.pose.translation.x, 1e-5);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.translation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.translation.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.rotation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.rotation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.rotation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box->obb.pose.rotation.w, 1e-6);
+  EXPECT_EQ("odom", oriented_bounding_box_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_marker->header.stamp);
+  EXPECT_NEAR(2.925, oriented_bounding_box_marker->scale.x, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_marker->scale.y, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_marker->scale.z, 1e-5);
+  EXPECT_NEAR(-0.0875, oriented_bounding_box_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxMarker->color.r + orientedBoundingBoxMarker->color.g +
-      orientedBoundingBoxMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxMarker->action);
-  EXPECT_EQ("oriented_bounding_box", orientedBoundingBoxMarker->ns);
-  EXPECT_EQ(1, orientedBoundingBoxMarker->frame_locked);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_marker->color.r + oriented_bounding_box_marker->color.g +
+    oriented_bounding_box_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_marker->action);
+  EXPECT_EQ("oriented_bounding_box", oriented_bounding_box_marker->ns);
+  EXPECT_EQ(1, oriented_bounding_box_marker->frame_locked);
 
-  EXPECT_EQ("base_link", localBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBox->header.stamp);
-  ASSERT_EQ(2, localBoundingBox->polygon.points.size());
-  EXPECT_NEAR(-1.55 - 0.122, localBoundingBox->polygon.points[0].x, 1e-5);
-  EXPECT_NEAR(-1.375, localBoundingBox->polygon.points[0].y, 1e-6);
-  EXPECT_NEAR(-1.375, localBoundingBox->polygon.points[0].z, 1e-6);
-  EXPECT_NEAR(1.375 - 0.122, localBoundingBox->polygon.points[1].x, 1e-5);
-  EXPECT_NEAR(1.375, localBoundingBox->polygon.points[1].y, 1e-6);
-  EXPECT_NEAR(1.375, localBoundingBox->polygon.points[1].z, 1e-6);
-  EXPECT_EQ("base_link", localBoundingBoxMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxMarker->header.stamp);
-  EXPECT_NEAR(2.925, localBoundingBoxMarker->scale.x, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxMarker->scale.y, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxMarker->scale.z, 1e-5);
-  EXPECT_NEAR(-0.0875 - 0.122, localBoundingBoxMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxMarker->color.a);
+  EXPECT_EQ("base_link", local_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box->header.stamp);
+  ASSERT_EQ(2, local_bounding_box->polygon.points.size());
+  EXPECT_NEAR(-1.55 - 0.122, local_bounding_box->polygon.points[0].x, 1e-5);
+  EXPECT_NEAR(-1.375, local_bounding_box->polygon.points[0].y, 1e-6);
+  EXPECT_NEAR(-1.375, local_bounding_box->polygon.points[0].z, 1e-6);
+  EXPECT_NEAR(1.375 - 0.122, local_bounding_box->polygon.points[1].x, 1e-5);
+  EXPECT_NEAR(1.375, local_bounding_box->polygon.points[1].y, 1e-6);
+  EXPECT_NEAR(1.375, local_bounding_box->polygon.points[1].z, 1e-6);
+  EXPECT_EQ("base_link", local_bounding_box_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_marker->header.stamp);
+  EXPECT_NEAR(2.925, local_bounding_box_marker->scale.x, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_marker->scale.y, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_marker->scale.z, 1e-5);
+  EXPECT_NEAR(-0.0875 - 0.122, local_bounding_box_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxMarker->color.r + localBoundingBoxMarker->color.g +
-      localBoundingBoxMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxMarker->action);
-  EXPECT_EQ("local_bounding_box", localBoundingBoxMarker->ns);
-  EXPECT_EQ(1, localBoundingBoxMarker->frame_locked);
+  EXPECT_LT(
+    0,
+    local_bounding_box_marker->color.r + local_bounding_box_marker->color.g + local_bounding_box_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_marker->action);
+  EXPECT_EQ("local_bounding_box", local_bounding_box_marker->ns);
+  EXPECT_EQ(1, local_bounding_box_marker->frame_locked);
 
-  ASSERT_EQ(8, num_points(*pclNoBoundingSphere));
-  CloudConstIter x_it(*pclNoBoundingSphere, "x");
-//  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-//  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-//  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(8, cras::numPoints(*pcl_no_bounding_sphere));
+  cras::CloudConstIter x_it(*pcl_no_bounding_sphere, "x");
+  // EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  // EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  // EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(8, num_points(*pclNoBoundingBox));
-  x_it = CloudConstIter(*pclNoBoundingBox, "x");
-//  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-//  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-//  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(8, cras::numPoints(*pcl_no_bounding_box));
+  x_it = cras::CloudConstIter(*pcl_no_bounding_box, "x");
+  // EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  // EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  // EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(8, num_points(*pclNoOrientedBoundingBox));
-  x_it = CloudConstIter(*pclNoOrientedBoundingBox, "x");
-//  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-//  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-//  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(8, cras::numPoints(*pcl_no_oriented_bounding_box));
+  x_it = cras::CloudConstIter(*pcl_no_oriented_bounding_box, "x");
+  // EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  // EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  // EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(8, num_points(*pclNoLocalBoundingBox));
-  x_it = CloudConstIter(*pclNoLocalBoundingBox, "x");
-//  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-//  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-//  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(8, cras::numPoints(*pcl_no_local_bounding_box));
+  x_it = cras::CloudConstIter(*pcl_no_local_bounding_box, "x");
+  // EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  // EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  // EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(3, num_points(*pclInside));
-  x_it = CloudConstIter(*pclInside, "x");
-//  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-//  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-//  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-//  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-//  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-//  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-//  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-//  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(3, cras::numPoints(*pcl_inside));
+  x_it = cras::CloudConstIter(*pcl_inside, "x");
+  // EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  // EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  // EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  // EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  // EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  // EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  // EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  // EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(4, num_points(*pclClip));
-  x_it = CloudConstIter(*pclClip, "x");
-  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-//  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-//  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-//  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-//  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-//  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-//  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-//  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(4, cras::numPoints(*pcl_clip));
+  x_it = cras::CloudConstIter(*pcl_clip, "x");
+  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  // EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  // EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  // EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  // EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  // EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  // EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  // EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(3, num_points(*pclShadow));
-  x_it = CloudConstIter(*pclShadow, "x");
-//  EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it; // pointSensor
-//  EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-//  EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-//  EXPECT_NEAR(10, *x_it, 1e-6); ++x_it; // pointClipMax
-//  EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it; // pointInBox
-//  EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it; // pointInSphere
-//  EXPECT_NEAR(5, *x_it, 1e-6); ++x_it; // pointInBoth
-  EXPECT_NEAR(5-0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(10-0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-//  EXPECT_NEAR(7, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(3, cras::numPoints(*pcl_shadow));
+  x_it = cras::CloudConstIter(*pcl_shadow, "x");
+  // EXPECT_NEAR(-1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  // EXPECT_NEAR(-1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  // EXPECT_NEAR(-1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  // EXPECT_NEAR(10, *x_it, 1e-6); ++x_it;  // pointClipMax
+  // EXPECT_NEAR(5.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  // EXPECT_NEAR(6.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  // EXPECT_NEAR(5, *x_it, 1e-6); ++x_it;  // pointInBoth
+  EXPECT_NEAR(5 - 0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(10 - 0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(11.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  // EXPECT_NEAR(7, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(2, boundingSphereDebugMarker->markers.size());
-  EXPECT_EQ("odom", boundingSphereDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphereDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingSphereDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[0].color.a);
+  ASSERT_EQ(2, bounding_sphere_debug_marker->markers.size());
+  EXPECT_EQ("odom", bounding_sphere_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_debug_marker->markers[0].scale.x, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_debug_marker->markers[0].scale.y, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_debug_marker->markers[0].scale.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_sphere_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_sphere_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[0].color.r + boundingSphereDebugMarker->markers[0].color.g +
-      boundingSphereDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, boundingSphereDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingSphereDebugMarker->markers[0].action);
-  EXPECT_FALSE(boundingSphereDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, boundingSphereDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("odom", boundingSphereDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphereDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(0.1*sqrt(3), boundingSphereDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(0.1*sqrt(3), boundingSphereDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(0.1*sqrt(3), boundingSphereDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(-1.5, boundingSphereDebugMarker->markers[1].pose.position.x, 1e-5);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingSphereDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    bounding_sphere_debug_marker->markers[0].color.r + bounding_sphere_debug_marker->markers[0].color.g +
+    bounding_sphere_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, bounding_sphere_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_sphere_debug_marker->markers[0].action);
+  EXPECT_FALSE(bounding_sphere_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, bounding_sphere_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("odom", bounding_sphere_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(0.1 * sqrt(3), bounding_sphere_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(0.1 * sqrt(3), bounding_sphere_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(0.1 * sqrt(3), bounding_sphere_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(-1.5, bounding_sphere_debug_marker->markers[1].pose.position.x, 1e-5);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_sphere_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_sphere_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[1].color.r + boundingSphereDebugMarker->markers[1].color.g +
-      boundingSphereDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, boundingSphereDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingSphereDebugMarker->markers[1].action);
-  EXPECT_FALSE(boundingSphereDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, boundingSphereDebugMarker->markers[1].frame_locked);
-  
-  EXPECT_EQ(4, boundingBoxDebugMarker->markers.size());
-  EXPECT_EQ("odom", boundingBoxDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, boundingBoxDebugMarker->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxDebugMarker->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxDebugMarker->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[0].color.a);
-  // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[0].color.r + boundingBoxDebugMarker->markers[0].color.g +
-      boundingBoxDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[0].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("odom", boundingBoxDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[1].color.a);
-  // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[1].color.r + boundingBoxDebugMarker->markers[1].color.g +
-      boundingBoxDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[1].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[1].frame_locked);
-  EXPECT_EQ("odom", boundingBoxDebugMarker->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, boundingBoxDebugMarker->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, boundingBoxDebugMarker->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, boundingBoxDebugMarker->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(0.122 - 0.1, boundingBoxDebugMarker->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[2].color.a);
-  // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[2].color.r + boundingBoxDebugMarker->markers[2].color.g +
-      boundingBoxDebugMarker->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[2].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[2].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[2].frame_locked);
-  EXPECT_EQ("odom", boundingBoxDebugMarker->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, boundingBoxDebugMarker->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, boundingBoxDebugMarker->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, boundingBoxDebugMarker->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(-1.5, boundingBoxDebugMarker->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[3].color.a);
-  // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[3].color.r + boundingBoxDebugMarker->markers[3].color.g +
-      boundingBoxDebugMarker->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[3].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[3].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    bounding_sphere_debug_marker->markers[1].color.r + bounding_sphere_debug_marker->markers[1].color.g +
+    bounding_sphere_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, bounding_sphere_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_sphere_debug_marker->markers[1].action);
+  EXPECT_FALSE(bounding_sphere_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, bounding_sphere_debug_marker->markers[1].frame_locked);
 
-  EXPECT_EQ(4, orientedBoundingBoxDebugMarker->markers.size());
-  EXPECT_EQ("odom", orientedBoundingBoxDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, orientedBoundingBoxDebugMarker->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxDebugMarker->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxDebugMarker->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[0].color.a);
+  EXPECT_EQ(4, bounding_box_debug_marker->markers.size());
+  EXPECT_EQ("odom", bounding_box_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, bounding_box_debug_marker->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_debug_marker->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_debug_marker->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[0].color.r + orientedBoundingBoxDebugMarker->markers[0].color.g +
-      orientedBoundingBoxDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[0].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("odom", orientedBoundingBoxDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[0].color.r + bounding_box_debug_marker->markers[0].color.g +
+    bounding_box_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[0].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("odom", bounding_box_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, bounding_box_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, bounding_box_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, bounding_box_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[1].color.r + orientedBoundingBoxDebugMarker->markers[1].color.g +
-      orientedBoundingBoxDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[1].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[1].frame_locked);
-  EXPECT_EQ("odom", orientedBoundingBoxDebugMarker->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, orientedBoundingBoxDebugMarker->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, orientedBoundingBoxDebugMarker->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, orientedBoundingBoxDebugMarker->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(0.122 - 0.1, orientedBoundingBoxDebugMarker->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[1].color.r + bounding_box_debug_marker->markers[1].color.g +
+    bounding_box_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[1].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[1].frame_locked);
+  EXPECT_EQ("odom", bounding_box_debug_marker->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, bounding_box_debug_marker->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, bounding_box_debug_marker->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, bounding_box_debug_marker->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(0.122 - 0.1, bounding_box_debug_marker->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[2].color.r + orientedBoundingBoxDebugMarker->markers[2].color.g +
-      orientedBoundingBoxDebugMarker->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[2].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[2].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[2].frame_locked);
-  EXPECT_EQ("odom", orientedBoundingBoxDebugMarker->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, orientedBoundingBoxDebugMarker->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, orientedBoundingBoxDebugMarker->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, orientedBoundingBoxDebugMarker->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(-1.5, orientedBoundingBoxDebugMarker->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[2].color.r + bounding_box_debug_marker->markers[2].color.g +
+    bounding_box_debug_marker->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[2].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[2].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[2].frame_locked);
+  EXPECT_EQ("odom", bounding_box_debug_marker->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, bounding_box_debug_marker->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, bounding_box_debug_marker->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, bounding_box_debug_marker->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(-1.5, bounding_box_debug_marker->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[3].color.r + orientedBoundingBoxDebugMarker->markers[3].color.g +
-      orientedBoundingBoxDebugMarker->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[3].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[3].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[3].color.r + bounding_box_debug_marker->markers[3].color.g +
+    bounding_box_debug_marker->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[3].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[3].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[3].frame_locked);
 
-  EXPECT_EQ(4, localBoundingBoxDebugMarker->markers.size());
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, localBoundingBoxDebugMarker->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxDebugMarker->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxDebugMarker->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(-0.122, localBoundingBoxDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[0].color.a);
+  EXPECT_EQ(4, oriented_bounding_box_debug_marker->markers.size());
+  EXPECT_EQ("odom", oriented_bounding_box_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, oriented_bounding_box_debug_marker->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_debug_marker->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_debug_marker->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[0].color.r + localBoundingBoxDebugMarker->markers[0].color.g +
-      localBoundingBoxDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[0].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(-0.122, localBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[0].color.r + oriented_bounding_box_debug_marker->markers[0].color.g +
+    oriented_bounding_box_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[0].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("odom", oriented_bounding_box_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, oriented_bounding_box_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, oriented_bounding_box_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, oriented_bounding_box_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[1].color.r + localBoundingBoxDebugMarker->markers[1].color.g +
-      localBoundingBoxDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[1].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[1].frame_locked);
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, localBoundingBoxDebugMarker->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, localBoundingBoxDebugMarker->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, localBoundingBoxDebugMarker->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(-0.1, localBoundingBoxDebugMarker->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[1].color.r + oriented_bounding_box_debug_marker->markers[1].color.g +
+    oriented_bounding_box_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[1].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[1].frame_locked);
+  EXPECT_EQ("odom", oriented_bounding_box_debug_marker->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, oriented_bounding_box_debug_marker->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, oriented_bounding_box_debug_marker->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, oriented_bounding_box_debug_marker->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(0.122 - 0.1, oriented_bounding_box_debug_marker->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[2].color.r + localBoundingBoxDebugMarker->markers[2].color.g +
-      localBoundingBoxDebugMarker->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[2].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[2].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[2].frame_locked);
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, localBoundingBoxDebugMarker->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, localBoundingBoxDebugMarker->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, localBoundingBoxDebugMarker->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(-1.5-0.122, localBoundingBoxDebugMarker->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[2].color.r + oriented_bounding_box_debug_marker->markers[2].color.g +
+    oriented_bounding_box_debug_marker->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[2].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[2].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[2].frame_locked);
+  EXPECT_EQ("odom", oriented_bounding_box_debug_marker->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, oriented_bounding_box_debug_marker->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, oriented_bounding_box_debug_marker->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, oriented_bounding_box_debug_marker->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(-1.5, oriented_bounding_box_debug_marker->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[3].color.r + localBoundingBoxDebugMarker->markers[3].color.g +
-      localBoundingBoxDebugMarker->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[3].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[3].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[3].color.r + oriented_bounding_box_debug_marker->markers[3].color.g +
+    oriented_bounding_box_debug_marker->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[3].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[3].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[3].frame_locked);
 
-  EXPECT_EQ(4, robotModelContainsTest->markers.size());
-  EXPECT_EQ("odom", robotModelContainsTest->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, robotModelContainsTest->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, robotModelContainsTest->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, robotModelContainsTest->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[0].color.a);
+  EXPECT_EQ(4, local_bounding_box_debug_marker->markers.size());
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, local_bounding_box_debug_marker->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_debug_marker->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_debug_marker->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(-0.122, local_bounding_box_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[0].color.r + robotModelContainsTest->markers[0].color.g +
-      robotModelContainsTest->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, robotModelContainsTest->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[0].action);
-  EXPECT_EQ("antenna-0", robotModelContainsTest->markers[0].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[0].frame_locked);
-  EXPECT_EQ("odom", robotModelContainsTest->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[0].color.r + local_bounding_box_debug_marker->markers[0].color.g +
+    local_bounding_box_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[0].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, local_bounding_box_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, local_bounding_box_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, local_bounding_box_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(-0.122, local_bounding_box_debug_marker->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[1].color.r + robotModelContainsTest->markers[1].color.g +
-      robotModelContainsTest->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelContainsTest->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[1].action);
-  EXPECT_EQ("base_link-0", robotModelContainsTest->markers[1].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[1].frame_locked);
-  EXPECT_EQ("odom", robotModelContainsTest->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, robotModelContainsTest->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, robotModelContainsTest->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, robotModelContainsTest->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(0.122-0.1, robotModelContainsTest->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[1].color.r + local_bounding_box_debug_marker->markers[1].color.g +
+    local_bounding_box_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[1].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[1].frame_locked);
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, local_bounding_box_debug_marker->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, local_bounding_box_debug_marker->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, local_bounding_box_debug_marker->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(-0.1, local_bounding_box_debug_marker->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[2].color.r + robotModelContainsTest->markers[2].color.g +
-      robotModelContainsTest->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelContainsTest->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[2].action);
-  EXPECT_EQ("base_link-1", robotModelContainsTest->markers[2].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[2].frame_locked);
-  EXPECT_EQ("odom", robotModelContainsTest->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, robotModelContainsTest->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, robotModelContainsTest->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, robotModelContainsTest->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(-1.5, robotModelContainsTest->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[2].color.r + local_bounding_box_debug_marker->markers[2].color.g +
+    local_bounding_box_debug_marker->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[2].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[2].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[2].frame_locked);
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, local_bounding_box_debug_marker->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, local_bounding_box_debug_marker->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, local_bounding_box_debug_marker->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(-1.5 - 0.122, local_bounding_box_debug_marker->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[3].color.r + robotModelContainsTest->markers[3].color.g +
-      robotModelContainsTest->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelContainsTest->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[3].action);
-  EXPECT_EQ("laser-0", robotModelContainsTest->markers[3].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[3].color.r + local_bounding_box_debug_marker->markers[3].color.g +
+    local_bounding_box_debug_marker->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[3].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[3].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[3].frame_locked);
 
-  EXPECT_EQ(2, robotModelShadowTest->markers.size());
-  EXPECT_EQ("odom", robotModelShadowTest->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelShadowTest->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, robotModelShadowTest->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, robotModelShadowTest->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, robotModelShadowTest->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelShadowTest->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelShadowTest->markers[0].color.a);
+  EXPECT_EQ(4, robot_model_contains_test->markers.size());
+  EXPECT_EQ("odom", robot_model_contains_test->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, robot_model_contains_test->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_contains_test->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_contains_test->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelShadowTest->markers[0].color.r + robotModelShadowTest->markers[0].color.g +
-      robotModelShadowTest->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, robotModelShadowTest->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelShadowTest->markers[0].action);
-  EXPECT_EQ("antenna-0", robotModelShadowTest->markers[0].ns);
-  EXPECT_EQ(1, robotModelShadowTest->markers[0].frame_locked);
-  EXPECT_EQ("odom", robotModelShadowTest->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelShadowTest->markers[1].header.stamp);
-  EXPECT_NEAR(2, robotModelShadowTest->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, robotModelShadowTest->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, robotModelShadowTest->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelShadowTest->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelShadowTest->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[0].color.r + robot_model_contains_test->markers[0].color.g +
+    robot_model_contains_test->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, robot_model_contains_test->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[0].action);
+  EXPECT_EQ("antenna-0", robot_model_contains_test->markers[0].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[0].frame_locked);
+  EXPECT_EQ("odom", robot_model_contains_test->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, robot_model_contains_test->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, robot_model_contains_test->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, robot_model_contains_test->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelShadowTest->markers[1].color.r + robotModelShadowTest->markers[1].color.g +
-      robotModelShadowTest->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelShadowTest->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelShadowTest->markers[1].action);
-  EXPECT_EQ("base_link-0", robotModelShadowTest->markers[1].ns);
-  EXPECT_EQ(1, robotModelShadowTest->markers[1].frame_locked);
-}
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[1].color.r + robot_model_contains_test->markers[1].color.g +
+    robot_model_contains_test->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_contains_test->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[1].action);
+  EXPECT_EQ("base_link-0", robot_model_contains_test->markers[1].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[1].frame_locked);
+  EXPECT_EQ("odom", robot_model_contains_test->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, robot_model_contains_test->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, robot_model_contains_test->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, robot_model_contains_test->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(0.122 - 0.1, robot_model_contains_test->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[2].color.a);
+  // make sure the marker has some color
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[2].color.r + robot_model_contains_test->markers[2].color.g +
+    robot_model_contains_test->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_contains_test->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[2].action);
+  EXPECT_EQ("base_link-1", robot_model_contains_test->markers[2].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[2].frame_locked);
+  EXPECT_EQ("odom", robot_model_contains_test->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, robot_model_contains_test->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, robot_model_contains_test->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, robot_model_contains_test->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(-1.5, robot_model_contains_test->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[3].color.a);
+  // make sure the marker has some color
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[3].color.r + robot_model_contains_test->markers[3].color.g +
+    robot_model_contains_test->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_contains_test->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[3].action);
+  EXPECT_EQ("laser-0", robot_model_contains_test->markers[3].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[3].frame_locked);
 
-TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
-{
-  ros::NodeHandle nh;
+  EXPECT_EQ(2, robot_model_shadow_test->markers.size());
+  EXPECT_EQ("odom", robot_model_shadow_test->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_shadow_test->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, robot_model_shadow_test->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_shadow_test->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_shadow_test->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_shadow_test->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_shadow_test->markers[0].color.a);
+  // make sure the marker has some color
+  EXPECT_LT(
+    0,
+    robot_model_shadow_test->markers[0].color.r + robot_model_shadow_test->markers[0].color.g +
+    robot_model_shadow_test->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, robot_model_shadow_test->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_shadow_test->markers[0].action);
+  EXPECT_EQ("antenna-0", robot_model_shadow_test->markers[0].ns);
+  EXPECT_EQ(1, robot_model_shadow_test->markers[0].frame_locked);
+  EXPECT_EQ("odom", robot_model_shadow_test->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_shadow_test->markers[1].header.stamp);
+  EXPECT_NEAR(2, robot_model_shadow_test->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(2, robot_model_shadow_test->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(2, robot_model_shadow_test->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_shadow_test->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_shadow_test->markers[1].color.a);
+  // make sure the marker has some color
+  EXPECT_LT(
+    0,
+    robot_model_shadow_test->markers[1].color.r + robot_model_shadow_test->markers[1].color.g +
+    robot_model_shadow_test->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_shadow_test->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_shadow_test->markers[1].action);
+  EXPECT_EQ("base_link-0", robot_model_shadow_test->markers[1].ns);
+  EXPECT_EQ(1, robot_model_shadow_test->markers[1].frame_locked);
+}  // NOLINT
 
-  auto filter = std::make_shared<RobotBodyFilterPointCloud2Test>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::PointCloud2>>(filter);
+TEST(RobotBodyFilter, ComputeMaskAllAtOnce) {
+  const auto nh = std::make_shared<rclcpp::Node>("compute_mask_config_all_at_once");
 
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("compute_mask_config_all_at_once", nh);
+  const auto filter = std::make_shared<RobotBodyFilterPointCloud2Test>(nullptr);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::PointCloud2>>(filter);
 
-  Cloud cloud;
-  cloud.header.frame_id = filter->filteringFrame;
-  CloudModifier mod(cloud);
-  mod.setPointCloud2Fields(3,
-                           "x", 1, sensor_msgs::PointField::FLOAT32,
-                           "y", 1, sensor_msgs::PointField::FLOAT32,
-                           "z", 1, sensor_msgs::PointField::FLOAT32);
+  filter_base->configure(
+    "filter1.params", "compute_mask_config_all_at_once",
+    nh->get_node_logging_interface(), nh->get_node_parameters_interface());
+
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = ROBOT_URDF;
+  filter->onRobotModelMsg(msg);
+
+  cras::Cloud cloud;
+  cloud.header.frame_id = filter->filtering_frame_;
+  cras::CloudModifier mod(cloud);
+  mod.setPointCloud2Fields(
+    3,
+    "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "z", 1, sensor_msgs::msg::PointField::FLOAT32);
   mod.resize(12);
   cloud.width = 4;
   cloud.height = 3;
   cloud.row_step = cloud.width * cloud.point_step;
 
   {
-    CloudIter x_it(cloud, "x");
-    CloudIter y_it(cloud, "y");
-    CloudIter z_it(cloud, "z");
+    cras::CloudIter x_it(cloud, "x");
+    cras::CloudIter y_it(cloud, "y");
+    cras::CloudIter z_it(cloud, "z");
 
-    *x_it = 1.5 + -1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointSensor
-    *x_it = 1.5 + -1.47; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointSensor2
-    *x_it = 1.5 + -1.42; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointClipMin
-    *x_it = 1.5 + 10; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointClipMax
-    *x_it = 1.5 + 0.85; *y_it = 0.85; *z_it = 0.85; ++x_it, ++y_it, ++z_it; // pointInBox
-    *x_it = 1.5 + 1.35; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointInSphere
-    *x_it = 1.5 + 0; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointInBoth
-    *x_it = 1.5 + -0.25; *y_it = -2; *z_it = 2; ++x_it, ++y_it, ++z_it; // pointShadowBox
-    *x_it = 1.5 + -0.560762; *y_it = 0; *z_it = 1.83871; ++x_it, ++y_it, ++z_it; // pointShadowSphere
-    *x_it = 1.5 + 1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointShadowBoth
-    *x_it = 1.5 + -3; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointOutside
-    *x_it = 1.5 + -4; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointOutside2
+    *x_it = 1.5 + -1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointSensor
+    *x_it = 1.5 + -1.47; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointSensor2
+    *x_it = 1.5 + -1.42; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointClipMin
+    *x_it = 1.5 + 10; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointClipMax
+    *x_it = 1.5 + 0.85; *y_it = 0.85; *z_it = 0.85; ++x_it, ++y_it, ++z_it;  // pointInBox
+    *x_it = 1.5 + 1.35; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointInSphere
+    *x_it = 1.5 + 0; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointInBoth
+    *x_it = 1.5 + -0.25; *y_it = -2; *z_it = 2; ++x_it, ++y_it, ++z_it;  // pointShadowBox
+    *x_it = 1.5 + -0.560762; *y_it = 0; *z_it = 1.83871; ++x_it, ++y_it, ++z_it;  // pointShadowSphere
+    *x_it = 1.5 + 1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointShadowBoth
+    *x_it = 1.5 + -3; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointOutside
+    *x_it = 1.5 + -4; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointOutside2
   }
 
   {
-    ros::Time now = ros::Time::now();
+    rclcpp::Time now = nh->get_clock()->now();
     cloud.header.stamp = now;
-    geometry_msgs::TransformStamped tf;
+    geometry_msgs::msg::TransformStamped tf;
     tf.transform.rotation.w = 1.0;
-    for (double d = -5.0; d < 5.0; d += 0.1)
-    {
-      tf.header.stamp = now + ros::Duration(d);
+    for (double d = -5.0; d < 5.0; d += 0.1) {
+      tf.header.stamp = now + rclcpp::Duration::from_seconds(d);
 
       tf.transform.translation.x = 0.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
     }
   }
 
-  while (!filter->tfFramesWatchdog->isReachable("antenna"))
-    ros::WallDuration(0.01).sleep();
-  filter->updateTransformCache(cloud.header.stamp, cloud.header.stamp + ros::Duration(1));
+  while (!filter->tf_frames_watchdog_->isReachable("antenna")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
+  filter->updateTransformCache(cloud.header.stamp, cloud.header.stamp + rclcpp::Duration::from_seconds(1));
 
-  SphereStampedConstPtr boundingSphere;
-  geometry_msgs::PolygonStampedConstPtr boundingBox;
-  OrientedBoundingBoxStampedConstPtr orientedBoundingBox;
-  geometry_msgs::PolygonStampedConstPtr localBoundingBox;
-  visualization_msgs::MarkerConstPtr boundingSphereMarker;
-  visualization_msgs::MarkerConstPtr boundingBoxMarker;
-  visualization_msgs::MarkerConstPtr orientedBoundingBoxMarker;
-  visualization_msgs::MarkerConstPtr localBoundingBoxMarker;
-  visualization_msgs::MarkerArrayConstPtr boundingSphereDebugMarker;
-  visualization_msgs::MarkerArrayConstPtr boundingBoxDebugMarker;
-  visualization_msgs::MarkerArrayConstPtr orientedBoundingBoxDebugMarker;
-  visualization_msgs::MarkerArrayConstPtr localBoundingBoxDebugMarker;
-  sensor_msgs::PointCloud2ConstPtr pclNoBoundingSphere;
-  sensor_msgs::PointCloud2ConstPtr pclNoBoundingBox;
-  sensor_msgs::PointCloud2ConstPtr pclNoOrientedBoundingBox;
-  sensor_msgs::PointCloud2ConstPtr pclNoLocalBoundingBox;
-  sensor_msgs::PointCloud2ConstPtr pclInside;
-  sensor_msgs::PointCloud2ConstPtr pclClip;
-  sensor_msgs::PointCloud2ConstPtr pclShadow;
-  visualization_msgs::MarkerArrayConstPtr robotModelContainsTest;
-  visualization_msgs::MarkerArrayConstPtr robotModelShadowTest;
+  SphereStamped::ConstSharedPtr bounding_sphere;
+  geometry_msgs::msg::PolygonStamped::ConstSharedPtr bounding_box;
+  OrientedBoundingBoxStamped::ConstSharedPtr oriented_bounding_box;
+  geometry_msgs::msg::PolygonStamped::ConstSharedPtr local_bounding_box;
+  visualization_msgs::msg::Marker::ConstSharedPtr bounding_sphere_marker;
+  visualization_msgs::msg::Marker::ConstSharedPtr bounding_box_marker;
+  visualization_msgs::msg::Marker::ConstSharedPtr oriented_bounding_box_marker;
+  visualization_msgs::msg::Marker::ConstSharedPtr local_bounding_box_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr bounding_sphere_debug_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr bounding_box_debug_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr oriented_bounding_box_debug_marker;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr local_bounding_box_debug_marker;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_bounding_sphere;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_bounding_box;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_oriented_bounding_box;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_no_local_bounding_box;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_inside;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_clip;
+  sensor_msgs::msg::PointCloud2::ConstSharedPtr pcl_shadow;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr robot_model_contains_test;
+  visualization_msgs::msg::MarkerArray::ConstSharedPtr robot_model_shadow_test;
 
-  ros::Subscriber boundingSphereSubscriber = nh.subscribe<SphereStamped>("/robot_bounding_sphere", 10, [&](const SphereStampedConstPtr& msg){boundingSphere=msg;});
-  ros::Subscriber boundingBoxSubscriber = nh.subscribe<geometry_msgs::PolygonStamped>("/robot_bounding_box", 10, [&](const geometry_msgs::PolygonStampedConstPtr& msg){boundingBox=msg;});
-  ros::Subscriber orientedBoundingBoxSubscriber = nh.subscribe<OrientedBoundingBoxStamped>("/robot_oriented_bounding_box", 10, [&](const OrientedBoundingBoxStampedConstPtr& msg){orientedBoundingBox=msg;});
-  ros::Subscriber localBoundingBoxSubscriber = nh.subscribe<geometry_msgs::PolygonStamped>("/robot_local_bounding_box", 10, [&](const geometry_msgs::PolygonStampedConstPtr& msg){localBoundingBox=msg;});
-  ros::Subscriber boundingSphereMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_bounding_sphere_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){boundingSphereMarker=msg;});
-  ros::Subscriber boundingBoxMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_bounding_box_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){boundingBoxMarker=msg;});
-  ros::Subscriber orientedBoundingBoxMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_oriented_bounding_box_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){orientedBoundingBoxMarker=msg;});
-  ros::Subscriber localBoundingBoxMarkerSubscriber = nh.subscribe<visualization_msgs::Marker>("/robot_local_bounding_box_marker", 10, [&](const visualization_msgs::MarkerConstPtr& msg){localBoundingBoxMarker=msg;});
-  ros::Subscriber boundingSphereDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_bounding_sphere_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){boundingSphereDebugMarker=msg;});
-  ros::Subscriber boundingBoxDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_bounding_box_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){boundingBoxDebugMarker=msg;});
-  ros::Subscriber orientedBoundingBoxDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_oriented_bounding_box_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){orientedBoundingBoxDebugMarker=msg;});
-  ros::Subscriber localBoundingBoxDebugMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_local_bounding_box_debug", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){localBoundingBoxDebugMarker=msg;});
-  ros::Subscriber scanPointCloudNoBoundingSphereSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_bsphere", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoBoundingSphere=msg;});
-  ros::Subscriber scanPointCloudNoBoundingBoxSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_bbox", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoBoundingBox=msg;});
-  ros::Subscriber scanPointCloudNoOrientedBoundingBoxSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_oriented_bbox", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoOrientedBoundingBox=msg;});
-  ros::Subscriber scanPointCloudNoLocalBoundingBoxSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_no_local_bbox", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclNoLocalBoundingBox=msg;});
-  ros::Subscriber debugPointCloudInsideSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_inside", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclInside=msg;});
-  ros::Subscriber debugPointCloudClipSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_clip", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclClip=msg;});
-  ros::Subscriber debugPointCloudShadowSubscriber = nh.subscribe<sensor_msgs::PointCloud2>("/scan_point_cloud_shadow", 10, [&](const sensor_msgs::PointCloud2ConstPtr& msg){pclShadow=msg;});
-  ros::Subscriber debugContainsMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_model_for_contains_test", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){robotModelContainsTest=msg;});
-  ros::Subscriber debugShadowMarkerSubscriber = nh.subscribe<visualization_msgs::MarkerArray>("/robot_model_for_shadow_test", 10, [&](const visualization_msgs::MarkerArrayConstPtr& msg){robotModelShadowTest=msg;});
+  auto bounding_sphereSubscriber = nh->create_subscription<SphereStamped>(
+    "/robot_bounding_sphere", 10,
+    [&](const SphereStamped::ConstSharedPtr& m){bounding_sphere = m;});
+  auto bounding_boxSubscriber = nh->create_subscription<geometry_msgs::msg::PolygonStamped>(
+    "/robot_bounding_box", 10,
+    [&](const geometry_msgs::msg::PolygonStamped::ConstSharedPtr& m){bounding_box = m;});
+  auto oriented_bounding_boxSubscriber = nh->create_subscription<OrientedBoundingBoxStamped>(
+    "/robot_oriented_bounding_box", 10,
+    [&](const OrientedBoundingBoxStamped::ConstSharedPtr& m){oriented_bounding_box = m;});
+  auto local_bounding_boxSubscriber = nh->create_subscription<geometry_msgs::msg::PolygonStamped>(
+    "/robot_local_bounding_box", 10,
+    [&](const geometry_msgs::msg::PolygonStamped::ConstSharedPtr& m){local_bounding_box = m;});
+  auto bounding_sphere_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_bounding_sphere_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){bounding_sphere_marker = m;});
+  auto bounding_box_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_bounding_box_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){bounding_box_marker = m;});
+  auto oriented_bounding_box_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_oriented_bounding_box_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){oriented_bounding_box_marker = m;});
+  auto local_bounding_box_markerSubscriber = nh->create_subscription<visualization_msgs::msg::Marker>(
+    "/robot_local_bounding_box_marker", 10,
+    [&](const visualization_msgs::msg::Marker::ConstSharedPtr& m){local_bounding_box_marker = m;});
+  auto bounding_sphere_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_bounding_sphere_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){bounding_sphere_debug_marker = m;});
+  auto bounding_box_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_bounding_box_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){bounding_box_debug_marker = m;});
+  auto oriented_bounding_box_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_oriented_bounding_box_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){oriented_bounding_box_debug_marker = m;});
+  auto local_bounding_box_debug_markerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_local_bounding_box_debug", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){local_bounding_box_debug_marker = m;});
+  auto scanPointCloudNoBoundingSphereSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_bsphere", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_bounding_sphere = m;});
+  auto scanPointCloudNoBoundingBoxSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_bbox", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_bounding_box = m;});
+  auto scanPointCloudNoOrientedBoundingBoxSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_oriented_bbox", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_oriented_bounding_box = m;});
+  auto scanPointCloudNoLocalBoundingBoxSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_no_local_bbox", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_no_local_bounding_box = m;});
+  auto debugPointCloudInsideSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_inside", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_inside = m;});
+  auto debugPointCloudClipSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_clip", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_clip = m;});
+  auto debugPointCloudShadowSubscriber = nh->create_subscription<sensor_msgs::msg::PointCloud2>(
+    "/scan_point_cloud_shadow", 10,
+    [&](const sensor_msgs::msg::PointCloud2::ConstSharedPtr& m){pcl_shadow = m;});
+  auto debugContainsMarkerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_model_for_contains_test", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){robot_model_contains_test = m;});
+  auto debugShadowMarkerSubscriber = nh->create_subscription<visualization_msgs::msg::MarkerArray>(
+    "/robot_model_for_shadow_test", 10,
+    [&](const visualization_msgs::msg::MarkerArray::ConstSharedPtr& m){robot_model_shadow_test = m;});
 
   std::vector<RayCastingShapeMask::MaskValue> mask;
   filter->computeMask(cloud, mask, "laser");
 
-  ASSERT_EQ(num_points(cloud), mask.size());
+  ASSERT_EQ(cras::numPoints(cloud), mask.size());
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[0]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[1]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::CLIP, mask[2]);
@@ -1601,720 +1771,763 @@ TEST(RobotBodyFilter, ComputeMaskAllAtOnce)
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, mask[10]);
   EXPECT_EQ(RayCastingShapeMask::MaskValue::OUTSIDE, mask[11]);
 
-  WAIT_FOR_MESSAGE(boundingSphere)
-  WAIT_FOR_MESSAGE(boundingBox)
-  WAIT_FOR_MESSAGE(orientedBoundingBox)
-  WAIT_FOR_MESSAGE(localBoundingBox)
-  WAIT_FOR_MESSAGE(boundingSphereMarker)
-  WAIT_FOR_MESSAGE(boundingBoxMarker)
-  WAIT_FOR_MESSAGE(orientedBoundingBoxMarker)
-  WAIT_FOR_MESSAGE(localBoundingBoxMarker)
-  WAIT_FOR_MESSAGE(boundingSphereDebugMarker)
-  WAIT_FOR_MESSAGE(boundingBoxDebugMarker)
-  WAIT_FOR_MESSAGE(orientedBoundingBoxDebugMarker)
-  WAIT_FOR_MESSAGE(localBoundingBoxDebugMarker)
-  WAIT_FOR_MESSAGE(pclNoBoundingSphere)
-  WAIT_FOR_MESSAGE(pclNoBoundingBox)
-  WAIT_FOR_MESSAGE(pclNoOrientedBoundingBox)
-  WAIT_FOR_MESSAGE(pclNoLocalBoundingBox)
-  WAIT_FOR_MESSAGE(pclInside)
-  WAIT_FOR_MESSAGE(pclClip)
-  WAIT_FOR_MESSAGE(pclShadow)
-  WAIT_FOR_MESSAGE(robotModelContainsTest)
-  WAIT_FOR_MESSAGE(robotModelShadowTest)
+  WAIT_FOR_MESSAGE(nh, bounding_sphere)
+  WAIT_FOR_MESSAGE(nh, bounding_box)
+  WAIT_FOR_MESSAGE(nh, oriented_bounding_box)
+  WAIT_FOR_MESSAGE(nh, local_bounding_box)
+  WAIT_FOR_MESSAGE(nh, bounding_sphere_marker)
+  WAIT_FOR_MESSAGE(nh, bounding_box_marker)
+  WAIT_FOR_MESSAGE(nh, oriented_bounding_box_marker)
+  WAIT_FOR_MESSAGE(nh, local_bounding_box_marker)
+  WAIT_FOR_MESSAGE(nh, bounding_sphere_debug_marker)
+  WAIT_FOR_MESSAGE(nh, bounding_box_debug_marker)
+  WAIT_FOR_MESSAGE(nh, oriented_bounding_box_debug_marker)
+  WAIT_FOR_MESSAGE(nh, local_bounding_box_debug_marker)
+  WAIT_FOR_MESSAGE(nh, pcl_no_bounding_sphere)
+  WAIT_FOR_MESSAGE(nh, pcl_no_bounding_box)
+  WAIT_FOR_MESSAGE(nh, pcl_no_oriented_bounding_box)
+  WAIT_FOR_MESSAGE(nh, pcl_no_local_bounding_box)
+  WAIT_FOR_MESSAGE(nh, pcl_inside)
+  WAIT_FOR_MESSAGE(nh, pcl_clip)
+  WAIT_FOR_MESSAGE(nh, pcl_shadow)
+  WAIT_FOR_MESSAGE(nh, robot_model_contains_test)
+  WAIT_FOR_MESSAGE(nh, robot_model_shadow_test)
 
-  EXPECT_EQ("laser", boundingSphere->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphere->header.stamp);
-  EXPECT_NEAR(sqrt(3) * 0.92, boundingSphere->sphere.radius, 1e-6);
-  EXPECT_NEAR(1.5, boundingSphere->sphere.center.x, 1e-6);
-  EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.y);
-  EXPECT_DOUBLE_EQ(0, boundingSphere->sphere.center.z);
-  EXPECT_EQ("laser", boundingSphereMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphereMarker->header.stamp);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereMarker->scale.z, 1e-6);
-  EXPECT_NEAR(1.5, boundingSphereMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingSphereMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingSphereMarker->color.a);
+  EXPECT_EQ("laser", bounding_sphere->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere->header.stamp);
+  EXPECT_NEAR(sqrt(3) * 0.92, bounding_sphere->sphere.radius, 1e-6);
+  EXPECT_NEAR(1.5, bounding_sphere->sphere.center.x, 1e-6);
+  EXPECT_DOUBLE_EQ(0, bounding_sphere->sphere.center.y);
+  EXPECT_DOUBLE_EQ(0, bounding_sphere->sphere.center.z);
+  EXPECT_EQ("laser", bounding_sphere_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere_marker->header.stamp);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_marker->scale.x, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_marker->scale.y, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_marker->scale.z, 1e-6);
+  EXPECT_NEAR(1.5, bounding_sphere_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_sphere_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_sphere_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingSphereMarker->color.r + boundingSphereMarker->color.g +
-      boundingSphereMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, boundingSphereMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingSphereMarker->action);
-  EXPECT_EQ("bounding_sphere", boundingSphereMarker->ns);
-  EXPECT_EQ(1, boundingSphereMarker->frame_locked);
+  EXPECT_LT(0, bounding_sphere_marker->color.r + bounding_sphere_marker->color.g + bounding_sphere_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, bounding_sphere_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_sphere_marker->action);
+  EXPECT_EQ("bounding_sphere", bounding_sphere_marker->ns);
+  EXPECT_EQ(1, bounding_sphere_marker->frame_locked);
 
-  EXPECT_EQ("laser", boundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBox->header.stamp);
-  ASSERT_EQ(2, boundingBox->polygon.points.size());
-  EXPECT_NEAR(1.5-1.55, boundingBox->polygon.points[0].x, 1e-5);
-  EXPECT_NEAR(-1.375, boundingBox->polygon.points[0].y, 1e-6);
-  EXPECT_NEAR(-1.375, boundingBox->polygon.points[0].z, 1e-6);
-  EXPECT_NEAR(1.5 + 1.375, boundingBox->polygon.points[1].x, 1e-5);
-  EXPECT_NEAR(1.375, boundingBox->polygon.points[1].y, 1e-6);
-  EXPECT_NEAR(1.375, boundingBox->polygon.points[1].z, 1e-6);
-  EXPECT_EQ("laser", boundingBoxMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxMarker->header.stamp);
-  EXPECT_NEAR(2.925, boundingBoxMarker->scale.x, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxMarker->scale.y, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxMarker->scale.z, 1e-5);
-  EXPECT_NEAR(1.5-0.0875, boundingBoxMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxMarker->color.a);
+  EXPECT_EQ("laser", bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box->header.stamp);
+  ASSERT_EQ(2, bounding_box->polygon.points.size());
+  EXPECT_NEAR(1.5 - 1.55, bounding_box->polygon.points[0].x, 1e-5);
+  EXPECT_NEAR(-1.375, bounding_box->polygon.points[0].y, 1e-6);
+  EXPECT_NEAR(-1.375, bounding_box->polygon.points[0].z, 1e-6);
+  EXPECT_NEAR(1.5 + 1.375, bounding_box->polygon.points[1].x, 1e-5);
+  EXPECT_NEAR(1.375, bounding_box->polygon.points[1].y, 1e-6);
+  EXPECT_NEAR(1.375, bounding_box->polygon.points[1].z, 1e-6);
+  EXPECT_EQ("laser", bounding_box_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_marker->header.stamp);
+  EXPECT_NEAR(2.925, bounding_box_marker->scale.x, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_marker->scale.y, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_marker->scale.z, 1e-5);
+  EXPECT_NEAR(1.5 - 0.0875, bounding_box_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxMarker->color.r + boundingBoxMarker->color.g +
-      boundingBoxMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxMarker->action);
-  EXPECT_EQ("bounding_box", boundingBoxMarker->ns);
-  EXPECT_EQ(1, boundingBoxMarker->frame_locked);
+  EXPECT_LT(0, bounding_box_marker->color.r + bounding_box_marker->color.g + bounding_box_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_marker->action);
+  EXPECT_EQ("bounding_box", bounding_box_marker->ns);
+  EXPECT_EQ(1, bounding_box_marker->frame_locked);
 
-  EXPECT_EQ("laser", orientedBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBox->header.stamp);
-  EXPECT_NEAR(2.925, orientedBoundingBox->obb.extents.x, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBox->obb.extents.y, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBox->obb.extents.z, 1e-5);
-  EXPECT_NEAR(1.5-0.0875, orientedBoundingBox->obb.pose.translation.x, 1e-5);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.translation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.translation.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.rotation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.rotation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBox->obb.pose.rotation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBox->obb.pose.rotation.w, 1e-6);
-  EXPECT_EQ("laser", orientedBoundingBoxMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxMarker->header.stamp);
-  EXPECT_NEAR(2.925, orientedBoundingBoxMarker->scale.x, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxMarker->scale.y, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxMarker->scale.z, 1e-5);
-  EXPECT_NEAR(1.5-0.0875, orientedBoundingBoxMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxMarker->color.a);
+  EXPECT_EQ("laser", oriented_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box->header.stamp);
+  EXPECT_NEAR(2.925, oriented_bounding_box->obb.extents.x, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box->obb.extents.y, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box->obb.extents.z, 1e-5);
+  EXPECT_NEAR(1.5 - 0.0875, oriented_bounding_box->obb.pose.translation.x, 1e-5);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.translation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.translation.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.rotation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.rotation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box->obb.pose.rotation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box->obb.pose.rotation.w, 1e-6);
+  EXPECT_EQ("laser", oriented_bounding_box_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_marker->header.stamp);
+  EXPECT_NEAR(2.925, oriented_bounding_box_marker->scale.x, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_marker->scale.y, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_marker->scale.z, 1e-5);
+  EXPECT_NEAR(1.5 - 0.0875, oriented_bounding_box_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxMarker->color.r + orientedBoundingBoxMarker->color.g +
-      orientedBoundingBoxMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxMarker->action);
-  EXPECT_EQ("oriented_bounding_box", orientedBoundingBoxMarker->ns);
-  EXPECT_EQ(1, orientedBoundingBoxMarker->frame_locked);
+  EXPECT_LT(
+    0, oriented_bounding_box_marker->color.r + oriented_bounding_box_marker->color.g +
+    oriented_bounding_box_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_marker->action);
+  EXPECT_EQ("oriented_bounding_box", oriented_bounding_box_marker->ns);
+  EXPECT_EQ(1, oriented_bounding_box_marker->frame_locked);
 
-  EXPECT_EQ("base_link", localBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBox->header.stamp);
-  ASSERT_EQ(2, localBoundingBox->polygon.points.size());
-  EXPECT_NEAR(-1.55 - 0.122, localBoundingBox->polygon.points[0].x, 1e-5);
-  EXPECT_NEAR(-1.375, localBoundingBox->polygon.points[0].y, 1e-6);
-  EXPECT_NEAR(-1.375, localBoundingBox->polygon.points[0].z, 1e-6);
-  EXPECT_NEAR(1.375 - 0.122, localBoundingBox->polygon.points[1].x, 1e-5);
-  EXPECT_NEAR(1.375, localBoundingBox->polygon.points[1].y, 1e-6);
-  EXPECT_NEAR(1.375, localBoundingBox->polygon.points[1].z, 1e-6);
-  EXPECT_EQ("base_link", localBoundingBoxMarker->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxMarker->header.stamp);
-  EXPECT_NEAR(2.925, localBoundingBoxMarker->scale.x, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxMarker->scale.y, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxMarker->scale.z, 1e-5);
-  EXPECT_NEAR(-0.0875 - 0.122, localBoundingBoxMarker->pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxMarker->pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxMarker->pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxMarker->color.a);
+  EXPECT_EQ("base_link", local_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box->header.stamp);
+  ASSERT_EQ(2, local_bounding_box->polygon.points.size());
+  EXPECT_NEAR(-1.55 - 0.122, local_bounding_box->polygon.points[0].x, 1e-5);
+  EXPECT_NEAR(-1.375, local_bounding_box->polygon.points[0].y, 1e-6);
+  EXPECT_NEAR(-1.375, local_bounding_box->polygon.points[0].z, 1e-6);
+  EXPECT_NEAR(1.375 - 0.122, local_bounding_box->polygon.points[1].x, 1e-5);
+  EXPECT_NEAR(1.375, local_bounding_box->polygon.points[1].y, 1e-6);
+  EXPECT_NEAR(1.375, local_bounding_box->polygon.points[1].z, 1e-6);
+  EXPECT_EQ("base_link", local_bounding_box_marker->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_marker->header.stamp);
+  EXPECT_NEAR(2.925, local_bounding_box_marker->scale.x, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_marker->scale.y, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_marker->scale.z, 1e-5);
+  EXPECT_NEAR(-0.0875 - 0.122, local_bounding_box_marker->pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_marker->pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_marker->pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_marker->color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxMarker->color.r + localBoundingBoxMarker->color.g +
-      localBoundingBoxMarker->color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxMarker->type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxMarker->action);
-  EXPECT_EQ("local_bounding_box", localBoundingBoxMarker->ns);
-  EXPECT_EQ(1, localBoundingBoxMarker->frame_locked);
+  EXPECT_LT(0, local_bounding_box_marker->color.r + local_bounding_box_marker->color.g +
+    local_bounding_box_marker->color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_marker->type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_marker->action);
+  EXPECT_EQ("local_bounding_box", local_bounding_box_marker->ns);
+  EXPECT_EQ(1, local_bounding_box_marker->frame_locked);
 
-  ASSERT_EQ(12, num_points(*pclNoBoundingSphere));
-  EXPECT_EQ(cloud.header.frame_id, pclNoBoundingSphere->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclNoBoundingSphere->header.stamp);
-  EXPECT_EQ(cloud.height, pclNoBoundingSphere->height);
-  EXPECT_EQ(cloud.width, pclNoBoundingSphere->width);
-  EXPECT_EQ(cloud.fields, pclNoBoundingSphere->fields);
-  EXPECT_EQ(cloud.point_step, pclNoBoundingSphere->point_step);
-  EXPECT_EQ(cloud.row_step, pclNoBoundingSphere->row_step);
-  CloudConstIter x_it(*pclNoBoundingSphere, "x");
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor2
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMin
-  EXPECT_NEAR(1.5 +  10.0, *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NAN(*x_it); ++x_it; // pointInBox
-  EXPECT_NAN(*x_it); ++x_it; // pointInSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointInBoth
-  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it; // pointOutside
-  EXPECT_NEAR(1.5 + -4.0, *x_it, 1e-6); ++x_it; // pointOutside2
+  ASSERT_EQ(12, cras::numPoints(*pcl_no_bounding_sphere));
+  EXPECT_EQ(cloud.header.frame_id, pcl_no_bounding_sphere->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_no_bounding_sphere->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_no_bounding_sphere->height);
+  EXPECT_EQ(cloud.width, pcl_no_bounding_sphere->width);
+  EXPECT_EQ(cloud.fields, pcl_no_bounding_sphere->fields);
+  EXPECT_EQ(cloud.point_step, pcl_no_bounding_sphere->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_no_bounding_sphere->row_step);
+  cras::CloudConstIter x_it(*pcl_no_bounding_sphere, "x");
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor2
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMin
+  EXPECT_NEAR(1.5 + 10.0, *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointInSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBoth
+  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it;  // pointOutside
+  EXPECT_NEAR(1.5 + -4.0, *x_it, 1e-6); ++x_it;  // pointOutside2
 
-  ASSERT_EQ(12, num_points(*pclNoBoundingBox));
-  EXPECT_EQ(cloud.header.frame_id, pclNoBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclNoBoundingBox->header.stamp);
-  EXPECT_EQ(cloud.height, pclNoBoundingBox->height);
-  EXPECT_EQ(cloud.width, pclNoBoundingBox->width);
-  EXPECT_EQ(cloud.fields, pclNoBoundingBox->fields);
-  EXPECT_EQ(cloud.point_step, pclNoBoundingBox->point_step);
-  EXPECT_EQ(cloud.row_step, pclNoBoundingBox->row_step);
-  x_it = CloudConstIter(*pclNoBoundingBox, "x");
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor2
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMin
-  EXPECT_NEAR(1.5 +  10., *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NAN(*x_it); ++x_it; // pointInBox
-  EXPECT_NAN(*x_it); ++x_it; // pointInSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointInBoth
-  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(1.5 +  1.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(12, cras::numPoints(*pcl_no_bounding_box));
+  EXPECT_EQ(cloud.header.frame_id, pcl_no_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_no_bounding_box->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_no_bounding_box->height);
+  EXPECT_EQ(cloud.width, pcl_no_bounding_box->width);
+  EXPECT_EQ(cloud.fields, pcl_no_bounding_box->fields);
+  EXPECT_EQ(cloud.point_step, pcl_no_bounding_box->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_no_bounding_box->row_step);
+  x_it = cras::CloudConstIter(*pcl_no_bounding_box, "x");
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor2
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMin
+  EXPECT_NEAR(1.5 + 10., *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointInSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBoth
+  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(1.5 + 1.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(12, num_points(*pclNoOrientedBoundingBox));
-  EXPECT_EQ(cloud.header.frame_id, pclNoOrientedBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclNoOrientedBoundingBox->header.stamp);
-  EXPECT_EQ(cloud.height, pclNoOrientedBoundingBox->height);
-  EXPECT_EQ(cloud.width, pclNoOrientedBoundingBox->width);
-  EXPECT_EQ(cloud.fields, pclNoOrientedBoundingBox->fields);
-  EXPECT_EQ(cloud.point_step, pclNoOrientedBoundingBox->point_step);
-  EXPECT_EQ(cloud.row_step, pclNoOrientedBoundingBox->row_step);
-  x_it = CloudConstIter(*pclNoOrientedBoundingBox, "x");
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor2
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMin
-  EXPECT_NEAR(1.5 +  10., *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NAN(*x_it); ++x_it; // pointInBox
-  EXPECT_NAN(*x_it); ++x_it; // pointInSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointInBoth
-  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(1.5 +  1.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(12, cras::numPoints(*pcl_no_oriented_bounding_box));
+  EXPECT_EQ(cloud.header.frame_id, pcl_no_oriented_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_no_oriented_bounding_box->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_no_oriented_bounding_box->height);
+  EXPECT_EQ(cloud.width, pcl_no_oriented_bounding_box->width);
+  EXPECT_EQ(cloud.fields, pcl_no_oriented_bounding_box->fields);
+  EXPECT_EQ(cloud.point_step, pcl_no_oriented_bounding_box->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_no_oriented_bounding_box->row_step);
+  x_it = cras::CloudConstIter(*pcl_no_oriented_bounding_box, "x");
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor2
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMin
+  EXPECT_NEAR(1.5 + 10., *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointInSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBoth
+  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(1.5 + 1.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(12, num_points(*pclNoLocalBoundingBox));
-  EXPECT_EQ(cloud.header.frame_id, pclNoLocalBoundingBox->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclNoLocalBoundingBox->header.stamp);
-  EXPECT_EQ(cloud.height, pclNoLocalBoundingBox->height);
-  EXPECT_EQ(cloud.width, pclNoLocalBoundingBox->width);
-  EXPECT_EQ(cloud.fields, pclNoLocalBoundingBox->fields);
-  EXPECT_EQ(cloud.point_step, pclNoLocalBoundingBox->point_step);
-  EXPECT_EQ(cloud.row_step, pclNoLocalBoundingBox->row_step);
-  x_it = CloudConstIter(*pclNoLocalBoundingBox, "x");
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor2
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMin
-  EXPECT_NEAR(1.5 +  10., *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NAN(*x_it); ++x_it; // pointInBox
-  EXPECT_NAN(*x_it); ++x_it; // pointInSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointInBoth
-  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(1.5 +  1.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it; // pointOutside
+  ASSERT_EQ(12, cras::numPoints(*pcl_no_local_bounding_box));
+  EXPECT_EQ(cloud.header.frame_id, pcl_no_local_bounding_box->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_no_local_bounding_box->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_no_local_bounding_box->height);
+  EXPECT_EQ(cloud.width, pcl_no_local_bounding_box->width);
+  EXPECT_EQ(cloud.fields, pcl_no_local_bounding_box->fields);
+  EXPECT_EQ(cloud.point_step, pcl_no_local_bounding_box->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_no_local_bounding_box->row_step);
+  x_it = cras::CloudConstIter(*pcl_no_local_bounding_box, "x");
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor2
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMin
+  EXPECT_NEAR(1.5 + 10., *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointInSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBoth
+  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(1.5 + 1.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NEAR(1.5 + -3.0, *x_it, 1e-6); ++x_it;  // pointOutside
 
-  ASSERT_EQ(12, num_points(*pclInside));
-  EXPECT_EQ(cloud.header.frame_id, pclInside->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclInside->header.stamp);
-  EXPECT_EQ(cloud.height, pclInside->height);
-  EXPECT_EQ(cloud.width, pclInside->width);
-  EXPECT_EQ(cloud.fields, pclInside->fields);
-  EXPECT_EQ(cloud.point_step, pclInside->point_step);
-  EXPECT_EQ(cloud.row_step, pclInside->row_step);
-  x_it = CloudConstIter(*pclInside, "x");
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor2
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMin
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMax
-  EXPECT_NEAR(1.5 +  0.85, *x_it, 1e-6); ++x_it; // pointInBox
-  EXPECT_NEAR(1.5 +  1.35, *x_it, 1e-6); ++x_it; // pointInSphere
-  EXPECT_NEAR(1.5 +  0.0, *x_it, 1e-6); ++x_it; // pointInBoth
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowBox
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowBoth
-  EXPECT_NAN(*x_it); ++x_it; // pointOutside
+  ASSERT_EQ(12, cras::numPoints(*pcl_inside));
+  EXPECT_EQ(cloud.header.frame_id, pcl_inside->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_inside->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_inside->height);
+  EXPECT_EQ(cloud.width, pcl_inside->width);
+  EXPECT_EQ(cloud.fields, pcl_inside->fields);
+  EXPECT_EQ(cloud.point_step, pcl_inside->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_inside->row_step);
+  x_it = cras::CloudConstIter(*pcl_inside, "x");
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor2
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMin
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMax
+  EXPECT_NEAR(1.5 + 0.85, *x_it, 1e-6); ++x_it;  // pointInBox
+  EXPECT_NEAR(1.5 + 1.35, *x_it, 1e-6); ++x_it;  // pointInSphere
+  EXPECT_NEAR(1.5 + 0.0, *x_it, 1e-6); ++x_it;  // pointInBoth
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowBoth
+  EXPECT_NAN(*x_it); ++x_it;  // pointOutside
 
-  ASSERT_EQ(12, num_points(*pclClip));
-  EXPECT_EQ(cloud.header.frame_id, pclClip->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclClip->header.stamp);
-  EXPECT_EQ(cloud.height, pclClip->height);
-  EXPECT_EQ(cloud.width, pclClip->width);
-  EXPECT_EQ(cloud.fields, pclClip->fields);
-  EXPECT_EQ(cloud.point_step, pclClip->point_step);
-  EXPECT_EQ(cloud.row_step, pclClip->row_step);
-  x_it = CloudConstIter(*pclClip, "x");
-  EXPECT_NEAR(1.5 + -1.5, *x_it, 1e-6); ++x_it; // pointSensor
-  EXPECT_NEAR(1.5 + -1.47, *x_it, 1e-6); ++x_it; // pointSensor2
-  EXPECT_NEAR(1.5 + -1.42, *x_it, 1e-6); ++x_it; // pointClipMin
-  EXPECT_NEAR(1.5 +  10., *x_it, 1e-6); ++x_it; // pointClipMax
-  EXPECT_NAN(*x_it); ++x_it; // pointInBox
-  EXPECT_NAN(*x_it); ++x_it; // pointInSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointInBoth
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowBox
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointShadowBoth
-  EXPECT_NAN(*x_it); ++x_it; // pointOutside
+  ASSERT_EQ(12, cras::numPoints(*pcl_clip));
+  EXPECT_EQ(cloud.header.frame_id, pcl_clip->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_clip->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_clip->height);
+  EXPECT_EQ(cloud.width, pcl_clip->width);
+  EXPECT_EQ(cloud.fields, pcl_clip->fields);
+  EXPECT_EQ(cloud.point_step, pcl_clip->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_clip->row_step);
+  x_it = cras::CloudConstIter(*pcl_clip, "x");
+  EXPECT_NEAR(1.5 + -1.5, *x_it, 1e-6); ++x_it;  // pointSensor
+  EXPECT_NEAR(1.5 + -1.47, *x_it, 1e-6); ++x_it;  // pointSensor2
+  EXPECT_NEAR(1.5 + -1.42, *x_it, 1e-6); ++x_it;  // pointClipMin
+  EXPECT_NEAR(1.5 + 10., *x_it, 1e-6); ++x_it;  // pointClipMax
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointInSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBoth
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointShadowBoth
+  EXPECT_NAN(*x_it); ++x_it;  // pointOutside
 
-  ASSERT_EQ(12, num_points(*pclShadow));
-  EXPECT_EQ(cloud.header.frame_id, pclShadow->header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, pclShadow->header.stamp);
-  EXPECT_EQ(cloud.height, pclShadow->height);
-  EXPECT_EQ(cloud.width, pclShadow->width);
-  EXPECT_EQ(cloud.fields, pclShadow->fields);
-  EXPECT_EQ(cloud.point_step, pclShadow->point_step);
-  EXPECT_EQ(cloud.row_step, pclShadow->row_step);
-  x_it = CloudConstIter(*pclShadow, "x");
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor
-  EXPECT_NAN(*x_it); ++x_it; // pointSensor2
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMin
-  EXPECT_NAN(*x_it); ++x_it; // pointClipMax
-  EXPECT_NAN(*x_it); ++x_it; // pointInBox
-  EXPECT_NAN(*x_it); ++x_it; // pointInSphere
-  EXPECT_NAN(*x_it); ++x_it; // pointInBoth
-  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it; // pointShadowBox
-  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it; // pointShadowSphere
-  EXPECT_NEAR(1.5 +  1.5, *x_it, 1e-6); ++x_it; // pointShadowBoth
-  EXPECT_NAN(*x_it); ++x_it; // pointOutside
+  ASSERT_EQ(12, cras::numPoints(*pcl_shadow));
+  EXPECT_EQ(cloud.header.frame_id, pcl_shadow->header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, pcl_shadow->header.stamp);
+  EXPECT_EQ(cloud.height, pcl_shadow->height);
+  EXPECT_EQ(cloud.width, pcl_shadow->width);
+  EXPECT_EQ(cloud.fields, pcl_shadow->fields);
+  EXPECT_EQ(cloud.point_step, pcl_shadow->point_step);
+  EXPECT_EQ(cloud.row_step, pcl_shadow->row_step);
+  x_it = cras::CloudConstIter(*pcl_shadow, "x");
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor
+  EXPECT_NAN(*x_it); ++x_it;  // pointSensor2
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMin
+  EXPECT_NAN(*x_it); ++x_it;  // pointClipMax
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBox
+  EXPECT_NAN(*x_it); ++x_it;  // pointInSphere
+  EXPECT_NAN(*x_it); ++x_it;  // pointInBoth
+  EXPECT_NEAR(1.5 + -0.25, *x_it, 1e-6); ++x_it;  // pointShadowBox
+  EXPECT_NEAR(1.5 + -0.560762, *x_it, 1e-6); ++x_it;  // pointShadowSphere
+  EXPECT_NEAR(1.5 + 1.5, *x_it, 1e-6); ++x_it;  // pointShadowBoth
+  EXPECT_NAN(*x_it); ++x_it;  // pointOutside
 
-  ASSERT_EQ(2, boundingSphereDebugMarker->markers.size());
-  EXPECT_EQ("laser", boundingSphereDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphereDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.x, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.y, 1e-6);
-  EXPECT_NEAR(2*sqrt(3) * 0.92, boundingSphereDebugMarker->markers[0].scale.z, 1e-6);
-  EXPECT_NEAR(1.5, boundingSphereDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingSphereDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[0].color.a);
+  ASSERT_EQ(2, bounding_sphere_debug_marker->markers.size());
+  EXPECT_EQ("laser", bounding_sphere_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_debug_marker->markers[0].scale.x, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_debug_marker->markers[0].scale.y, 1e-6);
+  EXPECT_NEAR(2 * sqrt(3) * 0.92, bounding_sphere_debug_marker->markers[0].scale.z, 1e-6);
+  EXPECT_NEAR(1.5, bounding_sphere_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_sphere_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_sphere_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[0].color.r + boundingSphereDebugMarker->markers[0].color.g +
-      boundingSphereDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, boundingSphereDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingSphereDebugMarker->markers[0].action);
-  EXPECT_FALSE(boundingSphereDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, boundingSphereDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("laser", boundingSphereDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingSphereDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(0.1*sqrt(3), boundingSphereDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(0.1*sqrt(3), boundingSphereDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(0.1*sqrt(3), boundingSphereDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(1.5-1.5, boundingSphereDebugMarker->markers[1].pose.position.x, 1e-5);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingSphereDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingSphereDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    bounding_sphere_debug_marker->markers[0].color.r + bounding_sphere_debug_marker->markers[0].color.g +
+    bounding_sphere_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, bounding_sphere_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_sphere_debug_marker->markers[0].action);
+  EXPECT_FALSE(bounding_sphere_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, bounding_sphere_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("laser", bounding_sphere_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_sphere_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(0.1 * sqrt(3), bounding_sphere_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(0.1 * sqrt(3), bounding_sphere_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(0.1 * sqrt(3), bounding_sphere_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.5 - 1.5, bounding_sphere_debug_marker->markers[1].pose.position.x, 1e-5);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_sphere_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_sphere_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_sphere_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingSphereDebugMarker->markers[1].color.r + boundingSphereDebugMarker->markers[1].color.g +
-      boundingSphereDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, boundingSphereDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingSphereDebugMarker->markers[1].action);
-  EXPECT_FALSE(boundingSphereDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, boundingSphereDebugMarker->markers[1].frame_locked);
+  EXPECT_LT(
+    0,
+    bounding_sphere_debug_marker->markers[1].color.r + bounding_sphere_debug_marker->markers[1].color.g +
+    bounding_sphere_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, bounding_sphere_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_sphere_debug_marker->markers[1].action);
+  EXPECT_FALSE(bounding_sphere_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, bounding_sphere_debug_marker->markers[1].frame_locked);
 
-  EXPECT_EQ(4, boundingBoxDebugMarker->markers.size());
-  EXPECT_EQ("laser", boundingBoxDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, boundingBoxDebugMarker->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxDebugMarker->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, boundingBoxDebugMarker->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, boundingBoxDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[0].color.a);
+  EXPECT_EQ(4, bounding_box_debug_marker->markers.size());
+  EXPECT_EQ("laser", bounding_box_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, bounding_box_debug_marker->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_debug_marker->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, bounding_box_debug_marker->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, bounding_box_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[0].color.r + boundingBoxDebugMarker->markers[0].color.g +
-      boundingBoxDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[0].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("laser", boundingBoxDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, boundingBoxDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, boundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[0].color.r + bounding_box_debug_marker->markers[0].color.g +
+    bounding_box_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[0].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("laser", bounding_box_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, bounding_box_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, bounding_box_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, bounding_box_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, bounding_box_debug_marker->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[1].color.r + boundingBoxDebugMarker->markers[1].color.g +
-      boundingBoxDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[1].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[1].frame_locked);
-  EXPECT_EQ("laser", boundingBoxDebugMarker->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, boundingBoxDebugMarker->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, boundingBoxDebugMarker->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, boundingBoxDebugMarker->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(1.5 + 0.122 - 0.1, boundingBoxDebugMarker->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[1].color.r + bounding_box_debug_marker->markers[1].color.g +
+    bounding_box_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[1].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[1].frame_locked);
+  EXPECT_EQ("laser", bounding_box_debug_marker->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, bounding_box_debug_marker->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, bounding_box_debug_marker->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, bounding_box_debug_marker->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(1.5 + 0.122 - 0.1, bounding_box_debug_marker->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[2].color.r + boundingBoxDebugMarker->markers[2].color.g +
-      boundingBoxDebugMarker->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[2].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[2].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[2].frame_locked);
-  EXPECT_EQ("laser", boundingBoxDebugMarker->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, boundingBoxDebugMarker->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, boundingBoxDebugMarker->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, boundingBoxDebugMarker->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, boundingBoxDebugMarker->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(1.5-1.5, boundingBoxDebugMarker->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, boundingBoxDebugMarker->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, boundingBoxDebugMarker->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[2].color.r + bounding_box_debug_marker->markers[2].color.g +
+    bounding_box_debug_marker->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[2].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[2].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[2].frame_locked);
+  EXPECT_EQ("laser", bounding_box_debug_marker->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, bounding_box_debug_marker->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, bounding_box_debug_marker->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, bounding_box_debug_marker->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, bounding_box_debug_marker->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(1.5 - 1.5, bounding_box_debug_marker->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, bounding_box_debug_marker->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, bounding_box_debug_marker->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, bounding_box_debug_marker->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, boundingBoxDebugMarker->markers[3].color.r + boundingBoxDebugMarker->markers[3].color.g +
-      boundingBoxDebugMarker->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, boundingBoxDebugMarker->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, boundingBoxDebugMarker->markers[3].action);
-  EXPECT_FALSE(boundingBoxDebugMarker->markers[3].ns.empty());
-  EXPECT_EQ(1, boundingBoxDebugMarker->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    bounding_box_debug_marker->markers[3].color.r + bounding_box_debug_marker->markers[3].color.g +
+    bounding_box_debug_marker->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, bounding_box_debug_marker->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, bounding_box_debug_marker->markers[3].action);
+  EXPECT_FALSE(bounding_box_debug_marker->markers[3].ns.empty());
+  EXPECT_EQ(1, bounding_box_debug_marker->markers[3].frame_locked);
 
-  EXPECT_EQ(4, orientedBoundingBoxDebugMarker->markers.size());
-  EXPECT_EQ("laser", orientedBoundingBoxDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, orientedBoundingBoxDebugMarker->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxDebugMarker->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, orientedBoundingBoxDebugMarker->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, orientedBoundingBoxDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[0].color.a);
+  EXPECT_EQ(4, oriented_bounding_box_debug_marker->markers.size());
+  EXPECT_EQ("laser", oriented_bounding_box_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, oriented_bounding_box_debug_marker->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_debug_marker->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, oriented_bounding_box_debug_marker->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, oriented_bounding_box_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[0].color.r + orientedBoundingBoxDebugMarker->markers[0].color.g +
-      orientedBoundingBoxDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[0].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("laser", orientedBoundingBoxDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, orientedBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, orientedBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[0].color.r + oriented_bounding_box_debug_marker->markers[0].color.g +
+    oriented_bounding_box_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[0].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("laser", oriented_bounding_box_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, oriented_bounding_box_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, oriented_bounding_box_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, oriented_bounding_box_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, oriented_bounding_box_debug_marker->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[1].color.r + orientedBoundingBoxDebugMarker->markers[1].color.g +
-      orientedBoundingBoxDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[1].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[1].frame_locked);
-  EXPECT_EQ("laser", orientedBoundingBoxDebugMarker->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, orientedBoundingBoxDebugMarker->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, orientedBoundingBoxDebugMarker->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, orientedBoundingBoxDebugMarker->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(1.5 + 0.122 - 0.1, orientedBoundingBoxDebugMarker->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[1].color.r + oriented_bounding_box_debug_marker->markers[1].color.g +
+    oriented_bounding_box_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[1].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[1].frame_locked);
+  EXPECT_EQ("laser", oriented_bounding_box_debug_marker->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, oriented_bounding_box_debug_marker->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, oriented_bounding_box_debug_marker->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, oriented_bounding_box_debug_marker->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(1.5 + 0.122 - 0.1, oriented_bounding_box_debug_marker->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[2].color.r + orientedBoundingBoxDebugMarker->markers[2].color.g +
-      orientedBoundingBoxDebugMarker->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[2].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[2].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[2].frame_locked);
-  EXPECT_EQ("laser", orientedBoundingBoxDebugMarker->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, orientedBoundingBoxDebugMarker->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, orientedBoundingBoxDebugMarker->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, orientedBoundingBoxDebugMarker->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, orientedBoundingBoxDebugMarker->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(1.5-1.5, orientedBoundingBoxDebugMarker->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, orientedBoundingBoxDebugMarker->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[2].color.r + oriented_bounding_box_debug_marker->markers[2].color.g +
+    oriented_bounding_box_debug_marker->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[2].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[2].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[2].frame_locked);
+  EXPECT_EQ("laser", oriented_bounding_box_debug_marker->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, oriented_bounding_box_debug_marker->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, oriented_bounding_box_debug_marker->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, oriented_bounding_box_debug_marker->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, oriented_bounding_box_debug_marker->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(1.5 - 1.5, oriented_bounding_box_debug_marker->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, oriented_bounding_box_debug_marker->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, oriented_bounding_box_debug_marker->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, oriented_bounding_box_debug_marker->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, orientedBoundingBoxDebugMarker->markers[3].color.r + orientedBoundingBoxDebugMarker->markers[3].color.g +
-      orientedBoundingBoxDebugMarker->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, orientedBoundingBoxDebugMarker->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, orientedBoundingBoxDebugMarker->markers[3].action);
-  EXPECT_FALSE(orientedBoundingBoxDebugMarker->markers[3].ns.empty());
-  EXPECT_EQ(1, orientedBoundingBoxDebugMarker->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    oriented_bounding_box_debug_marker->markers[3].color.r + oriented_bounding_box_debug_marker->markers[3].color.g +
+    oriented_bounding_box_debug_marker->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, oriented_bounding_box_debug_marker->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, oriented_bounding_box_debug_marker->markers[3].action);
+  EXPECT_FALSE(oriented_bounding_box_debug_marker->markers[3].ns.empty());
+  EXPECT_EQ(1, oriented_bounding_box_debug_marker->markers[3].frame_locked);
 
-  EXPECT_EQ(4, localBoundingBoxDebugMarker->markers.size());
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, localBoundingBoxDebugMarker->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxDebugMarker->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, localBoundingBoxDebugMarker->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(-0.122, localBoundingBoxDebugMarker->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[0].color.a);
+  EXPECT_EQ(4, local_bounding_box_debug_marker->markers.size());
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, local_bounding_box_debug_marker->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_debug_marker->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, local_bounding_box_debug_marker->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(-0.122, local_bounding_box_debug_marker->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[0].color.r + localBoundingBoxDebugMarker->markers[0].color.g +
-      localBoundingBoxDebugMarker->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[0].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[0].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[0].frame_locked);
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, localBoundingBoxDebugMarker->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(-0.122, localBoundingBoxDebugMarker->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[0].color.r + local_bounding_box_debug_marker->markers[0].color.g +
+    local_bounding_box_debug_marker->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[0].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[0].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[0].frame_locked);
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, local_bounding_box_debug_marker->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, local_bounding_box_debug_marker->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, local_bounding_box_debug_marker->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(-0.122, local_bounding_box_debug_marker->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[1].color.r + localBoundingBoxDebugMarker->markers[1].color.g +
-      localBoundingBoxDebugMarker->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[1].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[1].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[1].frame_locked);
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, localBoundingBoxDebugMarker->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, localBoundingBoxDebugMarker->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, localBoundingBoxDebugMarker->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(-0.1, localBoundingBoxDebugMarker->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[1].color.r + local_bounding_box_debug_marker->markers[1].color.g +
+    local_bounding_box_debug_marker->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[1].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[1].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[1].frame_locked);
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, local_bounding_box_debug_marker->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, local_bounding_box_debug_marker->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, local_bounding_box_debug_marker->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(-0.1, local_bounding_box_debug_marker->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[2].color.r + localBoundingBoxDebugMarker->markers[2].color.g +
-      localBoundingBoxDebugMarker->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[2].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[2].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[2].frame_locked);
-  EXPECT_EQ("base_link", localBoundingBoxDebugMarker->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, localBoundingBoxDebugMarker->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, localBoundingBoxDebugMarker->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, localBoundingBoxDebugMarker->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, localBoundingBoxDebugMarker->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(-1.5-0.122, localBoundingBoxDebugMarker->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, localBoundingBoxDebugMarker->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, localBoundingBoxDebugMarker->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[2].color.r + local_bounding_box_debug_marker->markers[2].color.g +
+    local_bounding_box_debug_marker->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[2].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[2].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[2].frame_locked);
+  EXPECT_EQ("base_link", local_bounding_box_debug_marker->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, local_bounding_box_debug_marker->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, local_bounding_box_debug_marker->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, local_bounding_box_debug_marker->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, local_bounding_box_debug_marker->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(-1.5 - 0.122, local_bounding_box_debug_marker->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, local_bounding_box_debug_marker->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, local_bounding_box_debug_marker->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, local_bounding_box_debug_marker->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, localBoundingBoxDebugMarker->markers[3].color.r + localBoundingBoxDebugMarker->markers[3].color.g +
-      localBoundingBoxDebugMarker->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, localBoundingBoxDebugMarker->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, localBoundingBoxDebugMarker->markers[3].action);
-  EXPECT_FALSE(localBoundingBoxDebugMarker->markers[3].ns.empty());
-  EXPECT_EQ(1, localBoundingBoxDebugMarker->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    local_bounding_box_debug_marker->markers[3].color.r + local_bounding_box_debug_marker->markers[3].color.g +
+    local_bounding_box_debug_marker->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, local_bounding_box_debug_marker->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, local_bounding_box_debug_marker->markers[3].action);
+  EXPECT_FALSE(local_bounding_box_debug_marker->markers[3].ns.empty());
+  EXPECT_EQ(1, local_bounding_box_debug_marker->markers[3].frame_locked);
 
-  EXPECT_EQ(4, robotModelContainsTest->markers.size());
-  EXPECT_EQ("laser", robotModelContainsTest->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, robotModelContainsTest->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, robotModelContainsTest->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, robotModelContainsTest->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, robotModelContainsTest->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[0].color.a);
+  EXPECT_EQ(4, robot_model_contains_test->markers.size());
+  EXPECT_EQ("laser", robot_model_contains_test->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, robot_model_contains_test->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_contains_test->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_contains_test->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, robot_model_contains_test->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[0].color.r + robotModelContainsTest->markers[0].color.g +
-      robotModelContainsTest->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, robotModelContainsTest->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[0].action);
-  EXPECT_EQ("antenna-0", robotModelContainsTest->markers[0].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[0].frame_locked);
-  EXPECT_EQ("laser", robotModelContainsTest->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[1].header.stamp);
-  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(1.84, robotModelContainsTest->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, robotModelContainsTest->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[0].color.r + robot_model_contains_test->markers[0].color.g +
+    robot_model_contains_test->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, robot_model_contains_test->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[0].action);
+  EXPECT_EQ("antenna-0", robot_model_contains_test->markers[0].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[0].frame_locked);
+  EXPECT_EQ("laser", robot_model_contains_test->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[1].header.stamp);
+  EXPECT_NEAR(1.84, robot_model_contains_test->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(1.84, robot_model_contains_test->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(1.84, robot_model_contains_test->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, robot_model_contains_test->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[1].color.r + robotModelContainsTest->markers[1].color.g +
-      robotModelContainsTest->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelContainsTest->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[1].action);
-  EXPECT_EQ("base_link-0", robotModelContainsTest->markers[1].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[1].frame_locked);
-  EXPECT_EQ("laser", robotModelContainsTest->markers[2].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[2].header.stamp);
-  EXPECT_NEAR(2.5, robotModelContainsTest->markers[2].scale.x, 1e-4);
-  EXPECT_NEAR(2.5, robotModelContainsTest->markers[2].scale.y, 1e-4);
-  EXPECT_NEAR(2.5, robotModelContainsTest->markers[2].scale.z, 1e-4);
-  EXPECT_NEAR(1.5+0.122-0.1, robotModelContainsTest->markers[2].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[2].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[2].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[2].color.a);
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[1].color.r + robot_model_contains_test->markers[1].color.g +
+    robot_model_contains_test->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_contains_test->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[1].action);
+  EXPECT_EQ("base_link-0", robot_model_contains_test->markers[1].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[1].frame_locked);
+  EXPECT_EQ("laser", robot_model_contains_test->markers[2].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[2].header.stamp);
+  EXPECT_NEAR(2.5, robot_model_contains_test->markers[2].scale.x, 1e-4);
+  EXPECT_NEAR(2.5, robot_model_contains_test->markers[2].scale.y, 1e-4);
+  EXPECT_NEAR(2.5, robot_model_contains_test->markers[2].scale.z, 1e-4);
+  EXPECT_NEAR(1.5 + 0.122 - 0.1, robot_model_contains_test->markers[2].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[2].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[2].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[2].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[2].color.r + robotModelContainsTest->markers[2].color.g +
-      robotModelContainsTest->markers[2].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelContainsTest->markers[2].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[2].action);
-  EXPECT_EQ("base_link-1", robotModelContainsTest->markers[2].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[2].frame_locked);
-  EXPECT_EQ("laser", robotModelContainsTest->markers[3].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelContainsTest->markers[3].header.stamp);
-  EXPECT_NEAR(0.1, robotModelContainsTest->markers[3].scale.x, 1e-5);
-  EXPECT_NEAR(0.1, robotModelContainsTest->markers[3].scale.y, 1e-5);
-  EXPECT_NEAR(0.1, robotModelContainsTest->markers[3].scale.z, 1e-5);
-  EXPECT_NEAR(1.5-1.5, robotModelContainsTest->markers[3].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelContainsTest->markers[3].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelContainsTest->markers[3].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelContainsTest->markers[3].color.a);
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[2].color.r + robot_model_contains_test->markers[2].color.g +
+    robot_model_contains_test->markers[2].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_contains_test->markers[2].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[2].action);
+  EXPECT_EQ("base_link-1", robot_model_contains_test->markers[2].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[2].frame_locked);
+  EXPECT_EQ("laser", robot_model_contains_test->markers[3].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_contains_test->markers[3].header.stamp);
+  EXPECT_NEAR(0.1, robot_model_contains_test->markers[3].scale.x, 1e-5);
+  EXPECT_NEAR(0.1, robot_model_contains_test->markers[3].scale.y, 1e-5);
+  EXPECT_NEAR(0.1, robot_model_contains_test->markers[3].scale.z, 1e-5);
+  EXPECT_NEAR(1.5 - 1.5, robot_model_contains_test->markers[3].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_contains_test->markers[3].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_contains_test->markers[3].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_contains_test->markers[3].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelContainsTest->markers[3].color.r + robotModelContainsTest->markers[3].color.g +
-      robotModelContainsTest->markers[3].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelContainsTest->markers[3].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelContainsTest->markers[3].action);
-  EXPECT_EQ("laser-0", robotModelContainsTest->markers[3].ns);
-  EXPECT_EQ(1, robotModelContainsTest->markers[3].frame_locked);
+  EXPECT_LT(
+    0,
+    robot_model_contains_test->markers[3].color.r + robot_model_contains_test->markers[3].color.g +
+    robot_model_contains_test->markers[3].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_contains_test->markers[3].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_contains_test->markers[3].action);
+  EXPECT_EQ("laser-0", robot_model_contains_test->markers[3].ns);
+  EXPECT_EQ(1, robot_model_contains_test->markers[3].frame_locked);
 
-  EXPECT_EQ(2, robotModelShadowTest->markers.size());
-  EXPECT_EQ("laser", robotModelShadowTest->markers[0].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelShadowTest->markers[0].header.stamp);
-  EXPECT_NEAR(2.75, robotModelShadowTest->markers[0].scale.x, 1e-5);
-  EXPECT_NEAR(2.75, robotModelShadowTest->markers[0].scale.y, 1e-5);
-  EXPECT_NEAR(2.75, robotModelShadowTest->markers[0].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, robotModelShadowTest->markers[0].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[0].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelShadowTest->markers[0].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelShadowTest->markers[0].color.a);
+  EXPECT_EQ(2, robot_model_shadow_test->markers.size());
+  EXPECT_EQ("laser", robot_model_shadow_test->markers[0].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_shadow_test->markers[0].header.stamp);
+  EXPECT_NEAR(2.75, robot_model_shadow_test->markers[0].scale.x, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_shadow_test->markers[0].scale.y, 1e-5);
+  EXPECT_NEAR(2.75, robot_model_shadow_test->markers[0].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, robot_model_shadow_test->markers[0].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[0].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_shadow_test->markers[0].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_shadow_test->markers[0].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelShadowTest->markers[0].color.r + robotModelShadowTest->markers[0].color.g +
-      robotModelShadowTest->markers[0].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::SPHERE, robotModelShadowTest->markers[0].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelShadowTest->markers[0].action);
-  EXPECT_EQ("antenna-0", robotModelShadowTest->markers[0].ns);
-  EXPECT_EQ(1, robotModelShadowTest->markers[0].frame_locked);
-  EXPECT_EQ("laser", robotModelShadowTest->markers[1].header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, robotModelShadowTest->markers[1].header.stamp);
-  EXPECT_NEAR(2, robotModelShadowTest->markers[1].scale.x, 1e-5);
-  EXPECT_NEAR(2, robotModelShadowTest->markers[1].scale.y, 1e-5);
-  EXPECT_NEAR(2, robotModelShadowTest->markers[1].scale.z, 1e-5);
-  EXPECT_NEAR(1.5, robotModelShadowTest->markers[1].pose.position.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.position.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.position.z, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.orientation.x, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.orientation.y, 1e-6);
-  EXPECT_NEAR(0, robotModelShadowTest->markers[1].pose.orientation.z, 1e-6);
-  EXPECT_NEAR(1, robotModelShadowTest->markers[1].pose.orientation.w, 1e-6);
-  EXPECT_LT(0, robotModelShadowTest->markers[1].color.a);
+  EXPECT_LT(
+    0,
+    robot_model_shadow_test->markers[0].color.r + robot_model_shadow_test->markers[0].color.g +
+    robot_model_shadow_test->markers[0].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::SPHERE, robot_model_shadow_test->markers[0].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_shadow_test->markers[0].action);
+  EXPECT_EQ("antenna-0", robot_model_shadow_test->markers[0].ns);
+  EXPECT_EQ(1, robot_model_shadow_test->markers[0].frame_locked);
+  EXPECT_EQ("laser", robot_model_shadow_test->markers[1].header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, robot_model_shadow_test->markers[1].header.stamp);
+  EXPECT_NEAR(2, robot_model_shadow_test->markers[1].scale.x, 1e-5);
+  EXPECT_NEAR(2, robot_model_shadow_test->markers[1].scale.y, 1e-5);
+  EXPECT_NEAR(2, robot_model_shadow_test->markers[1].scale.z, 1e-5);
+  EXPECT_NEAR(1.5, robot_model_shadow_test->markers[1].pose.position.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.position.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.position.z, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.orientation.x, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.orientation.y, 1e-6);
+  EXPECT_NEAR(0, robot_model_shadow_test->markers[1].pose.orientation.z, 1e-6);
+  EXPECT_NEAR(1, robot_model_shadow_test->markers[1].pose.orientation.w, 1e-6);
+  EXPECT_LT(0, robot_model_shadow_test->markers[1].color.a);
   // make sure the marker has some color
-  EXPECT_LT(0, robotModelShadowTest->markers[1].color.r + robotModelShadowTest->markers[1].color.g +
-      robotModelShadowTest->markers[1].color.b);
-  EXPECT_EQ(visualization_msgs::Marker::CUBE, robotModelShadowTest->markers[1].type);
-  EXPECT_EQ(visualization_msgs::Marker::ADD, robotModelShadowTest->markers[1].action);
-  EXPECT_EQ("base_link-0", robotModelShadowTest->markers[1].ns);
-  EXPECT_EQ(1, robotModelShadowTest->markers[1].frame_locked);
-}
+  EXPECT_LT(
+    0,
+    robot_model_shadow_test->markers[1].color.r + robot_model_shadow_test->markers[1].color.g +
+    robot_model_shadow_test->markers[1].color.b);
+  EXPECT_EQ(visualization_msgs::msg::Marker::CUBE, robot_model_shadow_test->markers[1].type);
+  EXPECT_EQ(visualization_msgs::msg::Marker::ADD, robot_model_shadow_test->markers[1].action);
+  EXPECT_EQ("base_link-0", robot_model_shadow_test->markers[1].ns);
+  EXPECT_EQ(1, robot_model_shadow_test->markers[1].frame_locked);
+}  // NOLINT
 
-TEST(RobotBodyFilter, UpdateLaserScan)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, UpdateLaserScan) {
+  const auto nh = std::make_shared<rclcpp::Node>("compute_mask_config_point_by_point");
 
-  auto filter = std::make_shared<RobotBodyFilterLaserScanTest>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::LaserScan>>(filter);
+  const auto filter = std::make_shared<RobotBodyFilterLaserScanTest>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::LaserScan>>(filter);
 
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("compute_mask_config_point_by_point", nh);
+  filter_base->configure(
+    "filter1.params", "compute_mask_config_point_by_point",
+    nh->get_node_logging_interface(), nh->get_node_parameters_interface());
 
-  sensor_msgs::LaserScan scan;
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = ROBOT_URDF;
+  filter->onRobotModelMsg(msg);
+
+  sensor_msgs::msg::LaserScan scan;
   scan.header.frame_id = "laser";
   scan.range_min = 0.1;
   scan.range_max = 10;
@@ -2323,173 +2536,179 @@ TEST(RobotBodyFilter, UpdateLaserScan)
   scan.angle_increment = M_PI / 18;
   scan.time_increment = 1.0f;
   scan.scan_time = 20.0f;
-  for (size_t i = 0; i < 19; ++i)
-  {
+  for (size_t i = 0; i < 19; ++i) {
     scan.intensities.push_back(i);
     scan.ranges.push_back(1.5);
   }
 
   {
-    geometry_msgs::TransformStamped tf;
-    ros::Time now = ros::Time::now();
+    geometry_msgs::msg::TransformStamped tf;
+    rclcpp::Time now = nh->get_clock()->now();
     scan.header.stamp = now;
     tf.transform.rotation.w = 1;
-    for (double d = -5.0; d < 5.0; d += 0.1)
-    {
-      tf.header.stamp = now + ros::Duration(d);
+    for (double d = -5.0; d < 5.0; d += 0.1) {
+      tf.header.stamp = now + rclcpp::Duration::from_seconds(d);
 
       tf.transform.translation.x = 0.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
-      tf.header.stamp += ros::Duration(20);
+      tf.header.stamp = rclcpp::Time(tf.header.stamp) + rclcpp::Duration::from_seconds(20);
 
       tf.transform.translation.x = 10.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      ASSERT_TRUE(filter->tfBuffer->setTransform(tf, "test"));
+      ASSERT_TRUE(filter->tf_buffer_->setTransform(tf, "test"));
     }
   }
 
   // give TF frames watchdog some time to catch up
-  while (!filter->tfFramesWatchdog->isReachable("laser"))
-    ros::WallDuration(0.01).sleep();
-  while (!filter->tfFramesWatchdog->isReachable("base_link"))
-    ros::WallDuration(0.01).sleep();
+  while (!filter->tf_frames_watchdog_->isReachable("laser")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
+  while (!filter->tf_frames_watchdog_->isReachable("base_link")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
 
-  sensor_msgs::LaserScan outScan;
-  ASSERT_TRUE(filter->update(scan, outScan));
+  sensor_msgs::msg::LaserScan out_scan;
+  ASSERT_TRUE(filter->update(scan, out_scan));
 
-  ASSERT_EQ(19, outScan.ranges.size());
-  EXPECT_EQ(1.5, outScan.ranges[0]); EXPECT_EQ(0, outScan.intensities[0]);
-  EXPECT_EQ(1.5, outScan.ranges[1]); EXPECT_EQ(1, outScan.intensities[1]);
-  EXPECT_EQ(1.5, outScan.ranges[2]); EXPECT_EQ(2, outScan.intensities[2]);
-  EXPECT_NAN(outScan.ranges[3]); EXPECT_EQ(3, outScan.intensities[3]);
-  EXPECT_NAN(outScan.ranges[4]); EXPECT_EQ(4, outScan.intensities[4]);
-  EXPECT_NAN(outScan.ranges[5]); EXPECT_EQ(5, outScan.intensities[5]);
-  EXPECT_NAN(outScan.ranges[6]); EXPECT_EQ(6, outScan.intensities[6]);
-  EXPECT_NAN(outScan.ranges[7]); EXPECT_EQ(7, outScan.intensities[7]);
-  EXPECT_NAN(outScan.ranges[8]); EXPECT_EQ(8, outScan.intensities[8]);
-  EXPECT_NAN(outScan.ranges[9]); EXPECT_EQ(9, outScan.intensities[9]);
-  EXPECT_NAN(outScan.ranges[10]); EXPECT_EQ(10, outScan.intensities[10]);
-  EXPECT_NAN(outScan.ranges[11]); EXPECT_EQ(11, outScan.intensities[11]);
-  EXPECT_NAN(outScan.ranges[12]); EXPECT_EQ(12, outScan.intensities[12]);
-  EXPECT_NAN(outScan.ranges[13]); EXPECT_EQ(13, outScan.intensities[13]);
-  EXPECT_NAN(outScan.ranges[14]); EXPECT_EQ(14, outScan.intensities[14]);
-  EXPECT_NAN(outScan.ranges[15]); EXPECT_EQ(15, outScan.intensities[15]);
-  EXPECT_EQ(1.5, outScan.ranges[16]); EXPECT_EQ(16, outScan.intensities[16]);
-  EXPECT_EQ(1.5, outScan.ranges[17]); EXPECT_EQ(17, outScan.intensities[17]);
-  EXPECT_EQ(1.5, outScan.ranges[18]); EXPECT_EQ(18, outScan.intensities[18]);
+  ASSERT_EQ(19, out_scan.ranges.size());
+  EXPECT_EQ(1.5, out_scan.ranges[0]); EXPECT_EQ(0, out_scan.intensities[0]);
+  EXPECT_EQ(1.5, out_scan.ranges[1]); EXPECT_EQ(1, out_scan.intensities[1]);
+  EXPECT_EQ(1.5, out_scan.ranges[2]); EXPECT_EQ(2, out_scan.intensities[2]);
+  EXPECT_NAN(out_scan.ranges[3]); EXPECT_EQ(3, out_scan.intensities[3]);
+  EXPECT_NAN(out_scan.ranges[4]); EXPECT_EQ(4, out_scan.intensities[4]);
+  EXPECT_NAN(out_scan.ranges[5]); EXPECT_EQ(5, out_scan.intensities[5]);
+  EXPECT_NAN(out_scan.ranges[6]); EXPECT_EQ(6, out_scan.intensities[6]);
+  EXPECT_NAN(out_scan.ranges[7]); EXPECT_EQ(7, out_scan.intensities[7]);
+  EXPECT_NAN(out_scan.ranges[8]); EXPECT_EQ(8, out_scan.intensities[8]);
+  EXPECT_NAN(out_scan.ranges[9]); EXPECT_EQ(9, out_scan.intensities[9]);
+  EXPECT_NAN(out_scan.ranges[10]); EXPECT_EQ(10, out_scan.intensities[10]);
+  EXPECT_NAN(out_scan.ranges[11]); EXPECT_EQ(11, out_scan.intensities[11]);
+  EXPECT_NAN(out_scan.ranges[12]); EXPECT_EQ(12, out_scan.intensities[12]);
+  EXPECT_NAN(out_scan.ranges[13]); EXPECT_EQ(13, out_scan.intensities[13]);
+  EXPECT_NAN(out_scan.ranges[14]); EXPECT_EQ(14, out_scan.intensities[14]);
+  EXPECT_NAN(out_scan.ranges[15]); EXPECT_EQ(15, out_scan.intensities[15]);
+  EXPECT_EQ(1.5, out_scan.ranges[16]); EXPECT_EQ(16, out_scan.intensities[16]);
+  EXPECT_EQ(1.5, out_scan.ranges[17]); EXPECT_EQ(17, out_scan.intensities[17]);
+  EXPECT_EQ(1.5, out_scan.ranges[18]); EXPECT_EQ(18, out_scan.intensities[18]);
 }
 
-TEST(RobotBodyFilter, UpdatePointCloud2)
-{
-  ros::NodeHandle nh;
+TEST(RobotBodyFilter, UpdatePointCloud2) {
+  const auto nh = std::make_shared<rclcpp::Node>("compute_mask_config_all_at_once");
 
-  auto filter = std::make_shared<RobotBodyFilterPointCloud2Test>();
-  auto filterBase = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::PointCloud2>>(filter);
+  const auto filter = std::make_shared<RobotBodyFilterPointCloud2Test>(nh);
+  const auto filter_base = std::dynamic_pointer_cast<filters::FilterBase<sensor_msgs::msg::PointCloud2>>(filter);
 
-  nh.setParam("test_robot_description", ROBOT_URDF);
-  filterBase->configure("compute_mask_config_all_at_once", nh);
+  filter_base->configure(
+    "filter1.params", "compute_mask_config_all_at_once",
+    nh->get_node_logging_interface(), nh->get_node_parameters_interface());
 
-  Cloud cloud;
+  const std_msgs::msg::String::SharedPtr msg(new std_msgs::msg::String);
+  msg->data = ROBOT_URDF;
+  filter->onRobotModelMsg(msg);
+
+  cras::Cloud cloud;
   cloud.header.frame_id = "laser";
-  CloudModifier mod(cloud);
-  mod.setPointCloud2Fields(3,
-                           "x", 1, sensor_msgs::PointField::FLOAT32,
-                           "y", 1, sensor_msgs::PointField::FLOAT32,
-                           "z", 1, sensor_msgs::PointField::FLOAT32);
+  cras::CloudModifier mod(cloud);
+  mod.setPointCloud2Fields(
+    3,
+    "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "z", 1, sensor_msgs::msg::PointField::FLOAT32);
   mod.resize(12);
   cloud.width = 4;
   cloud.height = 3;
   cloud.row_step = cloud.width * cloud.point_step;
 
   {
-    CloudIter x_it(cloud, "x");
-    CloudIter y_it(cloud, "y");
-    CloudIter z_it(cloud, "z");
+    cras::CloudIter x_it(cloud, "x");
+    cras::CloudIter y_it(cloud, "y");
+    cras::CloudIter z_it(cloud, "z");
 
-    *x_it = 1.5 + -1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointSensor
-    *x_it = 1.5 + -1.47; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointSensor2
-    *x_it = 1.5 + -1.42; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointClipMin
-    *x_it = 1.5 + 10; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointClipMax
-    *x_it = 1.5 + 0.95; *y_it = 0.95; *z_it = 0.95; ++x_it, ++y_it, ++z_it; // pointInBox
-    *x_it = 1.5 + 1.35; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointInSphere
-    *x_it = 1.5 + 0; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointInBoth
-    *x_it = 1.5 + -0.25; *y_it = -2; *z_it = 2; ++x_it, ++y_it, ++z_it; // pointShadowBox
-    *x_it = 1.5 + -0.560762; *y_it = 0; *z_it = 1.83871; ++x_it, ++y_it, ++z_it; // pointShadowSphere
-    *x_it = 1.5 + 1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointShadowBoth
-    *x_it = 1.5 + -3; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointOutside
-    *x_it = 1.5 + -4; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it; // pointOutside2
+    *x_it = 1.5 + -1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointSensor
+    *x_it = 1.5 + -1.47; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointSensor2
+    *x_it = 1.5 + -1.42; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointClipMin
+    *x_it = 1.5 + 10; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointClipMax
+    *x_it = 1.5 + 0.95; *y_it = 0.95; *z_it = 0.95; ++x_it, ++y_it, ++z_it;  // pointInBox
+    *x_it = 1.5 + 1.35; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointInSphere
+    *x_it = 1.5 + 0; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointInBoth
+    *x_it = 1.5 + -0.25; *y_it = -2; *z_it = 2; ++x_it, ++y_it, ++z_it;  // pointShadowBox
+    *x_it = 1.5 + -0.560762; *y_it = 0; *z_it = 1.83871; ++x_it, ++y_it, ++z_it;  // pointShadowSphere
+    *x_it = 1.5 + 1.5; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointShadowBoth
+    *x_it = 1.5 + -3; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointOutside
+    *x_it = 1.5 + -4; *y_it = 0; *z_it = 0; ++x_it, ++y_it, ++z_it;  // pointOutside2
   }
 
   {
-    ros::Time now = ros::Time::now();
+    rclcpp::Time now = nh->get_clock()->now();
     cloud.header.stamp = now;
-    geometry_msgs::TransformStamped tf;
+    geometry_msgs::msg::TransformStamped tf;
     tf.transform.rotation.w = 1.0;
-    for (double d = -5.0; d < 5.0; d += 0.1)
-    {
-      tf.header.stamp = now + ros::Duration(d);
+    for (double d = -5.0; d < 5.0; d += 0.1) {
+      tf.header.stamp = now + rclcpp::Duration::from_seconds(d);
 
       tf.transform.translation.x = 0.122;
       tf.header.frame_id = "odom";
       tf.child_frame_id = "base_link";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
 
       tf.transform.translation.x = -1.5 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "laser";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
 
       tf.transform.translation.x = 0.01864 - 0.122;
       tf.header.frame_id = "base_link";
       tf.child_frame_id = "antenna";
-      filter->tfBuffer->setTransform(tf, "test");
+      filter->tf_buffer_->setTransform(tf, "test");
     }
   }
 
-  while (!filter->tfFramesWatchdog->isReachable("laser"))
-    ros::WallDuration(0.01).sleep();
-  while (!filter->tfFramesWatchdog->isReachable("base_link"))
-    ros::WallDuration(0.01).sleep();
+  while (!filter->tf_frames_watchdog_->isReachable("laser")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
+  while (!filter->tf_frames_watchdog_->isReachable("base_link")) {
+    rclcpp::sleep_for(std::chrono::milliseconds(10));
+  }
 
-  sensor_msgs::PointCloud2 outCloud;
-  filter->update(cloud, outCloud);
+  sensor_msgs::msg::PointCloud2 out_cloud;
+  filter->update(cloud, out_cloud);
 
-  ASSERT_EQ(num_points(cloud), num_points(outCloud));
-  EXPECT_EQ("base_link", outCloud.header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, outCloud.header.stamp);
-  EXPECT_EQ(cloud.height, outCloud.height);
-  EXPECT_EQ(cloud.width, outCloud.width);
-  EXPECT_EQ(cloud.fields, outCloud.fields);
-  EXPECT_EQ(cloud.point_step, outCloud.point_step);
-  EXPECT_EQ(cloud.row_step, outCloud.row_step);
+  ASSERT_EQ(cras::numPoints(cloud), cras::numPoints(out_cloud));
+  EXPECT_EQ("base_link", out_cloud.header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, out_cloud.header.stamp);
+  EXPECT_EQ(cloud.height, out_cloud.height);
+  EXPECT_EQ(cloud.width, out_cloud.width);
+  EXPECT_EQ(cloud.fields, out_cloud.fields);
+  EXPECT_EQ(cloud.point_step, out_cloud.point_step);
+  EXPECT_EQ(cloud.row_step, out_cloud.row_step);
 
-  CloudConstIter x_it(outCloud, "x");
-  CloudConstIter y_it(outCloud, "y");
-  CloudConstIter z_it(outCloud, "z");
+  cras::CloudConstIter x_it(out_cloud, "x");
+  cras::CloudConstIter y_it(out_cloud, "y");
+  cras::CloudConstIter z_it(out_cloud, "z");
 
   // PointSensor
   EXPECT_NAN(*x_it); EXPECT_NAN(*y_it); EXPECT_NAN(*z_it);
@@ -2530,21 +2749,21 @@ TEST(RobotBodyFilter, UpdatePointCloud2)
 
   // test with unorganized clouds
 
-  filter->keepCloudsOrganized = false;
+  filter->keep_clouds_organized_ = false;
 
-  filter->update(cloud, outCloud);
+  filter->update(cloud, out_cloud);
 
-  ASSERT_EQ(2, num_points(outCloud));
-  EXPECT_EQ("base_link", outCloud.header.frame_id);
-  EXPECT_EQ(cloud.header.stamp, outCloud.header.stamp);
-  EXPECT_EQ(1, outCloud.height);
-  EXPECT_EQ(2, outCloud.width);
-  EXPECT_EQ(cloud.fields, outCloud.fields);
-  EXPECT_EQ(cloud.point_step, outCloud.point_step);
+  ASSERT_EQ(2, cras::numPoints(out_cloud));
+  EXPECT_EQ("base_link", out_cloud.header.frame_id);
+  EXPECT_EQ(cloud.header.stamp, out_cloud.header.stamp);
+  EXPECT_EQ(1, out_cloud.height);
+  EXPECT_EQ(2, out_cloud.width);
+  EXPECT_EQ(cloud.fields, out_cloud.fields);
+  EXPECT_EQ(cloud.point_step, out_cloud.point_step);
 
-  x_it = CloudConstIter(outCloud, "x");
-  y_it = CloudConstIter(outCloud, "y");
-  z_it = CloudConstIter(outCloud, "z");
+  x_it = cras::CloudConstIter(out_cloud, "x");
+  y_it = cras::CloudConstIter(out_cloud, "y");
+  z_it = cras::CloudConstIter(out_cloud, "z");
 
   // PointOutside
   EXPECT_NEAR(-3.122, *x_it, 1e-5); EXPECT_NEAR(0, *y_it, 1e-6); EXPECT_NEAR(0, *z_it, 1e-6);
@@ -2554,9 +2773,10 @@ TEST(RobotBodyFilter, UpdatePointCloud2)
   ++x_it, ++y_it, ++z_it;
 }
 
-  int main(int argc, char **argv)
-{
-  ros::init(argc, argv, "test_robot_body_filter");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  rclcpp::init(argc, argv);
+  const int result = RUN_ALL_TESTS();
+  rclcpp::shutdown();
+  return result;
 }

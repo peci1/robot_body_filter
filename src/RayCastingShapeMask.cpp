@@ -1,274 +1,274 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-FileCopyrightText: Czech Technical University in Prague
+
 /* HACK HACK HACK */
 /* We want to subclass ShapeMask and use its private members. */
 #include <sstream>  // has to be there, otherwise we encounter build problems
-#define private protected
-#include <moveit/point_containment_filter/shape_mask.h>
+#define private protected  // NOLINT
+#include <moveit/point_containment_filter/shape_mask.hpp>
 #undef private
 /* HACK END HACK */
 
+#include <cmath>
 #include <list>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <tuple>
+#include <set>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
-#include <robot_body_filter/RayCastingShapeMask.h>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 
+#include <eigen_stl_containers/eigen_stl_vector_container.h>
+#include <geometric_shapes/bodies.h>
 #include <geometric_shapes/body_operations.h>
+#include <cras_cpp_common/cloud.hpp>
+#include <rclcpp/clock.hpp>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/logging.hpp>
+#include <robot_body_filter/RayCastingShapeMask.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 
-#include <ros/console.h>
+namespace robot_body_filter {
 
-namespace robot_body_filter
-{
+struct RayCastingShapeMask::RayCastingShapeMaskPIMPL {
+  std::set<SeeShape, SortBodies> bodies_for_contains_test;
+  std::set<SeeShape, SortBodies> bodies_for_shadow_test;
+  std::set<SeeShape, SortBodies> bodies_for_bsphere;
+  std::set<SeeShape, SortBodies> bodies_for_bbox;
+  std::map<point_containment_filter::ShapeHandle, std::string> shape_names;
 
-struct RayCastingShapeMask::RayCastingShapeMaskPIMPL
-{
-  std::set<SeeShape, SortBodies> bodiesForContainsTest;
-  std::set<SeeShape, SortBodies> bodiesForShadowTest;
-  std::set<SeeShape, SortBodies> bodiesForBsphere;
-  std::set<SeeShape, SortBodies> bodiesForBbox;
-  std::map<point_containment_filter::ShapeHandle, std::string> shapeNames;
+  using MultiBodyTuple = std::tuple<MultiShapeHandle, SeeShape, SeeShape, SeeShape, SeeShape>;
+  std::list<MultiBodyTuple> multi_bodies;
 
-  typedef std::tuple<MultiShapeHandle, SeeShape, SeeShape, SeeShape, SeeShape> MultiBodyTuple;
-  std::list<MultiBodyTuple> multiBodies;
+  std::map<point_containment_filter::ShapeHandle, MultiShapeHandle> shapes_to_multi_shapes;
 
-  std::map<point_containment_filter::ShapeHandle, MultiShapeHandle>
-  shapesToMultiShapes;
-
-  bodies::BoundingSphere boundingSphere;
-  bodies::BoundingSphere boundingSphereForContainsTest;
+  bodies::BoundingSphere bounding_sphere;
+  bodies::BoundingSphere bounding_sphere_for_contains_test;
 };
 
 RayCastingShapeMask::RayCastingShapeMask(
-    const TransformCallback& transformCallback,
-    const double minSensorDist, const double maxSensorDist,
-    const bool doClipping, const bool doContainsTest, const bool doShadowTest,
-    const double maxShadowDist)
-    : ShapeMask(transformCallback),
-      minSensorDist(minSensorDist),
-      maxSensorDist(maxSensorDist),
-      doClipping(doClipping),
-      doContainsTest(doContainsTest),
-      doShadowTest(doShadowTest),
-      maxShadowDist(maxShadowDist)
-{
-  this->data = std::make_unique<RayCastingShapeMaskPIMPL>();
+  rclcpp::Logger logger,
+  const rclcpp::Clock::SharedPtr& clock,
+  const TransformCallback& transform_callback,
+  const double min_sensor_dist,
+  const double max_sensor_dist,
+  const bool do_clipping,
+  const bool do_contains_test,
+  const bool do_shadow_test,
+  const double max_shadow_dist)
+  : ShapeMask(transform_callback),
+    logger_(logger.get_child("ray_casting_shape_mask")),
+    clock_(clock),
+    min_sensor_dist_(min_sensor_dist),
+    max_sensor_dist_(max_sensor_dist),
+    max_shadow_dist_(max_shadow_dist),
+    do_clipping_(do_clipping),
+    do_contains_test_(do_contains_test),
+    do_shadow_test_(do_shadow_test) {
+  data_ = std::make_unique<RayCastingShapeMaskPIMPL>();
 }
 
 RayCastingShapeMask::~RayCastingShapeMask() = default;
 
 std::map<point_containment_filter::ShapeHandle, bodies::BoundingSphere>
-RayCastingShapeMask::getBoundingSpheres() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+RayCastingShapeMask::getBoundingSpheres() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, bodies::BoundingSphere> map;
 
-  size_t bodyIndex = 0, sphereIndex = 0;
-  for (const auto& seeShape : this->bodies_) {
-    if (sphereIndex >= this->bspheresBodyIndices.size()) {
+  size_t body_index = 0, sphere_index = 0;
+  for (const auto& see_shape : bodies_) {
+    if (sphere_index >= bspheres_body_indices_.size()) {
       break;
     }
-    if (this->bspheresBodyIndices[sphereIndex] == bodyIndex) {
-      map[seeShape.handle] = this->bspheres_[sphereIndex];
-      sphereIndex++;
+    if (bspheres_body_indices_[sphere_index] == body_index) {
+      map[see_shape.handle] = bspheres_[sphere_index];
+      sphere_index++;
     }
-    bodyIndex++;
+    body_index++;
   }
 
   return map;
 }
 
 std::map<point_containment_filter::ShapeHandle, bodies::BoundingSphere>
-RayCastingShapeMask::getBoundingSpheresForContainsTest() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+RayCastingShapeMask::getBoundingSpheresForContainsTest() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, bodies::BoundingSphere> map;
 
-  size_t bodyIndex = 0, sphereIndex = 0;
-  for (const auto& seeShape : this->bodies_) {
-    if (sphereIndex >= this->bspheresForContainsTestBodyIndices.size()) {
+  size_t body_index = 0, sphere_index = 0;
+  for (const auto& see_shape : bodies_) {
+    if (sphere_index >= bspheres_for_contains_test_body_indices_.size()) {
       break;
     }
-    if (this->bspheresForContainsTestBodyIndices[sphereIndex] == bodyIndex) {
-      map[seeShape.handle] = this->bspheresForContainsTest[sphereIndex];
-      sphereIndex++;
+    if (bspheres_for_contains_test_body_indices_[sphere_index] == body_index) {
+      map[see_shape.handle] = bspheres_for_contains_test_[sphere_index];
+      sphere_index++;
     }
-    bodyIndex++;
+    body_index++;
   }
 
   return map;
 }
 
-bodies::BoundingSphere RayCastingShapeMask::getBoundingSphere() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
-  return this->getBoundingSphereNoLock();
+bodies::BoundingSphere RayCastingShapeMask::getBoundingSphere() const {
+  std::lock_guard _(shapes_lock_);
+  return getBoundingSphereNoLock();
 }
 
-bodies::BoundingSphere RayCastingShapeMask::getBoundingSphereNoLock() const
-{
-  return this->data->boundingSphere;
+bodies::BoundingSphere RayCastingShapeMask::getBoundingSphereNoLock() const {
+  return data_->bounding_sphere;
 }
 
-bodies::BoundingSphere RayCastingShapeMask::getBoundingSphereForContainsTestNoLock() const
-{
-  return this->data->boundingSphereForContainsTest;
+bodies::BoundingSphere RayCastingShapeMask::getBoundingSphereForContainsTestNoLock() const {
+  return data_->bounding_sphere_for_contains_test;
 }
 
-void RayCastingShapeMask::updateBodyPoses()
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
-  this->updateBodyPosesNoLock();
+void RayCastingShapeMask::updateBodyPoses() {
+  std::lock_guard _(shapes_lock_);
+  updateBodyPosesNoLock();
 }
 
-void RayCastingShapeMask::updateBodyPosesNoLock()
-{
+void RayCastingShapeMask::updateBodyPosesNoLock() {
   auto transform = Eigen::Isometry3d::Identity();
-  point_containment_filter::ShapeHandle containsHandle;
-  bodies::Body* containsBody;
-  bodies::Body* shadowBody;
-  bodies::Body* bsphereBody;
-  bodies::Body* bboxBody;
-  std::set<const bodies::Body*> validBodies;
+  point_containment_filter::ShapeHandle contains_handle;
+  bodies::Body* contains_body;
+  bodies::Body* shadow_body;
+  bodies::Body* bsphere_body;
+  bodies::Body* bbox_body;
+  std::set<const bodies::Body*> valid_bodies;
 
-  for (const auto& multiBody : this->data->multiBodies)
-  {
-    containsHandle = std::get<0>(multiBody).contains;
-    containsBody = std::get<1>(multiBody).body;
-    shadowBody = std::get<2>(multiBody).body;
-    bsphereBody = std::get<3>(multiBody).body;
-    bboxBody = std::get<4>(multiBody).body;
+  for (const auto& multi_body : data_->multi_bodies) {
+    contains_handle = std::get<0>(multi_body).contains;
+    contains_body = std::get<1>(multi_body).body;
+    shadow_body = std::get<2>(multi_body).body;
+    bsphere_body = std::get<3>(multi_body).body;
+    bbox_body = std::get<4>(multi_body).body;
 
-    if (this->transform_callback_(containsHandle, transform))
-    {
-      containsBody->setPose(transform);
-      validBodies.insert(containsBody);
+    if (transform_callback_(contains_handle, transform)) {
+      contains_body->setPose(transform);
+      valid_bodies.insert(contains_body);
 
-      if (containsBody != shadowBody)
-      {
-        shadowBody->setPose(transform);
-        validBodies.insert(shadowBody);
+      if (contains_body != shadow_body) {
+        shadow_body->setPose(transform);
+        valid_bodies.insert(shadow_body);
       }
 
-      if (bsphereBody != containsBody && bsphereBody != shadowBody)
-      {
-        bsphereBody->setPose(transform);
-        validBodies.insert(bsphereBody);
+      if (bsphere_body != contains_body && bsphere_body != shadow_body) {
+        bsphere_body->setPose(transform);
+        valid_bodies.insert(bsphere_body);
       }
 
-      if (bboxBody != containsBody && bboxBody != shadowBody && bboxBody != bsphereBody)
-      {
-        bboxBody->setPose(transform);
-        validBodies.insert(bboxBody);
+      if (bbox_body != contains_body && bbox_body != shadow_body && bbox_body != bsphere_body) {
+        bbox_body->setPose(transform);
+        valid_bodies.insert(bbox_body);
       }
-    }
-    else
-    {
-      if (containsBody == nullptr)
-        ROS_ERROR_STREAM_DELAYED_THROTTLE_NAMED(3, "shape_mask",
-            "Missing transform for shape with handle " << containsHandle
-            << " without a body");
-      else {
+    } else {
+      if (contains_body == nullptr) {
+        RCLCPP_ERROR_STREAM_THROTTLE(
+          logger_, *clock_, 3, "Missing transform for shape with handle " << contains_handle << " without a body");
+      } else {
         std::string name;
-        if (this->data->shapeNames.find(containsHandle) != this->data->shapeNames.end())
-          name = this->data->shapeNames.at(containsHandle);
+        if (data_->shape_names.find(contains_handle) != data_->shape_names.end()) {
+          name = data_->shape_names.at(contains_handle);
+        }
 
-        if (name.empty())
-          ROS_ERROR_STREAM_DELAYED_THROTTLE_NAMED(3, "shape_mask",
-              "Missing transform for shape " << containsBody->getType()
-              << " with handle " << containsHandle);
-        else
-          ROS_ERROR_STREAM_DELAYED_THROTTLE_NAMED(3, "shape_mask",
-              "Missing transform for shape " << name << " (" << containsBody->getType() << ")");
+        if (name.empty()) {
+          RCLCPP_ERROR_STREAM_THROTTLE(
+            logger_, *clock_, 3,
+            "Missing transform for shape " << contains_body->getType() << " with handle " << contains_handle);
+        } else {
+          RCLCPP_ERROR_STREAM_THROTTLE(
+            logger_, *clock_, 3, "Missing transform for shape " << name << " (" << contains_body->getType() << ")");
+        }
       }
     }
   }
 
   // TODO: prevent frequent reallocations of memory
-  this->bspheres_.resize(this->bodies_.size());
-  this->bspheresBodyIndices.resize(this->bodies_.size());
-  this->bspheresForContainsTest.resize(this->bodies_.size());
-  this->bspheresForContainsTestBodyIndices.resize(this->bodies_.size());
+  bspheres_.resize(bodies_.size());
+  bspheres_body_indices_.resize(bodies_.size());
+  bspheres_for_contains_test_.resize(bodies_.size());
+  bspheres_for_contains_test_body_indices_.resize(bodies_.size());
 
-  size_t bodyIdx = 0, validBodyIdx = 0, validContainsTestIdx = 0;
-  for (const auto& seeShape : this->bodies_)
-  {
-    const auto& shapeHandle = seeShape.handle;
-    const auto body = seeShape.body;
-    const auto& multiShape = this->data->shapesToMultiShapes.at(shapeHandle);
-    if (validBodies.find(body) != validBodies.end())
-    {
-      this->bspheresBodyIndices[validBodyIdx] = bodyIdx;
-      body->computeBoundingSphere(this->bspheres_[validBodyIdx]);
+  size_t body_idx = 0, valid_body_idx = 0, valid_contains_test_idx = 0;
+  for (const auto& see_shape : bodies_) {
+    const auto& shape_handle = see_shape.handle;
+    const auto body = see_shape.body;
+    const auto& multi_shape = data_->shapes_to_multi_shapes.at(shape_handle);
+    if (valid_bodies.find(body) != valid_bodies.end()) {
+      bspheres_body_indices_[valid_body_idx] = body_idx;
+      body->computeBoundingSphere(bspheres_[valid_body_idx]);
 
-      if (shapeHandle == multiShape.contains &&
-        this->ignoreInContainsTest.find(multiShape) == this->ignoreInContainsTest.end())
-      {
-        this->bspheresForContainsTestBodyIndices[validContainsTestIdx] = bodyIdx;
-        this->bspheresForContainsTest[validContainsTestIdx] = this->bspheres_[validBodyIdx];
-        validContainsTestIdx++;
+      if (shape_handle == multi_shape.contains &&
+          ignore_in_contains_test_.find(multi_shape) == ignore_in_contains_test_.end()) {
+        bspheres_for_contains_test_body_indices_[valid_contains_test_idx] = body_idx;
+        bspheres_for_contains_test_[valid_contains_test_idx] = bspheres_[valid_body_idx];
+        valid_contains_test_idx++;
       }
 
-      validBodyIdx++;
+      valid_body_idx++;
     }
 
-    bodyIdx++;
+    body_idx++;
   }
-  this->bspheres_.resize(validBodyIdx);
-  this->bspheresForContainsTest.resize(validContainsTestIdx);
-  this->bspheresBodyIndices.resize(validBodyIdx);
-  this->bspheresForContainsTestBodyIndices.resize(validContainsTestIdx);
+  bspheres_.resize(valid_body_idx);
+  bspheres_for_contains_test_.resize(valid_contains_test_idx);
+  bspheres_body_indices_.resize(valid_body_idx);
+  bspheres_for_contains_test_body_indices_.resize(valid_contains_test_idx);
 
-  bodies::mergeBoundingSpheres(this->bspheres_, this->data->boundingSphere);
-  bodies::mergeBoundingSpheres(this->bspheresForContainsTest,
-                               this->data->boundingSphereForContainsTest);
+  bodies::mergeBoundingSpheres(bspheres_, data_->bounding_sphere);
+  bodies::mergeBoundingSpheres(bspheres_for_contains_test_, data_->bounding_sphere_for_contains_test);
 }
 
 void RayCastingShapeMask::maskContainmentAndShadows(
-    const Cloud& data, std::vector<RayCastingShapeMask::MaskValue>& mask,
-    const Eigen::Vector3d& sensorPos)
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+    const sensor_msgs::msg::PointCloud2& data, std::vector<MaskValue>& mask, const Eigen::Vector3d& sensor_pos) {
+  std::lock_guard _(shapes_lock_);
 
-  const auto np = num_points(data);
+  const auto np = cras::numPoints(data);
   mask.resize(np);
 
-  this->updateBodyPosesNoLock();
+  updateBodyPosesNoLock();
 
   // we now decide which points we keep
-  CloudConstIter iter_x(data, "x");
-  CloudConstIter iter_y(data, "y");
-  CloudConstIter iter_z(data, "z");
+  cras::CloudConstIter iter_x(data, "x");
+  cras::CloudConstIter iter_y(data, "y");
+  cras::CloudConstIter iter_z(data, "z");
 
   // Cloud iterators are not incremented in the for loop, because of the pragma
   // Comment out below parallelization as it can result in very high CPU consumption
-  //#pragma omp parallel for schedule(dynamic)
-  for (size_t i = 0; i < np; ++i)
-  {
+  // #pragma omp parallel for schedule(dynamic)
+  for (size_t i = 0; i < np; ++i) {
     const Eigen::Vector3d pt(static_cast<double>(*(iter_x + i)),
                              static_cast<double>(*(iter_y + i)),
                              static_cast<double>(*(iter_z + i)));
-    this->classifyPointNoLock(pt, mask[i], sensorPos);
+    classifyPointNoLock(pt, mask[i], sensor_pos);
   }
 }
 
-void RayCastingShapeMask::maskContainmentAndShadows(const Eigen::Vector3f& data,
-    RayCastingShapeMask::MaskValue& mask, const Eigen::Vector3d& sensorPos,
-    const bool updateBodyPoses)
-{
-  if (data.hasNaN())
-  {
+void RayCastingShapeMask::maskContainmentAndShadows(
+  const Eigen::Vector3f& data, MaskValue& mask, const Eigen::Vector3d& sensor_pos, const bool update_body_poses) {
+  if (data.hasNaN()) {
     mask = MaskValue::OUTSIDE;
     return;
   }
 
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+  std::lock_guard _(shapes_lock_);
 
-  if (updateBodyPoses)
-    this->updateBodyPosesNoLock();
+  if (update_body_poses) {
+    updateBodyPosesNoLock();
+  }
 
-  this->classifyPointNoLock(data.cast<double>(), mask, sensorPos);
+  classifyPointNoLock(data.cast<double>(), mask, sensor_pos);
 }
 
-void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
-    RayCastingShapeMask::MaskValue &mask, const Eigen::Vector3d& sensorPos)
-{
+void RayCastingShapeMask::classifyPointNoLock(
+    const Eigen::Vector3d& data, MaskValue& mask, const Eigen::Vector3d& sensor_pos) const {
   mask = MaskValue::OUTSIDE;
 
   if (data.hasNaN()) {
@@ -276,42 +276,38 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
   }
 
   // direction from measured point to sensor
-  Eigen::Vector3d dir(sensorPos - data);
+  Eigen::Vector3d dir(sensor_pos - data);
   const auto distance = dir.norm();
 
-  if (this->doClipping && (distance < this->minSensorDist ||
-    (this->maxSensorDist > 0.0 && distance > this->maxSensorDist)))
-  {
+  if (do_clipping_ && (distance < min_sensor_dist_ ||
+    (max_sensor_dist_ > 0.0 && distance > max_sensor_dist_))) {
     // check if the point is inside measurement range
     mask = MaskValue::CLIP;
     return;
   }
 
   // check if it is inside the scaled body
-  const auto radiusSquared = pow(this->data->boundingSphereForContainsTest.radius, 2);
-  if (this->doContainsTest &&
-    (this->data->boundingSphereForContainsTest.center - data).squaredNorm() < radiusSquared)
-  {
-    for (const auto &seeShape : this->data->bodiesForContainsTest)
-    {
-      if (seeShape.body->containsPoint(data))
-      {
+  const auto radius_squared = pow(data_->bounding_sphere_for_contains_test.radius, 2);
+  if (do_contains_test_ &&
+      (data_->bounding_sphere_for_contains_test.center - data).squaredNorm() < radius_squared) {
+    for (const auto& see_shape : data_->bodies_for_contains_test) {
+      if (see_shape.body->containsPoint(data)) {
         mask = MaskValue::INSIDE;
         return;
       }
     }
   }
 
-  if (this->doShadowTest && (this->maxShadowDist <= 0.0 || distance <= this->maxShadowDist)) {
+  if (do_shadow_test_ && (max_shadow_dist_ <= 0.0 || distance <= max_shadow_dist_)) {
     // point is not inside the robot, check if it is a shadow point
     dir /= distance;
     EigenSTL::vector_Vector3d intersections;
-    for (const auto &seeShape : this->data->bodiesForShadowTest) {
+    for (const auto& see_shape : data_->bodies_for_shadow_test) {
       // get the 1st intersection of ray pt->sensor
-      intersections.clear(); // intersectsRay doesn't clear the vector...
-      if (seeShape.body->intersectsRay(data, dir, &intersections, 1)) {
+      intersections.clear();  // intersectsRay doesn't clear the vector...
+      if (see_shape.body->intersectsRay(data, dir, &intersections, 1)) {
         // is the intersection between point and sensor?
-        if (dir.dot(sensorPos - intersections[0]) >= 0.0) {
+        if (dir.dot(sensor_pos - intersections[0]) >= 0.0) {
           mask = MaskValue::SHADOW;
           return;
         }
@@ -321,219 +317,205 @@ void RayCastingShapeMask::classifyPointNoLock(const Eigen::Vector3d& data,
 }
 
 void RayCastingShapeMask::setIgnoreInContainsTest(
-    std::unordered_set<MultiShapeHandle> ignoreInContainsTest,
-    const bool updateInternalStructures)
-{
-  this->ignoreInContainsTest = std::move(ignoreInContainsTest);
-  if (updateInternalStructures)
-    this->updateInternalShapeLists();
+    std::unordered_set<MultiShapeHandle> ignore_in_contains_test, const bool update_internal_structures) {
+  ignore_in_contains_test_ = std::move(ignore_in_contains_test);
+  if (update_internal_structures) {
+    updateInternalShapeLists();
+  }
 }
 
 void RayCastingShapeMask::setIgnoreInShadowTest(
-    std::unordered_set<MultiShapeHandle> ignoreInShadowTest,
-    const bool updateInternalStructures)
-{
-  this->ignoreInShadowTest = std::move(ignoreInShadowTest);
-  if (updateInternalStructures)
-    this->updateInternalShapeLists();
+    std::unordered_set<MultiShapeHandle> ignore_in_shadow_test, const bool update_internal_structures) {
+  ignore_in_shadow_test_ = std::move(ignore_in_shadow_test);
+  if (update_internal_structures) {
+    updateInternalShapeLists();
+  }
 }
 
 MultiShapeHandle RayCastingShapeMask::addShape(
-    const shapes::ShapeConstPtr &shape, const double scale, const double padding,
-    const bool updateInternalStructures, const std::string& name)
-{
-  return this->addShape(shape, scale, padding, scale, padding,
-                        scale, padding, scale, padding, updateInternalStructures, name);
+    const shapes::ShapeConstPtr& shape, const double scale, const double padding, const bool update_internal_structures,
+    const std::string& name) {
+  return addShape(
+    shape, scale, padding, scale, padding, scale, padding, scale, padding, update_internal_structures, name);
 }
 
 MultiShapeHandle RayCastingShapeMask::addShape(
-    const shapes::ShapeConstPtr &shape, const double containsScale, const double containsPadding,
-    const double shadowScale, const double shadowPadding, const double bsphereScale, const double bspherePadding,
-    const double bboxScale, const double bboxPadding, const bool updateInternalStructures, const std::string& name)
-{
+    const shapes::ShapeConstPtr& shape, const double contains_scale, const double contains_padding,
+    const double shadow_scale, const double shadow_padding, const double bsphere_scale, const double bsphere_padding,
+    const double bbox_scale, const double bbox_padding, const bool update_internal_structures,
+    const std::string& name) {
   MultiShapeHandle result;
 
-  result.contains = ShapeMask::addShape(shape, containsScale, containsPadding);
-  this->data->shapeNames[result.contains] = name;
+  result.contains = ShapeMask::addShape(shape, contains_scale, contains_padding);
+  data_->shape_names[result.contains] = name;
 
   result.shadow = result.contains;
-  if ((std::abs(containsScale - shadowScale) > 1e-6 ||
-      std::abs(containsPadding - shadowPadding) > 1e-6))
-  {
-    result.shadow = ShapeMask::addShape(shape, shadowScale, shadowPadding);
-    this->data->shapeNames[result.shadow] = name;
+  if (std::abs(contains_scale - shadow_scale) > 1e-6 || std::abs(contains_padding - shadow_padding) > 1e-6) {
+    result.shadow = ShapeMask::addShape(shape, shadow_scale, shadow_padding);
+    data_->shape_names[result.shadow] = name;
   }
 
   result.bsphere = result.contains;
-  if ((std::abs(containsScale - bsphereScale) > 1e-6 ||
-      std::abs(containsPadding - bspherePadding) > 1e-6))
-  {
-    result.bsphere = ShapeMask::addShape(shape, bsphereScale, bspherePadding);
-    this->data->shapeNames[result.bsphere] = name;
+  if (std::abs(contains_scale - bsphere_scale) > 1e-6 || std::abs(contains_padding - bsphere_padding) > 1e-6) {
+    result.bsphere = ShapeMask::addShape(shape, bsphere_scale, bsphere_padding);
+    data_->shape_names[result.bsphere] = name;
   }
 
   result.bbox = result.contains;
-  if ((std::abs(containsScale - bboxScale) > 1e-6 ||
-      std::abs(containsPadding - bboxPadding) > 1e-6))
-  {
-    result.bbox = ShapeMask::addShape(shape, bboxScale, bboxPadding);
-    this->data->shapeNames[result.bbox] = name;
+  if (std::abs(contains_scale - bbox_scale) > 1e-6 || std::abs(contains_padding - bbox_padding) > 1e-6) {
+    result.bbox = ShapeMask::addShape(shape, bbox_scale, bbox_padding);
+    data_->shape_names[result.bbox] = name;
   }
 
-  auto containsSeeShape = *this->used_handles_.at(result.contains);
-  auto shadowSeeShape = *this->used_handles_.at(result.shadow);
-  auto bsphereSeeShape = *this->used_handles_.at(result.bsphere);
-  auto bboxSeeShape = *this->used_handles_.at(result.bbox);
-  this->data->multiBodies.emplace_back(result, containsSeeShape, shadowSeeShape, bsphereSeeShape, bboxSeeShape);
+  auto contains_see_shape = *this->used_handles_.at(result.contains);
+  auto shadow_see_shape = *this->used_handles_.at(result.shadow);
+  auto bsphere_see_shape = *this->used_handles_.at(result.bsphere);
+  auto bbox_see_shape = *this->used_handles_.at(result.bbox);
+  data_->multi_bodies.emplace_back(
+    result, contains_see_shape, shadow_see_shape, bsphere_see_shape, bbox_see_shape);
 
-  this->data->shapesToMultiShapes[result.contains] = result;
-  this->data->shapesToMultiShapes[result.shadow] = result;
-  this->data->shapesToMultiShapes[result.bsphere] = result;
-  this->data->shapesToMultiShapes[result.bbox] = result;
+  data_->shapes_to_multi_shapes[result.contains] = result;
+  data_->shapes_to_multi_shapes[result.shadow] = result;
+  data_->shapes_to_multi_shapes[result.bsphere] = result;
+  data_->shapes_to_multi_shapes[result.bbox] = result;
 
-  if (updateInternalStructures)
-    this->updateInternalShapeLists();
+  if (update_internal_structures) {
+    updateInternalShapeLists();
+  }
   return result;
 }
 
-void RayCastingShapeMask::removeShape(const MultiShapeHandle& handle,
-    const bool updateInternalStructures)
-{
-  this->data->multiBodies.remove_if([handle](RayCastingShapeMaskPIMPL::MultiBodyTuple t){
+void RayCastingShapeMask::removeShape(const MultiShapeHandle& handle, const bool update_internal_structures) {
+  data_->multi_bodies.remove_if([handle](const RayCastingShapeMaskPIMPL::MultiBodyTuple& t) {
     return std::get<0>(t) == handle;
   });
 
   ShapeMask::removeShape(handle.contains);
-  this->data->shapeNames.erase(handle.contains);
-  this->data->shapesToMultiShapes.erase(handle.contains);
+  data_->shape_names.erase(handle.contains);
+  data_->shapes_to_multi_shapes.erase(handle.contains);
 
-  if (handle.contains != handle.shadow)
-  {
+  if (handle.contains != handle.shadow) {
     ShapeMask::removeShape(handle.shadow);
-    this->data->shapeNames.erase(handle.shadow);
-    this->data->shapesToMultiShapes.erase(handle.shadow);
+    data_->shape_names.erase(handle.shadow);
+    data_->shapes_to_multi_shapes.erase(handle.shadow);
   }
 
-  if (handle.contains != handle.bsphere)
-  {
+  if (handle.contains != handle.bsphere) {
     ShapeMask::removeShape(handle.bsphere);
-    this->data->shapeNames.erase(handle.bsphere);
-    this->data->shapesToMultiShapes.erase(handle.bsphere);
+    data_->shape_names.erase(handle.bsphere);
+    data_->shapes_to_multi_shapes.erase(handle.bsphere);
   }
 
-  if (handle.contains != handle.bbox)
-  {
+  if (handle.contains != handle.bbox) {
     ShapeMask::removeShape(handle.bbox);
-    this->data->shapeNames.erase(handle.bbox);
-    this->data->shapesToMultiShapes.erase(handle.bbox);
+    data_->shape_names.erase(handle.bbox);
+    data_->shapes_to_multi_shapes.erase(handle.bbox);
   }
 
-  if (updateInternalStructures)
-    this->updateInternalShapeLists();
+  if (update_internal_structures) {
+    updateInternalShapeLists();
+  }
 }
 
-void RayCastingShapeMask::setTransformCallback(
-    const point_containment_filter::ShapeMask::TransformCallback &transform_callback)
-{
+void RayCastingShapeMask::setTransformCallback(const ShapeMask::TransformCallback& transform_callback) {
   ShapeMask::setTransformCallback(transform_callback);
 }
 
-void RayCastingShapeMask::updateInternalShapeLists()
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+void RayCastingShapeMask::updateInternalShapeLists() {
+  std::lock_guard _(shapes_lock_);
 
-  this->data->bodiesForContainsTest.clear();
-  this->data->bodiesForShadowTest.clear();
-  this->data->bodiesForBsphere.clear();
-  this->data->bodiesForBbox.clear();
+  data_->bodies_for_contains_test.clear();
+  data_->bodies_for_shadow_test.clear();
+  data_->bodies_for_bsphere.clear();
+  data_->bodies_for_bbox.clear();
 
-  for (const auto& multiBody : this->data->multiBodies) {
+  for (const auto& multiBody : data_->multi_bodies) {
     const auto handle = std::get<0>(multiBody);
-    const auto containsSeeShape = std::get<1>(multiBody);
-    const auto shadowSeeShape = std::get<2>(multiBody);
-    const auto bsphereSeeShape = std::get<3>(multiBody);
-    const auto bboxSeeShape = std::get<4>(multiBody);
+    const auto contains_see_shape = std::get<1>(multiBody);
+    const auto shadow_see_shape = std::get<2>(multiBody);
+    const auto bsphere_see_shape = std::get<3>(multiBody);
+    const auto bbox_see_shape = std::get<4>(multiBody);
 
-    if (this->ignoreInContainsTest.find(handle) == this->ignoreInContainsTest.end())
-      this->data->bodiesForContainsTest.insert(containsSeeShape);
-    if (this->ignoreInShadowTest.find(handle) == this->ignoreInShadowTest.end())
-      this->data->bodiesForShadowTest.insert(shadowSeeShape);
-    if (this->ignoreInBsphere.find(handle) == this->ignoreInBsphere.end())
-      this->data->bodiesForBsphere.insert(bsphereSeeShape);
-    if (this->ignoreInBbox.find(handle) == this->ignoreInBbox.end())
-      this->data->bodiesForBbox.insert(bboxSeeShape);
+    if (ignore_in_contains_test_.find(handle) == ignore_in_contains_test_.end()) {
+      data_->bodies_for_contains_test.insert(contains_see_shape);
+    }
+    if (ignore_in_shadow_test_.find(handle) == ignore_in_shadow_test_.end()) {
+      data_->bodies_for_shadow_test.insert(shadow_see_shape);
+    }
+    if (ignore_in_bsphere_.find(handle) == ignore_in_bsphere_.end()) {
+      data_->bodies_for_bsphere.insert(bsphere_see_shape);
+    }
+    if (ignore_in_bbox_.find(handle) == ignore_in_bbox_.end()) {
+      data_->bodies_for_bbox.insert(bbox_see_shape);
+    }
   }
 }
 
-std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
-RayCastingShapeMask::getBodies() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+std::map<point_containment_filter::ShapeHandle, const bodies::Body*> RayCastingShapeMask::getBodies() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
 
-  for (const auto& seeShape: this->bodies_)
-    result[seeShape.handle] = seeShape.body;
+  for (const auto& see_shape : bodies_) {
+    result[see_shape.handle] = see_shape.body;
+  }
 
   return result;
 }
 
 std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
-RayCastingShapeMask::getBodiesForContainsTest() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+RayCastingShapeMask::getBodiesForContainsTest() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
 
-  for (const auto& seeShape: this->data->bodiesForContainsTest)
-    result[seeShape.handle] = seeShape.body;
+  for (const auto& see_shape : data_->bodies_for_contains_test) {
+    result[see_shape.handle] = see_shape.body;
+  }
 
   return result;
 }
 
 std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
-RayCastingShapeMask::getBodiesForShadowTest() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+RayCastingShapeMask::getBodiesForShadowTest() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
 
-  for (const auto& seeShape: this->data->bodiesForShadowTest)
-    result[seeShape.handle] = seeShape.body;
+  for (const auto& see_shape : data_->bodies_for_shadow_test) {
+    result[see_shape.handle] = see_shape.body;
+  }
 
   return result;
 }
 
 std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
-RayCastingShapeMask::getBodiesForBoundingSphere() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+RayCastingShapeMask::getBodiesForBoundingSphere() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
 
-  for (const auto& seeShape: this->data->bodiesForBsphere)
-    result[seeShape.handle] = seeShape.body;
+  for (const auto& see_shape : data_->bodies_for_bsphere) {
+    result[see_shape.handle] = see_shape.body;
+  }
 
   return result;
 }
 
 std::map<point_containment_filter::ShapeHandle, const bodies::Body*>
-RayCastingShapeMask::getBodiesForBoundingBox() const
-{
-  boost::mutex::scoped_lock _(this->shapes_lock_);
+RayCastingShapeMask::getBodiesForBoundingBox() const {
+  std::lock_guard _(shapes_lock_);
   std::map<point_containment_filter::ShapeHandle, const bodies::Body*> result;
 
-  for (const auto& seeShape: this->data->bodiesForBbox)
-    result[seeShape.handle] = seeShape.body;
+  for (const auto& see_shape : data_->bodies_for_bbox) {
+    result[see_shape.handle] = see_shape.body;
+  }
 
   return result;
 }
 
-bool MultiShapeHandle::operator==(const MultiShapeHandle& other) const
-{
-  return this->contains == other.contains && this->shadow == other.shadow &&
-         this->bsphere == other.bsphere && this->bbox == other.bbox;
+bool MultiShapeHandle::operator==(const MultiShapeHandle& other) const {
+  return contains == other.contains && shadow == other.shadow && bsphere == other.bsphere && bbox == other.bbox;
 }
 
-bool MultiShapeHandle::operator!=(const MultiShapeHandle& other) const
-{
+bool MultiShapeHandle::operator!=(const MultiShapeHandle& other) const {
   return !(*this == other);
 }
 
-}
+}  // namespace robot_body_filter

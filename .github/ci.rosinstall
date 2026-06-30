@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# SPDX-FileCopyrightText: Czech Technical University in Prague
+- git:
+    local-name: cras_msgs
+    uri: https://github.com/ctu-vras/cras_msgs.git
+    version: master
+- git:
+    local-name: ros-utils
+    uri: https://github.com/ctu-vras/ros-utils.git
+    version: ros2

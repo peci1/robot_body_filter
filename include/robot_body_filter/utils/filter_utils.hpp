@@ -1,393 +1,297 @@
-#ifndef ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
-#define ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
+#pragma once
 
-#include <rosconsole/macros_generated.h>
-#include <ros/common.h>
+// SPDX-License-Identifier: BSD-3-Clause
+// SPDX-FileCopyrightText: Czech Technical University in Prague
+
 #include <map>
+#include <set>
+#include <string>
+#include <vector>
 
-#if ROS_VERSION_MINIMUM(1, 15, 0)
+#include <cras_cpp_common/string_utils.hpp>
 #include <filters/filter_base.hpp>
-#else
-#include <filters/filter_base.h>
-#endif
 
-#include "robot_body_filter/utils/string_utils.hpp"
-#include "robot_body_filter/utils/xmlrpc_traits.h"
-
-namespace robot_body_filter
-{
-
-namespace
-{
-/**
- * \brief Internal use only. This class exposes the XmlRpcValue -> typed data conversion
- * provided by filters::FilterBase::getParam(), which is normally protected. We use this
- * workaround to avoid copy-pasting the code here.
- */
-template<typename F>
-class FilterParamHelper : public filters::FilterBase<F>
-{
-public:
-  FilterParamHelper(const std::string& key, const XmlRpc::XmlRpcValue& value)
-  {
-    this->params_[key] = value[key];
-  }
-  template<typename T> bool getParamHelper(const std::string& name, T& value) const
-  {
-    return filters::FilterBase<F>::getParam(name, value);
-  }
-  bool update(const F& data_in, F& data_out) override {return false;}
-protected:
-  bool configure() override {return false;}
-};
-}
+namespace robot_body_filter {
 
 template<typename F>
-class FilterBase : public filters::FilterBase<F>
-{
-
+class FilterBase : public filters::FilterBase<F> {
 protected:
-
   /** \brief Type of function that converts anything to a string. */
-  template <typename T> using ToStringFn = std::string (*)(const T&);
+  template<typename T>
+  using ToStringFn = std::string (*)(const T&);
+
+  /**
+   * \brief Tell whether a parameter has been specified.
+   *
+   * \param[in] name Name of the parameter.
+   * \return Whether the parameter is specified.
+   */
+  bool hasParam(const std::string& name) const {
+    const auto param_name = this->param_prefix_ + name;
+    if (this->params_interface_->has_parameter(param_name)) {
+      return true;
+    }
+    const auto overrides = this->params_interface_->get_parameter_overrides();
+    return overrides.count(param_name) > 0;
+  }
 
   /**
    * \brief Get the value of the given filter parameter, falling back to the
    *        specified default value, and print out a ROS info/warning message with
    *        the loaded values.
    * \tparam T Param type.
-   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
-   *             a "recursive" search is tried using the parts of the name separated by slashes.
-   *             This is useful if the filter config isn't loaded via a filterchain config, but via
-   *             a dict loaded directly to ROS parameter server.
-   * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
-   *             messages more informative.
-   * \param defaultUsed Whether the default value was used.
-   * \param valueToStringFn Function that converts valid/default values to string (for console
-   *             logging). Set to nullptr to disable logging.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *                 messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
    * \return The loaded param value.
    */
   template<typename T>
-  T getParamVerbose(const std::string &name, const T &defaultValue = T(),
-             const std::string &unit = "", bool* defaultUsed = nullptr,
-             ToStringFn<T> valueToStringFn = &to_string) const
-  {
+  T getParamVerbose(
+    const std::string &name, const T& default_value = T(), const std::string& unit = "", bool* default_used = nullptr,
+    ToStringFn<T> value_to_string_fn = &cras::to_string) {
+
     T value;
-    if (filters::FilterBase<F>::getParam(name, value))
-    {
-      if (valueToStringFn != nullptr)
-      {
-        ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
-                                        ", value: " << valueToStringFn(value) <<
-                                        prependIfNonEmpty(unit, " "));
-      }
-      if (defaultUsed != nullptr)
-        *defaultUsed = false;
-      return value;
-    }
-    else if (this->params_.find(name) != this->params_.end())
-    {  // the parameter was found, but has a wrong type
-      ROS_ERROR_STREAM(this->getName() << ": Parameter " << name << " found, "
-        "but its value has a wrong type. Expected XmlRpc type " <<
-        XmlRpcTraits<T>::stringType << ", got type: " <<
-        to_string(this->params_.at(name).getType()) <<
-        ". Using the default value instead.");
-    }
-    else if (name.length() > 1 && name.find_first_of('/', 1) != std::string::npos)
-    {  // The parameter has slashes in its name, so try a "recursive" search
-      auto slashPos = name.find_first_of('/', 1);
-      auto head = name.substr(0, slashPos);
-      auto tail = name.substr(slashPos + 1);
-      XmlRpc::XmlRpcValue val;
-
-      if (filters::FilterBase<F>::getParam(head, val))
-      {
-        while (val.getType() == XmlRpc::XmlRpcValue::TypeStruct)
-        {
-          if (val.hasMember(tail))
-          {
-            auto tmpFilter = FilterParamHelper<F>(tail, val);
-            if (tmpFilter.getParamHelper(tail, value))
-            {
-              if (defaultUsed != nullptr)
-                *defaultUsed = false;
-              if (valueToStringFn != nullptr)
-              {
-                ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
-                  ", value: " << valueToStringFn(value) << prependIfNonEmpty(unit, " "));
-              }
-              return value;
-            }
-            else
-            {
-              ROS_ERROR_STREAM(this->getName() << ": Parameter " << name << " found, "
-                "but its value has a wrong type. Expected XmlRpc type " <<
-                XmlRpcTraits<T>::stringType << ", got type: " <<
-                to_string(val[tail].getType()) <<
-                ". Using the default value instead.");
-              break;
-            }
-          } else {
-            slashPos = tail.find_first_of('/', 1);
-            if (slashPos == std::string::npos)
-              break;
-            head = tail.substr(0, slashPos);
-            tail = tail.substr(slashPos + 1);
-            if (!val.hasMember(head))
-              break;
-            XmlRpc::XmlRpcValue tmp = val[head]; // tmp copy is required, otherwise mem corruption
-            val = tmp;
-            if (!val.valid())
-              break;
-          }
+    try {
+      if (hasParam(name) && filters::FilterBase<F>::getParam(name, value)) {
+        if (value_to_string_fn != nullptr) {
+          RCLCPP_INFO_STREAM(
+            this->logging_interface_->get_logger(), this->getName() << ": Found parameter: " << name <<
+            ", value: " << value_to_string_fn(value) << cras::prependIfNonEmpty(unit, " "));
         }
+        if (default_used != nullptr) {
+          *default_used = false;
+        }
+        return value;
       }
+    } catch (const std::exception& e) {
+      RCLCPP_ERROR_STREAM(
+        this->logging_interface_->get_logger(),
+        this->getName() << ": Error getting value of parameter " << name << ": " << e.what());
     }
 
-    if (valueToStringFn != nullptr)
-    {
-      ROS_INFO_STREAM(this->getName() << ": Parameter " << name
-                                      << " not defined, assigning default: "
-                                      << valueToStringFn(defaultValue)
-                                      << prependIfNonEmpty(unit, " "));
+    if (value_to_string_fn != nullptr) {
+      RCLCPP_INFO_STREAM(
+        this->logging_interface_->get_logger(), this->getName() << ": Parameter " << name <<
+        " not defined, assigning default: " << value_to_string_fn(default_value) << cras::prependIfNonEmpty(unit, " "));
     }
-    if (defaultUsed != nullptr)
-      *defaultUsed = true;
-    return defaultValue;
+    if (default_used != nullptr) {
+      *default_used = true;
+    }
+    return default_value;
   }
 
   /** \brief Get the value of the given filter parameter, falling back to the
-   *        specified default value, and print out a ROS info/warning message with
-   *        the loaded values.
-   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
-   *             a "recursive" search is tried using the parts of the name separated by slashes.
-   *             This is useful if the filter config isn't loaded via a filterchain config, but via
-   *             a dict loaded directly to ROS parameter server.
-   * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
-   *             messages more informative.
+   *         specified default value, and print out a ROS info/warning message with
+   *         the loaded values.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *                 messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
    * \return The loaded param value.
    */
-  std::string getParamVerbose(const std::string &name, const char* defaultValue,
-                              const std::string &unit = "", bool* defaultUsed = nullptr,
-                              ToStringFn<std::string> valueToStringFn = &to_string) const
-  {
-    return this->getParamVerbose(name, std::string(defaultValue), unit, defaultUsed, valueToStringFn);
+  std::string getParamVerbose(
+    const std::string& name, const char* default_value, const std::string& unit = "", bool* default_used = nullptr,
+    const ToStringFn<std::string> value_to_string_fn = &cras::to_string) {
+
+    return getParamVerbose(name, std::string(default_value), unit, default_used, value_to_string_fn);
   }
-
-
 
   // getParam specializations for unsigned values
 
   /** \brief Get the value of the given filter parameter, falling back to the
-   *        specified default value, and print out a ROS info/warning message with
-   *        the loaded values.
-   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
-   *             a "recursive" search is tried using the parts of the name separated by slashes.
-   *             This is useful if the filter config isn't loaded via a filterchain config, but via
-   *             a dict loaded directly to ROS parameter server.
-   * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
-   *             messages more informative.
+   *         specified default value, and print out a ROS info/warning message with
+   *         the loaded values.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *                 messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
    * \return The loaded param value.
    * \throw std::invalid_argument If the loaded value is negative.
    */
-  uint64_t getParamVerbose(const std::string &name, const uint64_t &defaultValue,
-                           const std::string &unit = "", bool* defaultUsed = nullptr,
-                           ToStringFn<int> valueToStringFn = &to_string) const
-  {
-    return this->getParamUnsigned<uint64_t, int>(name, defaultValue, unit, defaultUsed,
-        valueToStringFn);
+  uint64_t getParamVerbose(
+    const std::string& name, const uint64_t& default_value, const std::string& unit = "", bool* default_used = nullptr,
+    const ToStringFn<int> value_to_string_fn = &cras::to_string) {
+
+    return getParamUnsigned<uint64_t, int>(name, default_value, unit, default_used, value_to_string_fn);
   }
 
   // there actually is an unsigned int implementation of FilterBase::getParam,
   // but it doesn't tell you when the passed value is negative - instead it just
   // returns false
   /** \brief Get the value of the given filter parameter, falling back to the
-   *        specified default value, and print out a ROS info/warning message with
-   *        the loaded values.
-   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
-   *             a "recursive" search is tried using the parts of the name separated by slashes.
-   *             This is useful if the filter config isn't loaded via a filterchain config, but via
-   *             a dict loaded directly to ROS parameter server.
-   * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
-   *             messages more informative.
+   *         specified default value, and print out a ROS info/warning message with
+   *         the loaded values.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *                 messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
    * \return The loaded param value.
    * \throw std::invalid_argument If the loaded value is negative.
    */
-  unsigned int getParamVerbose(const std::string &name,
-                               const unsigned int &defaultValue,
-                               const std::string &unit = "",
-                               bool* defaultUsed = nullptr,
-                               ToStringFn<int> valueToStringFn = &to_string) const
-  {
-    return this->getParamUnsigned<unsigned int, int>(name, defaultValue, unit, defaultUsed,
-        valueToStringFn);
+  unsigned int getParamVerbose(
+    const std::string& name, const unsigned int& default_value, const std::string& unit = "",
+    bool* default_used = nullptr, const ToStringFn<int> value_to_string_fn = &cras::to_string) {
+
+    return getParamUnsigned<unsigned int, int>(name, default_value, unit, default_used, value_to_string_fn);
   }
 
   // ROS types specializations
 
   /** \brief Get the value of the given filter parameter, falling back to the
-   *        specified default value, and print out a ROS info/warning message with
-   *        the loaded values.
-   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
-   *             a "recursive" search is tried using the parts of the name separated by slashes.
-   *             This is useful if the filter config isn't loaded via a filterchain config, but via
-   *             a dict loaded directly to ROS parameter server.
-   * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
-   *             messages more informative.
+   *         specified default value, and print out a ROS info/warning message with
+   *         the loaded values.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *                 messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
    * \return The loaded param value.
    */
-  ros::Duration getParamVerbose(const std::string &name,
-                                const ros::Duration &defaultValue,
-                                const std::string &unit = "",
-                                bool* defaultUsed = nullptr,
-                                ToStringFn<double> valueToStringFn = &to_string) const
-  {
-    return this->getParamCast<ros::Duration, double>(name, defaultValue.toSec(), unit, defaultUsed,
-        valueToStringFn);
+  rclcpp::Duration getParamDuration(
+    const std::string& name, const rclcpp::Duration& default_value, const std::string& unit = "",
+    bool* default_used = nullptr, const ToStringFn<double> value_to_string_fn = &cras::to_string) {
+
+    const double temp_value = getParamVerbose(name, default_value.seconds(), unit, default_used, value_to_string_fn);
+    return rclcpp::Duration::from_seconds(temp_value);
   }
 
   /** \brief Get the value of the given filter parameter as a set of strings, falling back to the
-   *        specified default value, and print out a ROS info/warning message with
-   *        the loaded values.
+   *         specified default value, and print out a ROS info/warning message with
+   *         the loaded values.
    * \tparam T Type of the values in the set. Only std::string and double are supported.
-   * \param name Name of the parameter. If the name contains slashes and the full name is not found,
-   *             a "recursive" search is tried using the parts of the name separated by slashes.
-   *             This is useful if the filter config isn't loaded via a filterchain config, but via
-   *             a dict loaded directly to ROS parameter server.
-   * \param defaultValue The default value to use.
-   * \param unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
-   *             messages more informative.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *                 messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
    * \return The loaded param value.
    */
   template<typename T>
   std::set<T> getParamVerboseSet(
-      const std::string &name,
-      const std::set<T> &defaultValue = std::set<T>(),
-      const std::string &unit = "",
-      bool* defaultUsed = nullptr,
-      ToStringFn<std::vector<T>> valueToStringFn = &to_string) const
-  {
-    std::vector<T> vector(defaultValue.begin(), defaultValue.end());
-    vector = this->getParamVerbose(name, vector, unit, defaultUsed, valueToStringFn);
+    const std::string& name, const std::set<T>& default_value = std::set<T>(), const std::string& unit = "",
+    bool* default_used = nullptr, const ToStringFn<std::vector<T>> value_to_string_fn = &cras::to_string) {
+
+    std::vector<T> vector(default_value.begin(), default_value.end());
+    vector = getParamVerbose(name, vector, unit, default_used, value_to_string_fn);
     return std::set<T>(vector.begin(), vector.end());
   }
 
-  template<typename T, typename MapType=std::map<std::string, T>>
+  /** \brief Get the value of the given filter parameter as a map with string keys, falling back to the
+   *         specified default value, and print out a ROS info/warning message with
+   *         the loaded values.
+   * \tparam T Type of the values in the map.
+   * \tparam MapType Type of the map. Only maps with string keys are expected to be used.
+   * \param[in] name Name of the parameter (without the `filterN.params.` prefix).
+   * \param[in] default_value The default value to use.
+   * \param[in] unit Optional string serving as a [physical/SI] unit of the parameter, just to make the
+   *             messages more informative.
+   * \param[out] default_used Whether the default value was used.
+   * \param[in] value_to_string_fn Function that converts valid/default values to string (for console logging).
+   *                            Set to nullptr to disable logging.
+   * \return The loaded param value.
+   */
+  template<typename T, typename MapType = std::map<std::string, T>>
   MapType getParamVerboseMap(
-      const std::string &name,
-      const std::map<std::string, T> &defaultValue = std::map<std::string, T>(),
-      const std::string &unit = "",
-      bool* defaultUsed = nullptr,
-      ToStringFn<MapType> valueToStringFn = &to_string) const
-  {
-    // convert default value to XmlRpc so that we can utilize FilterBase::getParam(XmlRpcValue).
-    XmlRpc::XmlRpcValue defaultValueXmlRpc;
-    defaultValueXmlRpc.begin(); // calls assertStruct() which mutates this value into a struct
-    for (const auto& val : defaultValue)
-      defaultValueXmlRpc[val.first] = val.second;
+    const std::string& name, const std::map<std::string, T>& default_value = std::map<std::string, T>(),
+    const std::string& unit = "", bool* default_used = nullptr,
+    const ToStringFn<MapType> value_to_string_fn = &cras::to_string) {
 
-    // get the param value as a XmlRpcValue
-    bool innerDefaultUsed;
-    auto valueXmlRpc = this->getParamVerbose(name, defaultValueXmlRpc, unit, &innerDefaultUsed,
-                                             (ToStringFn<XmlRpc::XmlRpcValue>)nullptr);
-
-    // convert to map
     MapType value;
-    bool hasWrongTypeItems = false;
-    for (auto& pairXmlRpc : valueXmlRpc)
-    {
-      if (pairXmlRpc.second.getType() == XmlRpcTraits<T>::xmlRpcType)
-      {
-        value[pairXmlRpc.first] = pairXmlRpc.second.operator T&();
+
+    std::string prefix = this->param_prefix_ + name + ".";
+    auto parameter_value_map = this->params_interface_->get_parameter_overrides();
+    for (const auto& [paramName, paramValue] : parameter_value_map) {
+      if (!cras::startsWith(paramName, prefix)) {
+        continue;
       }
-      else if (XmlRpcTraits<T>::xmlRpcType == XmlRpc::XmlRpcValue::TypeDouble && pairXmlRpc.second.getType() == XmlRpc::XmlRpcValue::TypeInt)
-      {
-        // special handling of the case when doubles are expected but an int is provided
-        value[pairXmlRpc.first] = static_cast<T>(pairXmlRpc.second.operator int&());
-      }
-      else
-      {
-        ROS_WARN_STREAM(this->getName() << ": Invalid value for dict parameter " << name
-          << " key " << pairXmlRpc.first << ". Expected XmlRpc type " << XmlRpcTraits<T>::stringType
-          << ", got type: " << to_string(pairXmlRpc.second.getType()) << ". Skipping value.");
-        hasWrongTypeItems = true;
+      std::string sub_name = paramName.substr(prefix.length());
+      try {
+        value[sub_name] = paramValue.template get<T>();
+      } catch (const std::exception& e) {
+        if constexpr (std::is_same_v<double, T>) {
+          try {
+            value[sub_name] = static_cast<double>(paramValue.template get<int>());
+          } catch (const std::exception&) {
+            RCLCPP_ERROR_STREAM(
+              this->logging_interface_->get_logger(),
+              this->getName() << ": Error getting value of parameter " << paramName << ": " << e.what());
+          }
+        } else {
+          RCLCPP_ERROR_STREAM(
+            this->logging_interface_->get_logger(),
+            this->getName() << ": Error getting value of parameter " << paramName << ": " << e.what());
+        }
       }
     }
 
-    if (value.empty() && hasWrongTypeItems)
-    {
-      value = defaultValue;
-      if (defaultUsed != nullptr)
-        *defaultUsed = true;
-      if (valueToStringFn != nullptr)
-      {
-        ROS_ERROR_STREAM(this->getName() << ": Dict parameter " << name
-                                         << " got only invalid types of values, assigning default: "
-                                         << valueToStringFn(defaultValue)
-                                         << prependIfNonEmpty(unit, " "));
+    if (value.empty()) {
+      value = default_value;
+      if (default_used != nullptr) {
+        *default_used = true;
+      }
+      if (value_to_string_fn != nullptr) {
+        RCLCPP_INFO_STREAM(
+          this->logging_interface_->get_logger(), this->getName() << ": Parameter " << name <<
+          " not defined, assigning default: " << value_to_string_fn(default_value) <<
+          cras::prependIfNonEmpty(unit, " "));
       }
     } else {
-      if (defaultUsed != nullptr)
-        *defaultUsed = innerDefaultUsed;
-      if (valueToStringFn != nullptr)
-      {
-        if (innerDefaultUsed)
-        {
-          ROS_INFO_STREAM(this->getName() << ": Parameter " << name
-                                          << " not defined, assigning default: "
-                                          << valueToStringFn(defaultValue)
-                                          << prependIfNonEmpty(unit, " "));
-        }
-        else
-        {
-          ROS_INFO_STREAM(this->getName() << ": Found parameter: " << name <<
-                                          ", value: " << valueToStringFn(value) <<
-                                          prependIfNonEmpty(unit, " "));
-        }
+      if (default_used != nullptr) {
+        *default_used = false;
       }
+      RCLCPP_INFO_STREAM(
+        this->logging_interface_->get_logger(), this->getName() << ": Found parameter: " << name <<
+        ", value: " << value_to_string_fn(value) << cras::prependIfNonEmpty(unit, " "));
     }
 
     return value;
   }
 
 private:
-
   template<typename Result, typename Param>
-  Result getParamUnsigned(const std::string &name, const Result &defaultValue,
-                          const std::string &unit = "", bool* defaultUsed = nullptr,
-                          ToStringFn<Param> valueToStringFn = &to_string) const
-  {
-    const Param signedValue = this->getParamVerbose(name, static_cast<Param>(defaultValue), unit,
-        defaultUsed, valueToStringFn);
-    if (signedValue < 0)
-    {
-      if (valueToStringFn != nullptr)
-      {
-        ROS_ERROR_STREAM(this->getName() << ": Value " << valueToStringFn(signedValue) <<
-                                         " of unsigned parameter " << name << " is negative.");
+  Result getParamUnsigned(
+    const std::string& name, const Result& default_value, const std::string& unit = "", bool* default_used = nullptr,
+    const ToStringFn<Param> value_to_string_fn = &cras::to_string) {
+
+    const Param signed_value = getParamVerbose(
+      name, static_cast<Param>(default_value), unit, default_used, value_to_string_fn);
+    if (signed_value < 0) {
+      if (value_to_string_fn != nullptr) {
+        RCLCPP_ERROR_STREAM(
+          this->logging_interface_->get_logger(), this->getName() << ": Value " << value_to_string_fn(signed_value) <<
+          " of unsigned parameter " << name << " is negative.");
       }
       throw std::invalid_argument(name);
     }
-    return static_cast<Result>(signedValue);
+    return static_cast<Result>(signed_value);
   }
 
   // generic casting getParam()
   template<typename Result, typename Param>
-  Result getParamCast(const std::string &name, const Param &defaultValue,
-                      const std::string &unit = "", bool* defaultUsed = nullptr,
-                      ToStringFn<Param> valueToStringFn = &to_string) const
-  {
-    const Param paramValue = this->getParamVerbose(name, defaultValue, unit, defaultUsed,
-        valueToStringFn);
-    return Result(paramValue);
-  }
+  Result getParamCast(
+    const std::string& name, const Param& default_value, const std::string& unit = "", bool* default_used = nullptr,
+    const ToStringFn<Param> value_to_string_fn = &cras::to_string) {
 
+    const Param param_value = getParamVerbose(name, default_value, unit, default_used, value_to_string_fn);
+    return Result(param_value);
+  }
 };
 
-}
-#endif //ROBOT_BODY_FILTER_UTILS_FILTER_UTILS_HPP
+}  // namespace robot_body_filter
